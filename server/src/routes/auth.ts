@@ -80,7 +80,7 @@ const sha256 = (value: string) => createHash('sha256').update(value).digest('hex
  * it loads — may carry the device token as `?access_token=`. Nothing else accepts it, so a leaked media link can't
  * change anything.
  */
-const TOKEN_IN_QUERY = [/^\/api\/media\/[^/]+\/(file|thumb|proxy)$/, /^\/api\/events$/, /^\/api\/edits\/[^/]+\/preview\.html$/, /^\/api\/studio\/(vendor|fonts)\/[^/]+$/];
+const TOKEN_IN_QUERY = [/^\/api\/media\/[^/]+\/(file|thumb|proxy)$/, /^\/api\/events$/, /^\/api\/edits\/[^/]+\/preview\.html$/, /^\/api\/studio\/(vendor|fonts|sfx)\/[^/]+$/];
 
 /** The device token a request carries, if any. */
 export function bearerToken(req: FastifyRequest) {

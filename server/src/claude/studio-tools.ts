@@ -12,6 +12,8 @@ import {
   timelineWords,
   type EditSpec,
 } from '../../../shared/edit';
+import { BUILTIN_SFX, builtinSfxId, SFX_GROUPS } from '../../../shared/sfx';
+import { ASSET_TYPES } from '../../../shared/types';
 import { db, schema } from '../db';
 import { createEdit, findEditForPiece, listEditVersions, listRenders, saveEditVersion, specMedia, specTranscripts } from '../studio/edits';
 import { queueRender } from '../studio/render';
@@ -130,7 +132,8 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
     tool(
       'update_edit',
       'Change a piece’s video edit and save it as a new version authored by you (starting the edit if there is none). ' +
-        '`clips` and `overlays` replace the whole list when given — include the ones to keep. `captions`, `audio`, `grade` and `watermark` change only the fields you pass.',
+        '`clips` and `overlays` replace the whole list when given — include the ones to keep. `captions`, `audio`, `grade` and `watermark` change only the fields you pass. ' +
+        'There is no music; the nasheed track is the creator’s to set and stays as it is.',
       {
         pieceId: z.string(),
         message: z.string().describe('Short version note, e.g. "Best takes, hook first"'),
@@ -152,14 +155,19 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
           .optional(),
         audio: z
           .object({
-            musicMediaId: z.string().nullable().optional(),
-            musicStart: z.number().min(0).optional(),
-            musicVolume: z.number().min(0).max(1).optional(),
-            duck: z.boolean().optional(),
             voiceVolume: z.number().min(0).max(2).optional(),
             enhanceVoice: z.boolean().optional(),
             normalize: z.boolean().optional(),
-            sfx: z.array(z.object({ id: z.string().optional(), mediaId: z.string(), at: z.number().min(0), volume: z.number().min(0).max(2).optional() })).optional(),
+            sfx: z
+              .array(
+                z.object({
+                  id: z.string().optional(),
+                  mediaId: z.string().describe('A sound-effect asset id, or a built-in sound as builtin:<name> (list_assets)'),
+                  at: z.number().min(0),
+                  volume: z.number().min(0).max(2).optional(),
+                }),
+              )
+              .optional(),
           })
           .optional(),
         grade: z.object({ lutMediaId: z.string().nullable().optional(), intensity: z.number().min(0).max(1).optional() }).optional(),
@@ -176,7 +184,8 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
           clips: (clips as EditSpec['clips'] | undefined) ?? spec.clips,
           overlays: (overlays as unknown as EditSpec['overlays'] | undefined) ?? spec.overlays,
           captions: { ...spec.captions, ...(captions?.preset && captions.preset !== spec.captions.preset ? CAPTION_PRESET_DEFAULTS[captions.preset] : {}), ...captions },
-          audio: { ...spec.audio, ...(audio as Partial<EditSpec['audio']>) },
+          // The nasheed stays the creator's (saveEditVersion keeps it too).
+          audio: { ...spec.audio, ...(audio as Partial<EditSpec['audio']>), nasheed: spec.audio.nasheed },
           grade: { ...spec.grade, ...grade },
           watermark: { ...spec.watermark, ...watermark },
         };
@@ -218,8 +227,8 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
 
     tool(
       'list_assets',
-      'List the workspace’s brand assets — music, sound effects, LUTs (colour grades), logos and fonts — with their ids.',
-      { type: z.enum(['logo', 'font', 'lut', 'music', 'sfx', 'template', 'other']).optional() },
+      'List the workspace’s brand assets — sound effects, LUTs (colour grades), logos, fonts, nasheeds — with their ids, and the app’s own sound effects (builtin:<name>, usable in any edit).',
+      { type: z.enum(ASSET_TYPES).optional() },
       safe(async ({ type }) => {
         const rows = db
           .select()
@@ -228,7 +237,9 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
           .orderBy(desc(schema.media.createdAt))
           .limit(100)
           .all();
-        return ok(rows.map((m) => ({ id: m.id, name: m.originalName, type: m.assetType, seconds: m.durationMs ? Math.round(m.durationMs / 100) / 10 : undefined, notes: m.notes || undefined })));
+        const assets = rows.map((m) => ({ id: m.id, name: m.originalName, type: m.assetType, seconds: m.durationMs ? Math.round(m.durationMs / 100) / 10 : undefined, notes: m.notes || undefined }));
+        const builtin = !type || type === 'sfx' ? BUILTIN_SFX.map((s) => ({ id: builtinSfxId(s.name), name: s.label, group: SFX_GROUPS[s.group], use: s.use, seconds: s.seconds })) : undefined;
+        return ok({ assets, builtinSoundEffects: builtin, note: type === 'nasheed' || (!type && rows.some((m) => m.assetType === 'nasheed')) ? 'Nasheeds are vocal only; only the creator can put one on an edit.' : undefined });
       }),
     ),
   ];

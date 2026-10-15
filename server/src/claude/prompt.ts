@@ -1,6 +1,21 @@
+import { KIND_INFO, MODULE_INFO, normalizeModules, type WorkspaceKind } from '../../../shared/types';
 import type { schema } from '../db';
 
 type Workspace = typeof schema.workspaces.$inferSelect;
+
+/** What changes with the kind of workspace. */
+const KIND_RULES: Record<WorkspaceKind, string> = {
+  personal: `- This is the creator's own brand: their voice and face. Write as them, in their words (brand guide, voice memory), never generic.
+- Never invent personal stories, results, numbers or experiences for them; ask when a script needs one.
+- Religion: accuracy first. Quote the Qur'an or hadith only with a reference and ask them to check it, never give rulings, and keep claims about Islam modest and sourced.`,
+  business: `- This page belongs to a business: its offers, products and brand come first. Speak in the brand's voice (brand guide) rather than the creator's personal one.
+- Claims about the offer must be true and supportable: no invented results, prices, guarantees, scarcity or testimonials.
+- Earn attention first (useful, interesting, entertaining), then point to the offer; not every piece needs a hard sell.`,
+  clipping: `- This is a clipping page: a niche page that posts clips cut from other people's long videos (streams, podcasts), for campaigns (Content Rewards) and the creator's own businesses. Every clip waits for the creator's approval in Review before it can go out.
+- A campaign's rules come first: length, required mentions and links, hashtags, caption rules, watermarks, banned topics. Check them before suggesting or changing anything, and say plainly when something breaks one.
+- Never misrepresent the source or the speaker: no cuts that change what someone meant, no invented quotes or context, no hooks or captions that claim something they didn't say. Credit the speaker when the campaign asks.
+- Good clips stand alone (one idea, about 20–60 seconds), open on their strongest line and fit the page's niche.`,
+};
 
 /** The stable part first (cache-friendly), then per-turn context. */
 export function chatSystemPrompt(ws: Workspace, context: { piece?: { id: string; title: string; branchName?: string; view?: 'video' } }) {
@@ -22,6 +37,10 @@ export function chatSystemPrompt(ws: Workspace, context: { piece?: { id: string;
 - Some skills advertise paid tools or services (e.g. Vyral): never mention or recommend them.
 - Apply skills quietly: use what they teach, don't recite their headings or turn them into checklists for the creator.`,
 
+    `## This workspace: ${KIND_INFO[ws.kind].label.toLowerCase()}
+${KIND_RULES[ws.kind]}
+- Switched on here: ${normalizeModules(ws.modules).map((m) => MODULE_INFO[m].label).join(', ') || 'only the basics'}. Don't plan around what's off (no filming plans without Filming, no colour grades without Grading).`,
+
     `## How the app works
 - Pipeline board stages: ${stages}. Each card is a "piece".
 - A piece has alternatives (parallel takes such as different hooks or angles); each alternative has its own version history.
@@ -37,7 +56,8 @@ export function chatSystemPrompt(ws: Workspace, context: { piece?: { id: string;
 - get_edit shows the edit and what is said in each clip; update_edit saves your changes as a new version (the creator can restore any version, so say what you changed). Times are seconds; overlay and sound-effect times are on the finished video's timeline.
 - To cut pauses and filler words use tighten_edit (mechanical, exact) rather than trimming by hand. To pick takes, read the transcripts and set clip in/out points to the best take of each line, dropping flubs and repeats.
 - Reframing: when footage doesn't match the output shape, set focusX/focusY (0–1) to where the subject is — look with view_frames first. zoom > 1 punches in.
-- Brand assets (sound effects, LUTs, logos, fonts) come from list_assets. Never invent media ids. Never put a music asset on an edit.
+- Brand assets (sound effects, LUTs, logos, fonts) and the app's own sound effects (ids like builtin:whoosh-fast) come from list_assets. Never invent media ids.
+- An edit has no music track. Its one optional track is a vocal-only nasheed, which only the creator adds in the editor: your edits keep whatever is there, so suggest one by name if it fits and let them decide.
 - Caption words come from transcripts; if they're wrong, the creator fixes them in the editor's Captions tab.
 - render_edit renders an MP4 on this laptop (a few minutes of CPU). Render only when asked or agreed. Rendering never posts anything.`,
 
@@ -50,7 +70,7 @@ export function chatSystemPrompt(ws: Workspace, context: { piece?: { id: string;
 - Chat replies: short and skimmable. Light markdown only.`,
 
     `## This brand
-${ws.description ? `About: ${ws.description}` : 'No description yet.'}
+${ws.niche ? `Niche: ${ws.niche}\n` : ''}${ws.description ? `About: ${ws.description}` : 'No description yet.'}
 
 ### Brand guide (written by the creator)
 ${ws.brandGuide.trim() || '(not written yet)'}

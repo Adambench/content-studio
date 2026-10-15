@@ -19,6 +19,7 @@ import type {
   Review,
   SystemStatus,
   Thread,
+  TodayData,
   Workspace,
 } from './types';
 
@@ -55,6 +56,7 @@ export const keys = {
   postStats: (id: string) => ['post-stats', id] as const,
   devices: ['devices'] as const,
   fcm: ['fcm'] as const,
+  today: ['today'] as const,
 };
 
 export type AuthStatus = { setupRequired: boolean; authenticated: boolean; desktopManaged: boolean };
@@ -97,6 +99,21 @@ export const useCreatorInfo = (accountId: string | null) =>
 export const usePosts = (wid: string, from: number, to: number) =>
   useQuery({ queryKey: keys.posts(wid, from, to), queryFn: () => api<Post[]>(`/workspaces/${wid}/posts?from=${from}&to=${to}`), placeholderData: (prev) => prev });
 /** Last week's posts onwards, plus anything failed or missed. */
+/** Today: the device's own day, refreshed while anything is running (jobs don't announce when they start). */
+export function useToday() {
+  return useQuery({
+    queryKey: keys.today,
+    queryFn: () => {
+      const from = new Date();
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(from);
+      to.setDate(to.getDate() + 1);
+      return api<TodayData>(`/today?from=${from.getTime()}&to=${to.getTime()}`);
+    },
+    refetchInterval: (q) => (q.state.data?.work.length ? 15_000 : 120_000),
+  });
+}
+
 export const useUpcomingPosts = (wid: string) => useQuery({ queryKey: keys.upcoming(wid), queryFn: () => api<Post[]>(`/workspaces/${wid}/posts/upcoming`), enabled: !!wid });
 export const usePiecePosts = (pieceId: string) => useQuery({ queryKey: keys.piecePosts(pieceId), queryFn: () => api<Post[]>(`/pieces/${pieceId}/posts`) });
 

@@ -72,8 +72,8 @@ export function StudioPage() {
             <EmptyTitle>Edit this video</EmptyTitle>
             <EmptyDescription>
               {footage
-                ? `Starts with the ${footage} clip${footage === 1 ? '' : 's'} attached to this piece, in your brand’s look. Then tighten the pauses, style the captions, add music and render.`
-                : 'Attach footage to the piece first (or add clips once you’re in). You get captions from what’s said, music that ducks under your voice, text, b-roll and a branded look.'}
+                ? `Starts with the ${footage} clip${footage === 1 ? '' : 's'} attached to this piece, in your brand’s look. Then tighten the pauses, style the captions, add sound effects and render.`
+                : 'Attach footage to the piece first (or add clips once you’re in). You get captions from what’s said, sound effects, text, b-roll and a branded look.'}
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>

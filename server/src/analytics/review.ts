@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, inArray, isNotNull } from 'drizzle-orm';
 import { DEFAULT_WEEKLY_REVIEW, lastReviewDue, type ReviewBody, type ReviewSlotSuggestion } from '../../../shared/analytics';
 import type { QueueSlot } from '../../../shared/publish';
+import { KIND_INFO } from '../../../shared/types';
 import { askStructured } from '../claude/oneshot';
 import { resolveModel } from '../claude/options';
 import { playbook } from '../claude/plugin';
@@ -157,7 +158,7 @@ function systemPrompt(ws: typeof schema.workspaces.$inferSelect) {
 - Queue times: suggest an account's new queue only when its timing numbers clearly support it (at least a few posts in each part of the day you compare). Keep about the same number of posts a week unless the numbers say otherwise. Otherwise leave it out. The creator applies suggestions with a click; you can't change anything yourself.
 - Voice memory: return the full voice memory with what the results show works for this audience (hooks, topics, formats, lengths, caption style) folded in. Keep every existing rule unless the results clearly contradict it; mark rules that come from results with "(from results)"; stay under 350 words. If the results don't teach anything new yet, return it unchanged and leave voiceNote empty.
 - Plain, friendly language; no hype.`,
-    `## The brand\n${ws.description || '(no description)'}\n\n### Brand guide\n${ws.brandGuide.trim() || '(not written)'}`,
+    `## The brand (${KIND_INFO[ws.kind].label.toLowerCase()})\n${ws.niche ? `Niche: ${ws.niche}\n` : ''}${ws.description || '(no description)'}\n\n### Brand guide\n${ws.brandGuide.trim() || '(not written)'}`,
   ]
     .filter(Boolean)
     .join('\n\n');

@@ -22,7 +22,10 @@ const capturedToast = () =>
     : toast.success('Saved on this phone', { description: 'It goes to your computer as soon as it can reach it.' });
 
 export function CapturePage() {
-  const { data: workspaces = [] } = useWorkspaces();
+  const { data: all = [] } = useWorkspaces();
+  // Ideas go to workspaces with Ideas & scripts on (all of them if none has it).
+  const withIdeas = all.filter((w) => w.modules.includes('ideas'));
+  const workspaces = withIdeas.length ? withIdeas : all;
   const settings = useSettings();
   const [wid, setWid] = useState('');
   const [recording, setRecording] = useState(false);

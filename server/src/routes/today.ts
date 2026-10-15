@@ -1,0 +1,179 @@
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { REVIEW_STAGE, normalizeModules } from '../../../shared/types';
+import { db, schema } from '../db';
+import { getSetting } from '../lib/settings';
+import { todayPosts } from '../publish/posts';
+
+const DAY = 24 * 60 * 60 * 1000;
+
+/** Background jobs worth showing, by what they do for me. Renders, transcriptions and posts have their own rows. */
+const JOB_LABELS: Record<string, string> = {
+  'capture.structure': 'Turning a captured idea into a card',
+  'voice.learn': 'Learning from your edits',
+  'stats.sync': 'Reading the latest numbers',
+  'analytics.review': 'Writing the weekly review',
+};
+
+/**
+ * The Today view: what needs me across every workspace (clips to review, today's posts and the ones that failed),
+ * what's running, and Claude usage. Campaigns, submissions and research briefs join it in later steps.
+ */
+export async function todayRoutes(app: FastifyInstance) {
+  app.get('/api/today', async (req) => {
+    // The day as the asking device sees it (its local midnight); the server's own day otherwise.
+    const q = z.object({ from: z.coerce.number().int().optional(), to: z.coerce.number().int().optional() }).parse(req.query);
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    const from = q.from ?? midnight.getTime();
+    const to = q.to && q.to > from ? q.to : from + DAY;
+
+    const workspaces = db.select().from(schema.workspaces).orderBy(asc(schema.workspaces.position), asc(schema.workspaces.createdAt)).all();
+    const wsIds = workspaces.map((w) => w.id);
+
+    // ---------- clips waiting for review ----------
+    const reviewing = workspaces.filter((w) => w.stages.some((s) => s.id === REVIEW_STAGE)).map((w) => w.id);
+    const reviewPieces = reviewing.length
+      ? db
+          .select({ id: schema.pieces.id, workspaceId: schema.pieces.workspaceId, title: schema.pieces.title, updatedAt: schema.pieces.updatedAt })
+          .from(schema.pieces)
+          .where(and(eq(schema.pieces.stage, REVIEW_STAGE), inArray(schema.pieces.workspaceId, reviewing)))
+          .orderBy(asc(schema.pieces.updatedAt))
+          .limit(60)
+          .all()
+      : [];
+    // Show the latest render when there is one (that's what gets approved), else the first footage.
+    const pieceMedia = reviewPieces.length
+      ? db
+          .select({ id: schema.media.id, pieceId: schema.media.pieceId, source: schema.media.source, hasThumb: schema.media.hasThumb, durationMs: schema.media.durationMs, createdAt: schema.media.createdAt })
+          .from(schema.media)
+          .where(and(inArray(schema.media.pieceId, reviewPieces.map((p) => p.id)), isNull(schema.media.assetType)))
+          .orderBy(asc(schema.media.createdAt))
+          .all()
+      : [];
+    const review = reviewPieces.map((p) => {
+      const own = pieceMedia.filter((m) => m.pieceId === p.id);
+      const render = own.filter((m) => m.source === 'render').at(-1);
+      const thumb = (render?.hasThumb ? render : undefined) ?? own.find((m) => m.hasThumb);
+      return { ...p, thumbMediaId: thumb?.id ?? null, renderMediaId: render?.id ?? null, durationMs: render?.durationMs ?? null };
+    });
+
+    // ---------- work running ----------
+    const renders = db
+      .select({
+        id: schema.renders.id,
+        workspaceId: schema.renders.workspaceId,
+        pieceId: schema.renders.pieceId,
+        status: schema.renders.status,
+        progress: schema.renders.progress,
+        stage: schema.renders.stage,
+        versionNumber: schema.renders.versionNumber,
+        createdAt: schema.renders.createdAt,
+        title: schema.pieces.title,
+      })
+      .from(schema.renders)
+      .leftJoin(schema.pieces, eq(schema.pieces.id, schema.renders.pieceId))
+      .where(inArray(schema.renders.status, ['queued', 'running']))
+      .orderBy(asc(schema.renders.createdAt))
+      .all();
+    const transcribing = db
+      .select({ id: schema.media.id, workspaceId: schema.media.workspaceId, name: schema.media.originalName, status: schema.media.transcriptStatus, durationMs: schema.media.durationMs })
+      .from(schema.media)
+      .where(inArray(schema.media.transcriptStatus, ['queued', 'running']))
+      .orderBy(asc(schema.media.createdAt))
+      .all();
+    const jobs = db
+      .select({ id: schema.jobs.id, type: schema.jobs.type, status: schema.jobs.status, payload: schema.jobs.payload })
+      .from(schema.jobs)
+      .where(and(inArray(schema.jobs.status, ['queued', 'running']), inArray(schema.jobs.type, Object.keys(JOB_LABELS))))
+      .orderBy(asc(schema.jobs.runAt))
+      .all();
+    const work = [
+      ...renders.map((r) => ({
+        id: r.id,
+        type: 'render' as const,
+        workspaceId: r.workspaceId,
+        pieceId: r.pieceId,
+        title: `Rendering ${r.title ?? 'a video'}${r.versionNumber ? ` · v${r.versionNumber}` : ''}`,
+        detail: r.status === 'queued' ? 'Waiting its turn' : r.stage,
+        status: r.status as 'queued' | 'running',
+        progress: r.status === 'running' ? r.progress : null,
+      })),
+      ...transcribing.map((m) => ({
+        id: m.id,
+        type: 'transcribe' as const,
+        workspaceId: m.workspaceId,
+        pieceId: null,
+        title: `Transcribing ${m.name}`,
+        detail: m.status === 'queued' ? 'Waiting its turn' : m.durationMs ? `${Math.round(m.durationMs / 60000) || '<1'} min of audio` : 'Listening',
+        status: m.status as 'queued' | 'running',
+        progress: null,
+      })),
+      ...jobs.map((j) => ({
+        id: j.id,
+        type: 'job' as const,
+        workspaceId: typeof j.payload.workspaceId === 'string' ? j.payload.workspaceId : null,
+        pieceId: null,
+        title: JOB_LABELS[j.type],
+        detail: j.status === 'queued' ? 'Waiting its turn' : 'Working on it',
+        status: j.status as 'queued' | 'running',
+        progress: null,
+      })),
+    ].filter((w) => !w.workspaceId || wsIds.includes(w.workspaceId));
+
+    // ---------- each page at a glance ----------
+    const counts = db
+      .select({ workspaceId: schema.pieces.workspaceId, stage: schema.pieces.stage, n: sql<number>`count(*)` })
+      .from(schema.pieces)
+      .groupBy(schema.pieces.workspaceId, schema.pieces.stage)
+      .all();
+    const next = db
+      .select({ workspaceId: schema.posts.workspaceId, at: sql<number>`min(${schema.posts.scheduledAt})` })
+      .from(schema.posts)
+      .where(eq(schema.posts.status, 'scheduled'))
+      .groupBy(schema.posts.workspaceId)
+      .all();
+    const lastPosted = db
+      .select({ workspaceId: schema.posts.workspaceId, at: sql<number>`max(${schema.posts.publishedAt})` })
+      .from(schema.posts)
+      .where(eq(schema.posts.status, 'published'))
+      .groupBy(schema.posts.workspaceId)
+      .all();
+
+    const posts = todayPosts(from, to);
+    return {
+      from,
+      to,
+      workspaces: workspaces.map((w) => {
+        const own = counts.filter((c) => c.workspaceId === w.id);
+        return {
+          id: w.id,
+          name: w.name,
+          color: w.color,
+          kind: w.kind,
+          modules: normalizeModules(w.modules),
+          niche: w.niche,
+          // Cards not out yet, by stage, in board order.
+          stages: w.stages.filter((s) => s.id !== 'posted').map((s) => ({ ...s, count: own.find((c) => c.stage === s.id)?.n ?? 0 })),
+          nextPostAt: next.find((n) => n.workspaceId === w.id)?.at ?? null,
+          lastPostedAt: lastPosted.find((n) => n.workspaceId === w.id)?.at ?? null,
+        };
+      }),
+      review,
+      posts: posts.filter((p) => p.scheduledAt >= from && p.scheduledAt < to),
+      attention: posts.filter((p) => p.status === 'failed' || p.status === 'missed').sort((a, b) => b.scheduledAt - a.scheduledAt),
+      work,
+      usage: getSetting('claudeUsage') ?? null,
+      // The most recent finished weekly reviews, newest first, so their suggestions aren't missed.
+      reviews: db
+        .select({ id: schema.reviews.id, workspaceId: schema.reviews.workspaceId, finishedAt: schema.reviews.finishedAt })
+        .from(schema.reviews)
+        .where(eq(schema.reviews.status, 'done'))
+        .orderBy(desc(schema.reviews.finishedAt))
+        .limit(3)
+        .all()
+        .filter((r) => r.finishedAt && r.finishedAt > from - 7 * DAY),
+    };
+  });
+}

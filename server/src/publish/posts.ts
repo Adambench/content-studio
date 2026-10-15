@@ -21,12 +21,14 @@ export const optionsSchema = z
     yourBrand: z.boolean().optional(),
     brandedContent: z.boolean().optional(),
     aiGenerated: z.boolean().optional(),
-    autoAddMusic: z.boolean().optional(),
     shareToFeed: z.boolean().optional(),
     youtubePrivacy: z.enum(['public', 'unlisted', 'private']).optional(),
     madeForKids: z.boolean().optional(),
+    // Older apps still send TikTok's "add recommended music": accepted and dropped, it's always off.
+    autoAddMusic: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .transform(({ autoAddMusic: _music, ...options }) => options);
 
 export const scheduleSchema = z.object({
   format: z.enum(['video', 'photo']),
@@ -260,6 +262,17 @@ export function listPosts(workspaceId: string, from: number, to: number) {
         or(and(gte(schema.posts.scheduledAt, from), lt(schema.posts.scheduledAt, to)), inArray(schema.posts.status, ['failed', 'missed', 'publishing'])),
       ),
     )
+    .orderBy(asc(schema.posts.scheduledAt))
+    .all();
+  return withContext(rows);
+}
+
+/** Every workspace's posts due between two times, plus any that failed or missed their time (for Today). */
+export function todayPosts(from: number, to: number) {
+  const rows = db
+    .select()
+    .from(schema.posts)
+    .where(or(and(gte(schema.posts.scheduledAt, from), lt(schema.posts.scheduledAt, to)), inArray(schema.posts.status, ['failed', 'missed'])))
     .orderBy(asc(schema.posts.scheduledAt))
     .all();
   return withContext(rows);

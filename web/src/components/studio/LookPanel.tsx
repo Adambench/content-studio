@@ -53,28 +53,31 @@ export function LookPanel() {
         </div>
       </section>
 
-      <section className="space-y-4 border-t pt-4">
-        <h3 className="text-sm font-medium">Colour grade</h3>
-        <Field label="LUT" hint={luts.length ? undefined : 'No LUTs yet'}>
-          <MediaSelect value={spec.grade.lutMediaId} onChange={(lutMediaId) => update((s) => ({ ...s, grade: { ...s.grade, lutMediaId } }))} options={luts} noneLabel="No grade" />
-        </Field>
-        {spec.grade.lutMediaId ? (
-          <>
-            <SliderField label="Strength" value={spec.grade.intensity} min={0} max={1} format={(v) => `${Math.round(v * 100)}%`} onChange={(intensity) => update((s) => ({ ...s, grade: { ...s.grade, intensity } }))} />
-            <p className="text-xs text-muted-foreground">The grade is applied when rendering — the preview shows the footage ungraded.</p>
-          </>
-        ) : (
-          !luts.length && (
-            <p className="text-xs text-muted-foreground">
-              Import .cube files in{' '}
-              <Link to={`/w/${edit.workspaceId}/assets`} className="underline underline-offset-2">
-                Brand assets
-              </Link>
-              .
-            </p>
-          )
-        )}
-      </section>
+      {/* Grading is a module: off, the section only shows to take off a grade that's still on. */}
+      {(workspace.modules.includes('grading') || spec.grade.lutMediaId) && (
+        <section className="space-y-4 border-t pt-4">
+          <h3 className="text-sm font-medium">Colour grade</h3>
+          <Field label="LUT" hint={luts.length ? undefined : 'No LUTs yet'}>
+            <MediaSelect value={spec.grade.lutMediaId} onChange={(lutMediaId) => update((s) => ({ ...s, grade: { ...s.grade, lutMediaId } }))} options={luts} noneLabel="No grade" />
+          </Field>
+          {spec.grade.lutMediaId ? (
+            <>
+              <SliderField label="Strength" value={spec.grade.intensity} min={0} max={1} format={(v) => `${Math.round(v * 100)}%`} onChange={(intensity) => update((s) => ({ ...s, grade: { ...s.grade, intensity } }))} />
+              <p className="text-xs text-muted-foreground">The grade is applied when rendering — the preview shows the footage ungraded.</p>
+            </>
+          ) : (
+            !luts.length && (
+              <p className="text-xs text-muted-foreground">
+                Import .cube files in{' '}
+                <Link to={`/w/${edit.workspaceId}/assets`} className="underline underline-offset-2">
+                  Brand assets
+                </Link>
+                .
+              </p>
+            )
+          )}
+        </section>
+      )}
 
       <section className="space-y-4 border-t pt-4">
         <h3 className="text-sm font-medium">Watermark</h3>
@@ -107,7 +110,7 @@ export function LookPanel() {
           <h3 className="flex items-center gap-2 text-sm font-medium">
             <Palette className="size-4" /> Brand look
           </h3>
-          <p className="text-xs text-muted-foreground">Shape, captions, grade, watermark and music settings — new edits in {workspace.name} start with the saved look.</p>
+          <p className="text-xs text-muted-foreground">Shape, captions, grade, watermark and voice settings — new edits in {workspace.name} start with the saved look.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={() => (workspace.editTemplate ? setConfirmSave(true) : saveTemplate())}>

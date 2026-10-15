@@ -42,7 +42,7 @@ async function probeMedia({ mediaId }: { mediaId: string }) {
       () => false,
     );
   }
-  // Footage and voice memos get transcribed; brand assets (music, SFX…) and finished renders don't.
+  // Footage and voice memos get transcribed; brand assets (nasheeds, SFX…) and finished renders don't.
   const wantsTranscript = !row.assetType && row.source !== 'render' && !!info?.hasAudio && (row.kind === 'video' || row.kind === 'audio');
   setMedia(mediaId, {
     durationMs: info?.durationMs ?? null,
@@ -107,6 +107,7 @@ async function structureCapture(payload: { workspaceId: string; mediaId?: string
         // The same text every time first, so it caches.
         playbook('hooks', 'halal'),
         `You turn a creator's rough spoken or typed notes into a content idea card for their "${ws.name}" brand.`,
+        ws.niche && `The page's niche: ${ws.niche}`,
         ws.description && `About the brand: ${ws.description}`,
         ws.brandGuide && `Brand guide:\n${ws.brandGuide}`,
         ws.voiceMemory && `What you've learned about their voice:\n${ws.voiceMemory}`,

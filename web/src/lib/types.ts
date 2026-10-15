@@ -1,12 +1,15 @@
 import type { DayPart, PostStats, ReviewBody, ReviewStatus, WeeklyReviewSetting } from '@shared/analytics';
 import type { EditSpec, EditTemplate } from '@shared/edit';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostProblem, PostStatus, PublishPlatform, QueueSlot } from '@shared/publish';
-import type { AssetType, ChatPart, ClaudeUsage, DraftContent, MediaKind, MediaSource, ProxyStatus, RenderStatus, Stage, Transcript, TranscriptStatus, WorkspaceColor } from '@shared/types';
+import type { AssetType, ChatPart, ClaudeUsage, DraftContent, MediaKind, MediaSource, ModuleId, ProxyStatus, RenderStatus, Stage, Transcript, TranscriptStatus, WorkspaceColor, WorkspaceKind } from '@shared/types';
 
 export type Workspace = {
   id: string;
   name: string;
   color: WorkspaceColor;
+  kind: WorkspaceKind;
+  modules: ModuleId[];
+  niche: string;
   description: string;
   brandGuide: string;
   voiceMemory: string;
@@ -307,4 +310,39 @@ export type Review = {
   error: string | null;
   createdAt: number;
   finishedAt: number | null;
+};
+
+/** Something running in the background, for Today. */
+export type TodayWork = {
+  id: string;
+  type: 'render' | 'transcribe' | 'job';
+  workspaceId: string | null;
+  pieceId: string | null;
+  title: string;
+  detail: string;
+  status: 'queued' | 'running';
+  progress: number | null;
+};
+
+/** The Today view: what needs me across every workspace. */
+export type TodayData = {
+  from: number;
+  to: number;
+  workspaces: {
+    id: string;
+    name: string;
+    color: WorkspaceColor;
+    kind: WorkspaceKind;
+    modules: ModuleId[];
+    niche: string;
+    stages: (Stage & { count: number })[];
+    nextPostAt: number | null;
+    lastPostedAt: number | null;
+  }[];
+  review: { id: string; workspaceId: string; title: string; updatedAt: number; thumbMediaId: string | null; renderMediaId: string | null; durationMs: number | null }[];
+  posts: Post[];
+  attention: Post[];
+  work: TodayWork[];
+  usage: ClaudeUsage | null;
+  reviews: { id: string; workspaceId: string; finishedAt: number | null }[];
 };

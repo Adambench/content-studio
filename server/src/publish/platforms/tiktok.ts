@@ -240,7 +240,7 @@ async function publishPhotos(ctx: PublishContext, direct: boolean): Promise<Publ
   const init = await call<{ publish_id: string }>(token, '/v2/post/publish/content/init/', {
     media_type: 'PHOTO',
     post_mode: direct ? 'DIRECT_POST' : 'MEDIA_UPLOAD',
-    post_info: { title: copy.title, description: copy.caption, ...(direct && { ...postInfo(ctx, await creatorInfo(token), true), auto_add_music: !!options.autoAddMusic }) },
+    post_info: { title: copy.title, description: copy.caption, ...(direct && { ...postInfo(ctx, await creatorInfo(token), true), auto_add_music: false }) },
     source_info: { source: 'PULL_FROM_URL', photo_cover_index: 0, photo_images: images },
     ...(direct && options.aiGenerated && { is_aigc: true }),
   });

@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { normalizeServer } from '../../../shared/devices';
 import { TIGHTEN_PRESETS, normalizeEdit, type EditSpec } from '../../../shared/edit';
+import { builtinSfx, builtinSfxId } from '../../../shared/sfx';
 import { config } from '../config';
 import { db, schema } from '../db';
 import { emit } from '../lib/events';
@@ -14,7 +15,7 @@ import { getPiece } from '../services/pieces';
 import { BUNDLED_FONTS, composeEdit } from '../studio/compose';
 import { createEdit, editDetail, findEditForPiece, getEdit, listRenders, restoreEditVersion, saveEditVersion, specMedia, specTranscripts, updateEditWorking } from '../studio/edits';
 import { proxyPath } from '../studio/proxy';
-import { cancelRender, getRender, gsapPath, queueRender, runtimePath } from '../studio/render';
+import { builtinSfxPath, cancelRender, getRender, gsapPath, queueRender, runtimePath } from '../studio/render';
 import { tightenEdit } from '../studio/tighten';
 import { bearerToken } from './auth';
 
@@ -116,7 +117,10 @@ export async function studioRoutes(app: FastifyInstance) {
         const o = spec.overlays[i];
         return o.type === 'broll' ? source(o.mediaId, o.in) : null;
       },
-      fileUrl: (id) => url(`/api/media/${id}/file`),
+      fileUrl: (id) => {
+        const builtin = builtinSfx(id);
+        return url(builtin ? `/api/studio/sfx/${builtin.name}.ogg` : `/api/media/${id}/file`);
+      },
       fontUrl: (file) => url(`/api/studio/fonts/${file}`),
       scripts: [url('/api/studio/vendor/gsap.min.js'), url('/api/studio/vendor/hyperframes-runtime.js')],
       preview: true,
@@ -145,6 +149,14 @@ export async function studioRoutes(app: FastifyInstance) {
     if (!FONT_FILES.has(req.params.file)) throw notFound();
     reply.header('Cache-Control', 'public, max-age=31536000, immutable');
     return reply.type('font/woff2').sendFile(req.params.file, join(config.assetsDir, 'fonts'));
+  });
+
+  // The app's own sound effects, for the preview and for listening in the editor and brand assets.
+  app.get<{ Params: { file: string } }>('/api/studio/sfx/:file', async (req, reply) => {
+    const name = req.params.file.replace(/\.ogg$/, '');
+    if (!builtinSfx(builtinSfxId(name)) || !existsSync(builtinSfxPath(name))) throw notFound();
+    reply.header('Cache-Control', 'public, max-age=86400');
+    return reply.type('audio/ogg').sendFile(`${name}.ogg`, dirname(builtinSfxPath(name)));
   });
 
   // Fix what Whisper heard, for captions and search.

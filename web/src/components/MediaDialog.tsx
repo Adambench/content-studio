@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
+import { VocalOnlyDialog } from '@/components/VocalOnlyDialog';
 import { api, errorMessage, fileUrl, mediaFileUrl } from '@/lib/api';
 import { bytes, clock, duration } from '@/lib/format';
 import { queryClient, useBoard, useMediaItem } from '@/lib/queries';
@@ -24,6 +25,7 @@ export function MediaDialog({ wid, mediaId, onClose }: { wid: string; mediaId: s
   const playerRef = useRef<HTMLVideoElement & HTMLAudioElement>(null);
   const [time, setTime] = useState(0);
   const [notes, setNotes] = useState('');
+  const [confirmNasheed, setConfirmNasheed] = useState(false);
 
   useEffect(() => setNotes(m?.notes ?? ''), [m?.id, m?.notes]);
 
@@ -102,7 +104,7 @@ export function MediaDialog({ wid, mediaId, onClose }: { wid: string; mediaId: s
                 {isAsset ? (
                   <div className="space-y-1.5">
                     <Label className="text-xs">Type</Label>
-                    <Select value={m.assetType ?? 'other'} onValueChange={(v) => patch({ assetType: v as AssetType })}>
+                    <Select value={m.assetType ?? 'other'} onValueChange={(v) => (v === 'nasheed' ? setConfirmNasheed(true) : patch({ assetType: v as AssetType }))}>
                       <SelectTrigger className="w-full" size="sm">
                         <SelectValue />
                       </SelectTrigger>
@@ -224,6 +226,14 @@ export function MediaDialog({ wid, mediaId, onClose }: { wid: string; mediaId: s
           </div>
         )}
       </DialogContent>
+      <VocalOnlyDialog
+        open={confirmNasheed}
+        onCancel={() => setConfirmNasheed(false)}
+        onConfirm={() => {
+          setConfirmNasheed(false);
+          void patch({ assetType: 'nasheed' });
+        }}
+      />
     </Dialog>
   );
 }

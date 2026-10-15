@@ -4,7 +4,7 @@ import type { PostStats, ReviewBody, ReviewStatus } from '../../../shared/analyt
 import type { EditSpec, EditTemplate } from '../../../shared/edit';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
 import type { SessionKind } from '../../../shared/devices';
-import type { AssetType, ChatPart, DraftContent, MediaKind, MediaSource, ProxyStatus, RenderStatus, Stage, TranscriptStatus } from '../../../shared/types';
+import type { AssetType, ChatPart, DraftContent, MediaKind, MediaSource, ModuleId, ProxyStatus, RenderStatus, Stage, TranscriptStatus, WorkspaceKind } from '../../../shared/types';
 
 const id = () => text('id').primaryKey();
 const createdAt = () => integer('created_at').notNull().default(sql`(unixepoch() * 1000)`);
@@ -34,11 +34,17 @@ export const workspaces = sqliteTable('workspaces', {
   id: id(),
   name: text('name').notNull(),
   color: text('color').notNull().default('violet'),
+  // What the page is for; presets its modules, stages and Claude's instructions (KIND_PRESETS).
+  kind: text('kind').$type<WorkspaceKind>().notNull().default('personal'),
+  // The modules switched on (MODULES).
+  modules: text('modules', { mode: 'json' }).$type<ModuleId[]>().notNull().default(sql`'[]'`),
+  // The page's niche in a sentence: research keywords, and how moments are judged for fit.
+  niche: text('niche').notNull().default(''),
   description: text('description').notNull().default(''),
   brandGuide: text('brand_guide').notNull().default(''),
   // Claude-maintained notes about my voice, learned from my edits.
   voiceMemory: text('voice_memory').notNull().default(''),
-  // The brand's video look (captions, grade, watermark, music), applied to new edits.
+  // The brand's video look (shape, captions, grade, watermark, voice settings), applied to new edits.
   editTemplate: text('edit_template', { mode: 'json' }).$type<EditTemplate>(),
   stages: text('stages', { mode: 'json' }).$type<Stage[]>().notNull(),
   position: integer('position').notNull().default(0),
@@ -100,7 +106,7 @@ export const media = sqliteTable(
     workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
     pieceId: text('piece_id').references(() => pieces.id, { onDelete: 'set null' }),
     kind: text('kind').$type<MediaKind>().notNull(),
-    // Set for brand assets (logos, fonts, LUTs, music, SFX); null for footage.
+    // Set for brand assets (logos, fonts, LUTs, nasheeds, SFX); null for footage.
     assetType: text('asset_type').$type<AssetType>(),
     source: text('source').$type<MediaSource>().notNull().default('upload'),
     originalName: text('original_name').notNull(),

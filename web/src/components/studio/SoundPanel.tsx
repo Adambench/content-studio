@@ -1,12 +1,15 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
-import { editDuration, LOUDNESS_TARGET, newEditId, type EditAudio, type SfxCue } from '@shared/edit';
+import { editDuration, LOUDNESS_TARGET, NASHEED_DEFAULTS, newEditId, type EditAudio, type NasheedTrack, type SfxCue } from '@shared/edit';
+import { builtinSfxId } from '@shared/sfx';
+import { mediaFileUrl } from '@/lib/api';
+import { sfxUrl } from '@/lib/sfx';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useStudio } from './context';
-import { Field, MediaSelect, SecondsField, SliderField } from './controls';
+import { Field, ListenButton, MediaSelect, SecondsField, SfxSelect, SliderField } from './controls';
 
 const pct = (v: number) => (v === 0 ? 'Off' : `${Math.round(v * 100)}%`);
 
@@ -29,8 +32,9 @@ export function SoundPanel() {
   const a = spec.audio;
   const set = (patch: Partial<EditAudio>) => update((s) => ({ ...s, audio: { ...s.audio, ...patch } }));
   const setCue = (id: string, patch: Partial<SfxCue>) => set({ sfx: a.sfx.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
-  const music = assets.filter((m) => m.assetType === 'music');
-  const sfx = assets.filter((m) => m.assetType === 'sfx');
+  const setNasheed = (patch: Partial<NasheedTrack>) => a.nasheed && set({ nasheed: { ...a.nasheed, ...patch } });
+  const nasheeds = assets.filter((m) => m.assetType === 'nasheed');
+  const sfx = assets.filter((m) => m.assetType === 'sfx' && m.kind === 'audio');
   const duration = editDuration(spec);
   const wsAssets = `/w/${edit.workspaceId}/assets`;
 
@@ -43,24 +47,30 @@ export function SoundPanel() {
       </section>
 
       <section className="space-y-4 border-t pt-4">
-        <h3 className="text-sm font-medium">Music</h3>
-        <Field label="Track" hint={music.length ? undefined : 'No music yet'}>
-          <MediaSelect value={a.musicMediaId} onChange={(musicMediaId) => set({ musicMediaId })} options={music} noneLabel="No music" />
-        </Field>
-        {!music.length && (
+        <div>
+          <h3 className="text-sm font-medium">Nasheed</h3>
+          <p className="text-xs text-muted-foreground">Vocal only, no instruments. Optional, and yours to add: Claude can’t put one on.</p>
+        </div>
+        <div className="flex items-end gap-1.5">
+          <Field label="Track" hint={nasheeds.length ? undefined : 'None imported'} className="min-w-0 flex-1">
+            <MediaSelect value={a.nasheed?.mediaId ?? null} onChange={(id) => set({ nasheed: id ? { ...NASHEED_DEFAULTS, ...a.nasheed, mediaId: id } : null })} options={nasheeds} noneLabel="No nasheed" />
+          </Field>
+          <ListenButton src={a.nasheed ? mediaFileUrl(a.nasheed.mediaId) : null} volume={a.nasheed?.volume} label="Listen to the nasheed" />
+        </div>
+        {!nasheeds.length && (
           <p className="text-xs text-muted-foreground">
-            Import tracks you have the rights to in{' '}
+            Import vocal-only nasheeds in{' '}
             <Link to={wsAssets} className="underline underline-offset-2">
-              Brand assets
-            </Link>{' '}
-            — platforms mute copyrighted music.
+              Brand assets → Nasheeds
+            </Link>
+            .
           </p>
         )}
-        {a.musicMediaId && (
+        {a.nasheed && (
           <>
-            <SliderField label="Music level" value={a.musicVolume} min={0} max={1} step={0.01} format={pct} onChange={(musicVolume) => set({ musicVolume })} />
-            <Toggle id="duck" label="Duck under speech" hint="Music dips whenever someone talks" checked={a.duck} onChange={(duck) => set({ duck })} />
-            <SecondsField label="Start the track at" value={a.musicStart} onChange={(musicStart) => set({ musicStart })} />
+            <SliderField label="Nasheed level" value={a.nasheed.volume} min={0} max={1} step={0.01} format={pct} onChange={(volume) => setNasheed({ volume })} />
+            <Toggle id="duck" label="Duck under speech" hint="It dips whenever someone talks" checked={a.nasheed.duck} onChange={(duck) => setNasheed({ duck })} />
+            <SecondsField label="Start the nasheed at" value={a.nasheed.start} onChange={(start) => setNasheed({ start })} />
           </>
         )}
       </section>
@@ -71,9 +81,9 @@ export function SoundPanel() {
           <Button
             size="sm"
             variant="outline"
-            disabled={!sfx.length}
             onClick={() => {
-              const cue = { id: newEditId(), mediaId: sfx[0].id, at: Math.round(Math.min(time, Math.max(0, duration - 0.1)) * 100) / 100, volume: 0.8 };
+              const last = a.sfx.at(-1)?.mediaId;
+              const cue = { id: newEditId(), mediaId: last ?? builtinSfxId('whoosh-fast'), at: Math.round(Math.min(time, Math.max(0, duration - 0.1)) * 100) / 100, volume: 0.8 };
               set({ sfx: [...a.sfx, cue].sort((x, y) => x.at - y.at) });
               select({ kind: 'sfx', id: cue.id });
             }}
@@ -81,19 +91,20 @@ export function SoundPanel() {
             <Plus /> At playhead
           </Button>
         </div>
-        {!sfx.length && (
+        {!a.sfx.length && (
           <p className="text-xs text-muted-foreground">
-            Whooshes and pops live in{' '}
+            Whooshes, pops, hits, risers and dings: the app has its own, and yours from{' '}
             <Link to={wsAssets} className="underline underline-offset-2">
               Brand assets → Sound effects
-            </Link>
-            .
+            </Link>{' '}
+            join them.
           </p>
         )}
         {a.sfx.map((c) => (
           <div key={c.id} className={cn('space-y-3 rounded-lg border p-2.5', selection?.kind === 'sfx' && selection.id === c.id && 'border-brand/60')}>
-            <div className="flex items-center gap-2">
-              <MediaSelect value={c.mediaId} onChange={(id) => id && setCue(c.id, { mediaId: id })} options={sfx} noneLabel="—" />
+            <div className="flex items-center gap-1">
+              <SfxSelect value={c.mediaId} onChange={(mediaId) => setCue(c.id, { mediaId })} brand={sfx} />
+              <ListenButton src={sfxUrl(c.mediaId)} volume={c.volume} label="Listen to this sound" />
               <Button size="icon-sm" variant="ghost" className="text-destructive hover:text-destructive" aria-label="Remove sound effect" onClick={() => set({ sfx: a.sfx.filter((x) => x.id !== c.id) })}>
                 <Trash2 />
               </Button>

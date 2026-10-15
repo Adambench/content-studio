@@ -91,17 +91,64 @@ export const DEFAULT_STAGES: Stage[] = [
   { id: 'posted', name: 'Posted' },
 ];
 
+/** A clipping page's board: clips are made for it, reviewed, then go out like any other piece. */
+export const CLIPPING_STAGES: Stage[] = [
+  { id: 'making', name: 'Making' },
+  { id: 'review', name: 'Review' },
+  { id: 'ready', name: 'Ready' },
+  { id: 'scheduled', name: 'Scheduled' },
+  { id: 'posted', name: 'Posted' },
+];
+
+/** Where clips wait for my yes or no (Today lists them). */
+export const REVIEW_STAGE = 'review';
+
 export const WORKSPACE_COLORS = ['violet', 'blue', 'cyan', 'emerald', 'amber', 'orange', 'rose', 'pink'] as const;
 export type WorkspaceColor = (typeof WORKSPACE_COLORS)[number];
 
+/** What a workspace is for. A kind presets modules, stages and Claude's instructions; it doesn't fence anything off. */
+export const WORKSPACE_KINDS = ['personal', 'business', 'clipping'] as const;
+export type WorkspaceKind = (typeof WORKSPACE_KINDS)[number];
+
+export const MODULES = ['ideas', 'filming', 'grading', 'campaigns', 'clipping', 'research'] as const;
+export type ModuleId = (typeof MODULES)[number];
+
+export const KIND_INFO: Record<WorkspaceKind, { label: string; hint: string; niche: string }> = {
+  personal: { label: 'Personal brand', hint: 'Your own voice and face: ideas, scripts, filming, a graded look', niche: 'e.g. Muslim entrepreneurship and everyday deen for young professionals' },
+  business: { label: 'Business', hint: 'A business’s page: its offers and brand, its own footage', niche: 'e.g. Handmade leather goods for people who buy once and keep it for life' },
+  clipping: { label: 'Clipping page', hint: 'A niche page fed by campaigns: streams and podcasts cut into clips', niche: 'e.g. Business and money advice from podcasts, for 18–30s starting out' },
+};
+
+export const MODULE_INFO: Record<ModuleId, { label: string; hint: string }> = {
+  ideas: { label: 'Ideas & scripts', hint: 'Capture ideas by voice or text; Claude turns them into cards and scripts' },
+  filming: { label: 'Filming', hint: 'You film yourself: Claude plans shots and delivery' },
+  grading: { label: 'Grading', hint: 'Colour grades (LUTs) in the video editor and brand assets' },
+  campaigns: { label: 'Campaigns', hint: 'Content Rewards campaigns and your businesses’ own' },
+  clipping: { label: 'Clipping', hint: 'Long videos in, clips out: sources and the moments found in them' },
+  research: { label: 'Research brief', hint: 'A daily look at what’s working in the niche' },
+};
+
+export const KIND_PRESETS: Record<WorkspaceKind, { modules: ModuleId[]; stages: Stage[] }> = {
+  personal: { modules: ['ideas', 'filming', 'grading', 'research'], stages: DEFAULT_STAGES },
+  business: { modules: ['ideas', 'filming', 'grading', 'campaigns', 'research'], stages: DEFAULT_STAGES },
+  clipping: { modules: ['campaigns', 'clipping', 'research'], stages: CLIPPING_STAGES },
+};
+
+/** Known modules only, in the usual order. */
+export function normalizeModules(input: unknown): ModuleId[] {
+  const list = Array.isArray(input) ? input : [];
+  return MODULES.filter((m) => list.includes(m));
+}
+
 export type MediaKind = 'video' | 'image' | 'audio' | 'other';
-export const ASSET_TYPES = ['logo', 'font', 'lut', 'music', 'sfx', 'template', 'other'] as const;
+/** No music: a vocal-only nasheed is the only track an edit can have, and only the creator adds one. */
+export const ASSET_TYPES = ['logo', 'font', 'lut', 'nasheed', 'sfx', 'template', 'other'] as const;
 export type AssetType = (typeof ASSET_TYPES)[number];
 export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
   logo: 'Logos & images',
   font: 'Fonts',
   lut: 'LUTs',
-  music: 'Music',
+  nasheed: 'Nasheeds',
   sfx: 'Sound effects',
   template: 'Templates',
   other: 'Other',

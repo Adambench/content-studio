@@ -1,7 +1,8 @@
-import { Image as ImageIcon, Music, Type, Video } from 'lucide-react';
+import { AudioLines, Image as ImageIcon, Type, Video } from 'lucide-react';
 import { useRef } from 'react';
 import { clipLength, clipStarts, editDuration } from '@shared/edit';
 import { mediaThumbUrl } from '@/lib/api';
+import { sfxName } from '@/lib/sfx';
 import { cn } from '@/lib/utils';
 import { useStudio } from './context';
 
@@ -90,10 +91,10 @@ export function Timeline({ className }: { className?: string }) {
 
         {/* sound */}
         <div className="relative mt-1 h-3">
-          {spec.audio.musicMediaId && (
-            <div className="absolute inset-y-0 right-0 left-0 flex items-center gap-1 rounded bg-amber-500/20 px-1 text-[9px] text-amber-200">
-              <Music className="size-2.5" />
-              <span className="truncate">{media.get(spec.audio.musicMediaId)?.originalName ?? 'Music'}</span>
+          {spec.audio.nasheed && (
+            <div className="absolute inset-y-0 right-0 left-0 flex items-center gap-1 rounded bg-emerald-500/20 px-1 text-[9px] text-emerald-200">
+              <AudioLines className="size-2.5" />
+              <span className="truncate">{media.get(spec.audio.nasheed.mediaId)?.originalName ?? 'Nasheed'}</span>
             </div>
           )}
           {spec.audio.sfx.map((s) => (
@@ -103,7 +104,8 @@ export function Timeline({ className }: { className?: string }) {
               onPointerDown={() => select({ kind: 'sfx', id: s.id })}
               className={cn('absolute top-0 z-10 size-3 -translate-x-1/2 rounded-full border border-sidebar bg-orange-400', selection?.kind === 'sfx' && selection.id === s.id && 'ring-2 ring-brand')}
               style={{ left: pct(s.at) }}
-              aria-label="Sound effect"
+              title={sfxName(s.mediaId, media)}
+              aria-label={`Sound effect: ${sfxName(s.mediaId, media)}`}
             />
           ))}
         </div>

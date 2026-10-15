@@ -16,8 +16,19 @@ export function onLiveEvent(listener: Listener) {
   return () => void listeners.delete(listener);
 }
 
+/** Today gathers from everything, so most events touch it; renders report progress often, so at most every 2 s. */
+let todayTimer: ReturnType<typeof setTimeout> | null = null;
+function refreshToday() {
+  if (todayTimer) return;
+  todayTimer = setTimeout(() => {
+    todayTimer = null;
+    queryClient.invalidateQueries({ queryKey: keys.today });
+  }, 2000);
+}
+
 function apply(event: LiveEvent) {
   const inv = (key: readonly unknown[]) => queryClient.invalidateQueries({ queryKey: key });
+  if (event.type === 'changed' || event.type === 'job') refreshToday();
   if (event.type === 'changed') {
     const wid = event.workspaceId;
     switch (event.entity) {

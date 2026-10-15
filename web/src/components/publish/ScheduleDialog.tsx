@@ -503,7 +503,6 @@ function TikTokDirect({ account, format, media, options, onOptions, onBlocker }:
           )}
         </div>
       )}
-      {format === 'photo' && <SwitchRow id={`music-${account.id}`} label="Add recommended music" checked={!!options.autoAddMusic} onChange={(v) => set({ autoAddMusic: v })} />}
       <SwitchRow id={`ai-${account.id}`} label="AI-generated content" hint="Adds TikTok’s AI-generated label." checked={!!options.aiGenerated} onChange={(v) => set({ aiGenerated: v })} />
       <p className="text-xs text-muted-foreground">
         By posting, you agree to TikTok’s{' '}

@@ -22,7 +22,8 @@ function summary(spec: EditSpec, names: (id: string) => string) {
     `${spec.clips.length} clip${spec.clips.length === 1 ? '' : 's'} from ${files.join(', ') || 'no footage'}`,
     spec.captions.enabled ? `${CAPTION_PRESET_LABELS[spec.captions.preset].label} captions` : 'No captions',
     spec.overlays.length ? `${spec.overlays.length} overlay${spec.overlays.length === 1 ? '' : 's'}` : null,
-    spec.audio.musicMediaId ? `Music: ${names(spec.audio.musicMediaId)}` : null,
+    spec.audio.nasheed ? `Nasheed: ${names(spec.audio.nasheed.mediaId)}` : null,
+    spec.audio.sfx.length ? `${spec.audio.sfx.length} sound effect${spec.audio.sfx.length === 1 ? '' : 's'}` : null,
     spec.grade.lutMediaId ? `Grade: ${names(spec.grade.lutMediaId)}` : null,
   ].filter(Boolean);
 }

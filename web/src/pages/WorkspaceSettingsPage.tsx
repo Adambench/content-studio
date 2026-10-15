@@ -2,8 +2,9 @@ import { ArrowDown, ArrowUp, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import type { Stage, WorkspaceColor } from '@shared/types';
+import { KIND_INFO, KIND_PRESETS, MODULE_INFO, MODULES, type ModuleId, type Stage, type WorkspaceColor, type WorkspaceKind } from '@shared/types';
 import { ColorPicker } from '@/components/ColorPicker';
+import { KindPicker } from '@/components/KindPicker';
 import { PageHeader } from '@/components/PageHeader';
 import { useWorkspaceContext } from '@/components/WorkspaceLayout';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -12,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { api, errorMessage } from '@/lib/api';
 import { keys, queryClient } from '@/lib/queries';
@@ -21,6 +23,9 @@ export function WorkspaceSettingsPage() {
   const navigate = useNavigate();
   const [name, setName] = useState(ws.name);
   const [color, setColor] = useState<WorkspaceColor>(ws.color);
+  const [kind, setKind] = useState<WorkspaceKind>(ws.kind);
+  const [modules, setModules] = useState<ModuleId[]>(ws.modules);
+  const [niche, setNiche] = useState(ws.niche);
   const [description, setDescription] = useState(ws.description);
   const [brandGuide, setBrandGuide] = useState(ws.brandGuide);
   const [voiceMemory, setVoiceMemory] = useState(ws.voiceMemory);
@@ -32,12 +37,33 @@ export function WorkspaceSettingsPage() {
   useEffect(() => setVoiceMemory(ws.voiceMemory), [ws.voiceMemory]);
   useEffect(() => setStages(ws.stages), [ws.stages]);
 
-  const dirty = name !== ws.name || color !== ws.color || description !== ws.description || brandGuide !== ws.brandGuide || voiceMemory !== ws.voiceMemory || JSON.stringify(stages) !== JSON.stringify(ws.stages);
+  const dirty =
+    name !== ws.name ||
+    color !== ws.color ||
+    kind !== ws.kind ||
+    JSON.stringify(modules) !== JSON.stringify(ws.modules) ||
+    niche !== ws.niche ||
+    description !== ws.description ||
+    brandGuide !== ws.brandGuide ||
+    voiceMemory !== ws.voiceMemory ||
+    JSON.stringify(stages) !== JSON.stringify(ws.stages);
+  const presetStages = KIND_PRESETS[kind].stages;
+  const stagesMatchKind = JSON.stringify(stages) === JSON.stringify(presetStages);
+
+  // Another kind brings its modules; its stages are a click away (changing them moves cards).
+  function changeKind(k: WorkspaceKind) {
+    setKind(k);
+    setModules(KIND_PRESETS[k].modules);
+  }
+  const toggleModule = (m: ModuleId, on: boolean) => setModules((all) => MODULES.filter((x) => (x === m ? on : all.includes(x))));
 
   async function save() {
     setBusy(true);
     try {
-      await api(`/workspaces/${ws.id}`, { method: 'PATCH', body: { name: name.trim(), color, description, brandGuide, voiceMemory, stages: stages.map((s) => ({ ...s, name: s.name.trim() || 'Untitled' })) } });
+      await api(`/workspaces/${ws.id}`, {
+        method: 'PATCH',
+        body: { name: name.trim(), color, kind, modules, niche, description, brandGuide, voiceMemory, stages: stages.map((s) => ({ ...s, name: s.name.trim() || 'Untitled' })) },
+      });
       await Promise.all([queryClient.invalidateQueries({ queryKey: keys.workspace(ws.id) }), queryClient.invalidateQueries({ queryKey: keys.workspaces })]);
       toast.success('Saved');
     } catch (err) {
@@ -97,8 +123,36 @@ export function WorkspaceSettingsPage() {
                 <ColorPicker value={color} onChange={setColor} />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="niche">Niche</Label>
+                <Input id="niche" value={niche} onChange={(e) => setNiche(e.target.value)} maxLength={300} placeholder={KIND_INFO[kind].niche} />
+                <p className="text-xs text-muted-foreground">One sentence: the topic and who it’s for. Research and clip picking go by it.</p>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="desc">About this brand</Label>
                 <Textarea id="desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={2000} placeholder="Audience, topics, goals" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle id="kind-title">Kind and modules</CardTitle>
+              <CardDescription>The kind sets Claude’s instructions and suggests modules and stages. Switch modules on or off to suit this page.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <KindPicker value={kind} onChange={changeKind} labelledBy="kind-title" />
+              <div className="divide-y rounded-lg border">
+                {MODULES.map((m) => (
+                  <div key={m} className="flex items-center justify-between gap-4 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <Label htmlFor={`module-${m}`} className="text-sm">
+                        {MODULE_INFO[m].label}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">{MODULE_INFO[m].hint}</p>
+                    </div>
+                    <Switch id={`module-${m}`} checked={modules.includes(m)} onCheckedChange={(on) => toggleModule(m, on)} />
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -156,9 +210,16 @@ export function WorkspaceSettingsPage() {
                   </Button>
                 </div>
               ))}
-              <Button variant="outline" size="sm" disabled={stages.length >= 12} onClick={() => setStages((s) => [...s, { id: crypto.randomUUID().slice(0, 8), name: 'New stage' }])}>
-                <Plus /> Add stage
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" disabled={stages.length >= 12} onClick={() => setStages((s) => [...s, { id: crypto.randomUUID().slice(0, 8), name: 'New stage' }])}>
+                  <Plus /> Add stage
+                </Button>
+                {!stagesMatchKind && (
+                  <Button variant="ghost" size="sm" onClick={() => setStages(presetStages)}>
+                    Use the {KIND_INFO[kind].label.toLowerCase()} stages
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
 

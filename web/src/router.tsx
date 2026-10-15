@@ -18,6 +18,7 @@ import { PiecePage } from '@/pages/PiecePage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { SharePage } from '@/pages/SharePage';
 import { StudioPage } from '@/pages/StudioPage';
+import { TodayPage } from '@/pages/TodayPage';
 import { WorkspaceSettingsPage } from '@/pages/WorkspaceSettingsPage';
 
 export const router = createBrowserRouter([
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
         element: <AppShell />,
         children: [
           { index: true, element: <HomeRedirect /> },
+          { path: 'today', element: <TodayPage /> },
           { path: 'settings', element: <SettingsPage /> },
           { path: 'capture', element: <CapturePage /> },
           { path: 'share', element: <SharePage /> },

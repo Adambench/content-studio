@@ -1,11 +1,13 @@
-import { Crosshair } from 'lucide-react';
+import { Crosshair, Play, Square } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { BUILTIN_SFX, SFX_GROUPS, builtinSfx, builtinSfxId, type SfxGroup } from '@shared/sfx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { listen, stopListening } from '@/lib/sfx';
 import type { Media } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -142,4 +144,63 @@ export function ColorField({ label, value, onChange }: { label: string; value: s
 
 export function PanelEmpty({ children }: { children: React.ReactNode }) {
   return <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">{children}</p>;
+}
+
+/** A play button that lets you hear a sound (and stops it on a second press). */
+export function ListenButton({ src, volume, label = 'Listen', className }: { src: string | null; volume?: number; label?: string; className?: string }) {
+  const [playing, setPlaying] = useState(false);
+  return (
+    <Button
+      type="button"
+      size="icon-sm"
+      variant="ghost"
+      className={className}
+      disabled={!src}
+      aria-label={playing ? 'Stop' : label}
+      onClick={async () => {
+        if (playing) return stopListening();
+        if (!src) return;
+        setPlaying(true);
+        await listen(src, volume);
+        setPlaying(false);
+      }}
+    >
+      {playing ? <Square className="fill-current" /> : <Play />}
+    </Button>
+  );
+}
+
+/** Pick a sound effect: the app's own, by use, then the brand's. */
+export function SfxSelect({ value, onChange, brand, className }: { value: string; onChange: (id: string) => void; brand: Media[]; className?: string }) {
+  const known = !!builtinSfx(value) || brand.some((m) => m.id === value);
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger size="sm" className={cn('w-full min-w-0', className)} aria-label="Sound effect">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {brand.length > 0 && (
+          <SelectGroup>
+            <SelectLabel>Your sound effects</SelectLabel>
+            {brand.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.originalName}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+        {(Object.keys(SFX_GROUPS) as SfxGroup[]).map((g) => (
+          <SelectGroup key={g}>
+            <SelectLabel>{SFX_GROUPS[g]}</SelectLabel>
+            {BUILTIN_SFX.filter((s) => s.group === g).map((s) => (
+              <SelectItem key={s.name} value={builtinSfxId(s.name)}>
+                {s.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        ))}
+        {!known && <SelectItem value={value}>Missing sound</SelectItem>}
+      </SelectContent>
+    </Select>
+  );
 }

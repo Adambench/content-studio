@@ -22,6 +22,7 @@ import { pieceRoutes } from './routes/pieces';
 import { publishingRoutes } from './routes/publishing';
 import { studioRoutes } from './routes/studio';
 import { systemRoutes } from './routes/system';
+import { todayRoutes } from './routes/today';
 import { uploadRoutes } from './routes/uploads';
 import { workspaceRoutes } from './routes/workspaces';
 
@@ -105,6 +106,7 @@ await app.register(chatRoutes);
 await app.register(studioRoutes);
 await app.register(publishingRoutes);
 await app.register(analyticsRoutes);
+await app.register(todayRoutes);
 
 registerHandlers();
 startWorker();

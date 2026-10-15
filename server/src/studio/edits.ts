@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, max, ne } from 'drizzle-orm';
 import { applyTemplate, emptyEdit, normalizeEdit, normalizeTemplate, type EditClip, type EditSpec } from '../../../shared/edit';
+import { builtinSfx, isBuiltinSfx } from '../../../shared/sfx';
 import type { Transcript } from '../../../shared/types';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
@@ -59,15 +60,17 @@ export function createEdit(pieceId: string, by: Author) {
 /**
  * Check every file an edit points at belongs to this workspace and is the right kind, and keep clip in/out points
  * inside their sources. `strict` (Claude) refuses with a message to act on; otherwise references to files that are
- * gone (deleted from the library) are dropped, so an edit never becomes unsaveable.
+ * gone (deleted from the library) are dropped, so an edit never becomes unsaveable. Sound effects are sound-effect
+ * assets or the app's own; the nasheed plays only a nasheed asset (and is dropped rather than refused, since Claude
+ * never sets it).
  */
 export function validateSpec(workspaceId: string, input: EditSpec, strict: boolean): EditSpec {
   const spec = normalizeEdit(input);
   const ids = new Set<string>();
   spec.clips.forEach((c) => ids.add(c.mediaId));
   spec.overlays.forEach((o) => o.type !== 'text' && ids.add(o.mediaId));
-  spec.audio.sfx.forEach((s) => ids.add(s.mediaId));
-  for (const id of [spec.audio.musicMediaId, spec.grade.lutMediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) ids.add(id);
+  spec.audio.sfx.forEach((s) => !isBuiltinSfx(s.mediaId) && ids.add(s.mediaId));
+  for (const id of [spec.audio.nasheed?.mediaId, spec.grade.lutMediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) ids.add(id);
   const rows = ids.size ? db.select().from(schema.media).where(inArray(schema.media.id, [...ids])).all() : [];
   const byId = new Map(rows.map((r) => [r.id, r]));
   const check = (id: string, what: string, ok: (m: MediaRow) => boolean): MediaRow | null => {
@@ -89,8 +92,14 @@ export function validateSpec(workspaceId: string, input: EditSpec, strict: boole
   spec.overlays = spec.overlays.filter(
     (o) => o.type === 'text' || (o.type === 'image' ? check(o.mediaId, 'Image overlay', (m) => m.kind === 'image') : check(o.mediaId, 'B-roll', picture)),
   );
-  spec.audio.sfx = spec.audio.sfx.filter((s) => check(s.mediaId, 'Sound effect', (m) => m.kind === 'audio'));
-  if (spec.audio.musicMediaId && !check(spec.audio.musicMediaId, 'Music', (m) => m.kind === 'audio' || m.kind === 'video')) spec.audio.musicMediaId = null;
+  spec.audio.sfx = spec.audio.sfx.filter((s) => {
+    if (!isBuiltinSfx(s.mediaId)) return check(s.mediaId, 'Sound effect', (m) => m.assetType === 'sfx' && m.kind === 'audio');
+    if (builtinSfx(s.mediaId)) return true;
+    if (strict) throw badRequest(`Sound effect: there's no built-in sound called ${s.mediaId}.`);
+    return false;
+  });
+  const nasheed = spec.audio.nasheed && byId.get(spec.audio.nasheed.mediaId);
+  if (spec.audio.nasheed && (!nasheed || nasheed.workspaceId !== workspaceId || nasheed.assetType !== 'nasheed' || nasheed.kind !== 'audio')) spec.audio.nasheed = null;
   if (spec.grade.lutMediaId && !check(spec.grade.lutMediaId, 'Colour grade', (m) => m.assetType === 'lut' || /\.cube$/i.test(m.originalName))) spec.grade.lutMediaId = null;
   if (spec.watermark.mediaId && !check(spec.watermark.mediaId, 'Watermark', (m) => m.kind === 'image')) spec.watermark.mediaId = null;
   if (spec.captions.fontMediaId && !check(spec.captions.fontMediaId, 'Caption font', (m) => m.assetType === 'font' || /\.(ttf|otf|woff2?)$/i.test(m.originalName))) {
@@ -99,10 +108,17 @@ export function validateSpec(workspaceId: string, input: EditSpec, strict: boole
   return spec;
 }
 
+/** Only the creator adds, changes or removes the nasheed: whatever Claude sends, the edit keeps the one it had. */
+function withAuthorNasheed(edit: EditRow, input: EditSpec, by: Author): EditSpec {
+  if (by !== 'claude') return input;
+  const spec = normalizeEdit(input);
+  return { ...spec, audio: { ...spec.audio, nasheed: normalizeEdit(edit.working).audio.nasheed } };
+}
+
 /** Autosave of the live edit. */
 export function updateEditWorking(editId: string, input: EditSpec, by: Author) {
   const edit = getEdit(editId);
-  const spec = validateSpec(edit.workspaceId, input, by === 'claude');
+  const spec = validateSpec(edit.workspaceId, withAuthorNasheed(edit, input, by), by === 'claude');
   db.update(schema.edits).set({ working: spec, workingUpdatedAt: now() }).where(eq(schema.edits.id, editId)).run();
   ensureProxies(spec);
   announce(edit, by);
@@ -112,7 +128,7 @@ export function updateEditWorking(editId: string, input: EditSpec, by: Author) {
 /** Snapshot the live edit (optionally replacing it first) as a new version. */
 export function saveEditVersion(editId: string, input: { author: Author; message?: string; spec?: EditSpec }) {
   const edit = getEdit(editId);
-  const spec = input.spec ? validateSpec(edit.workspaceId, input.spec, input.author === 'claude') : normalizeEdit(edit.working);
+  const spec = input.spec ? validateSpec(edit.workspaceId, withAuthorNasheed(edit, input.spec, input.author), input.author === 'claude') : normalizeEdit(edit.working);
   const head = edit.headVersionId ? db.select().from(schema.editVersions).where(eq(schema.editVersions.id, edit.headVersionId)).get() : undefined;
   if (head && JSON.stringify(normalizeEdit(head.spec)) === JSON.stringify(spec)) {
     if (input.spec) updateEditWorking(editId, spec, input.author);
@@ -177,12 +193,12 @@ export function ensureProxies(spec: EditSpec) {
 export function specMedia(spec: EditSpec) {
   const ids = new Set(pictureMediaIds(spec));
   spec.overlays.forEach((o) => o.type === 'image' && ids.add(o.mediaId));
-  spec.audio.sfx.forEach((s) => ids.add(s.mediaId));
-  for (const id of [spec.audio.musicMediaId, spec.grade.lutMediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) ids.add(id);
+  spec.audio.sfx.forEach((s) => !isBuiltinSfx(s.mediaId) && ids.add(s.mediaId));
+  for (const id of [spec.audio.nasheed?.mediaId, spec.grade.lutMediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) ids.add(id);
   return ids.size ? db.select().from(schema.media).where(inArray(schema.media.id, [...ids])).all() : [];
 }
 
-/** Transcripts of the main-track footage, for captions, ducking and tightening. */
+/** Transcripts of the main-track footage, for captions, ducking the nasheed and tightening. */
 export async function specTranscripts(spec: EditSpec, rows: MediaRow[]) {
   const ids = new Set(spec.clips.map((c) => c.mediaId));
   const out: Record<string, Transcript | null> = {};

@@ -52,8 +52,6 @@ export type PostOptions = {
   yourBrand?: boolean;
   brandedContent?: boolean;
   aiGenerated?: boolean;
-  /** TikTok photo posts: let TikTok add recommended music. */
-  autoAddMusic?: boolean;
   // Instagram
   shareToFeed?: boolean;
   // YouTube

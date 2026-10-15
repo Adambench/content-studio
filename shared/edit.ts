@@ -98,15 +98,24 @@ export type BrollOverlay = OverlayBase & {
 };
 export type EditOverlay = TextOverlay | ImageOverlay | BrollOverlay;
 
+/** `mediaId` is a sound-effect asset or one of the app's own sounds (`builtin:<name>`, shared/sfx.ts). */
 export type SfxCue = { id: string; mediaId: string; at: number; volume: number };
 
-export type EditAudio = {
-  musicMediaId: string | null;
-  /** Where in the music track to start, in seconds. */
-  musicStart: number;
-  musicVolume: number;
-  /** Lower the music while someone speaks. */
+/**
+ * A vocal-only nasheed under the video. There's no music track: this is the only one an edit can have, only the
+ * creator sets it (edits Claude saves keep whatever was there), and it plays only nasheed assets.
+ */
+export type NasheedTrack = {
+  mediaId: string;
+  /** Where in the nasheed to start, in seconds. */
+  start: number;
+  volume: number;
+  /** Lower it while someone speaks. */
   duck: boolean;
+};
+
+export type EditAudio = {
+  nasheed: NasheedTrack | null;
   /** Level of all clip sound. */
   voiceVolume: number;
   /** Rumble cut, gentle compression and presence on the clip sound. */
@@ -130,13 +139,13 @@ export type EditSpec = {
   watermark: Watermark;
 };
 
-/** The reusable look of a brand's videos, saved per workspace. */
+/** The reusable look of a brand's videos, saved per workspace. Never a nasheed: that's agreed edit by edit. */
 export type EditTemplate = {
   format: EditFormat;
   captions: CaptionSettings;
   grade: EditGrade;
   watermark: Watermark;
-  audio: Omit<EditAudio, 'sfx' | 'musicStart'>;
+  audio: Omit<EditAudio, 'sfx' | 'nasheed'>;
 };
 
 export const DUCK_LEVEL = 0.3;
@@ -159,7 +168,7 @@ export function emptyEdit(): EditSpec {
       fontMediaId: null,
     },
     overlays: [],
-    audio: { musicMediaId: null, musicStart: 0, musicVolume: 0.25, duck: true, voiceVolume: 1, enhanceVoice: false, normalize: true, sfx: [] },
+    audio: { nasheed: null, voiceVolume: 1, enhanceVoice: false, normalize: true, sfx: [] },
     grade: { lutMediaId: null, intensity: 1 },
     watermark: { mediaId: null, corner: 'tr', opacity: 0.85, size: 0.16 },
   };
@@ -195,13 +204,24 @@ function normalizeCaptions(input: unknown, base = emptyEdit().captions): Caption
   };
 }
 
+export const NASHEED_DEFAULTS = { start: 0, volume: 0.25, duck: true };
+
+function normalizeNasheed(input: unknown): NasheedTrack | null {
+  const n = obj(input);
+  if (typeof n.mediaId !== 'string' || !n.mediaId) return null;
+  return {
+    mediaId: n.mediaId,
+    start: round(num(n.start, NASHEED_DEFAULTS.start, 0)),
+    volume: round(num(n.volume, NASHEED_DEFAULTS.volume, 0, 1)),
+    duck: typeof n.duck === 'boolean' ? n.duck : NASHEED_DEFAULTS.duck,
+  };
+}
+
+/** Older edits had a music track (musicMediaId…): it's dropped, never carried over. */
 function normalizeAudio(input: unknown, base = emptyEdit().audio): EditAudio {
   const a = obj(input);
   return {
-    musicMediaId: a.musicMediaId === undefined ? base.musicMediaId : idOrNull(a.musicMediaId),
-    musicStart: round(num(a.musicStart, base.musicStart, 0)),
-    musicVolume: round(num(a.musicVolume, base.musicVolume, 0, 1)),
-    duck: typeof a.duck === 'boolean' ? a.duck : base.duck,
+    nasheed: a.nasheed === undefined ? base.nasheed : normalizeNasheed(a.nasheed),
     voiceVolume: round(num(a.voiceVolume, base.voiceVolume, 0, 2)),
     enhanceVoice: typeof a.enhanceVoice === 'boolean' ? a.enhanceVoice : base.enhanceVoice,
     normalize: typeof a.normalize === 'boolean' ? a.normalize : base.normalize,
@@ -296,18 +316,18 @@ export function normalizeEdit(input: unknown): EditSpec {
 }
 
 export function templateFromEdit(spec: EditSpec): EditTemplate {
-  const { sfx: _sfx, musicStart: _start, ...audio } = spec.audio;
+  const { sfx: _sfx, nasheed: _nasheed, ...audio } = spec.audio;
   return { format: spec.format, captions: spec.captions, grade: spec.grade, watermark: spec.watermark, audio };
 }
 
 export function normalizeTemplate(input: unknown): EditTemplate {
   const t = obj(input);
-  return templateFromEdit(normalizeEdit({ ...t, audio: { ...obj(t.audio), sfx: [] } }));
+  return templateFromEdit(normalizeEdit({ ...t, audio: { ...obj(t.audio), sfx: [], nasheed: null } }));
 }
 
-/** Apply a brand template's look to an edit, keeping its footage, overlays and sound effects. */
+/** Apply a brand template's look to an edit, keeping its footage, overlays, nasheed and sound effects. */
 export function applyTemplate(spec: EditSpec, template: EditTemplate): EditSpec {
-  return normalizeEdit({ ...spec, format: template.format, captions: template.captions, grade: template.grade, watermark: template.watermark, audio: { ...template.audio, musicStart: spec.audio.musicStart, sfx: spec.audio.sfx } });
+  return normalizeEdit({ ...spec, format: template.format, captions: template.captions, grade: template.grade, watermark: template.watermark, audio: { ...template.audio, nasheed: spec.audio.nasheed, sfx: spec.audio.sfx } });
 }
 
 // ---------- timeline ----------
@@ -399,7 +419,7 @@ export function captionPages(words: (Pick<TimelineWord, 'start' | 'end' | 'text'
   return pages.filter((p) => p.end > p.start);
 }
 
-/** Stretches of speech in output time (for ducking music), merging short pauses. */
+/** Stretches of speech in output time (for ducking the nasheed), merging short pauses. */
 export function speechSpans(words: Pick<TimelineWord, 'start' | 'end'>[], mergeGap = 0.6): [number, number][] {
   const spans: [number, number][] = [];
   for (const w of words) {

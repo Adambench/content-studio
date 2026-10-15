@@ -6,6 +6,7 @@ import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { and, eq, inArray } from 'drizzle-orm';
 import { EDIT_FORMATS, LOUDNESS_TARGET, clipLength, editDuration, normalizeEdit, type EditSpec } from '../../../shared/edit';
+import { builtinSfx } from '../../../shared/sfx';
 import { config } from '../config';
 import { db, newId, now, schema } from '../db';
 import { findBinary } from '../lib/bin';
@@ -25,6 +26,8 @@ import type { WorkerMessage, WorkerRequest } from './worker';
 const require = createRequire(import.meta.url);
 export const gsapPath = () => require.resolve('gsap/dist/gsap.min.js');
 export const runtimePath = () => require.resolve('@hyperframes/core/runtime');
+/** One of the app's own sound effects (shared/sfx.ts). */
+export const builtinSfxPath = (name: string) => join(config.assetsDir, 'sfx', `${name}.ogg`);
 
 // The worker sits next to this file in development (TypeScript through tsx) and next to the bundle when built.
 const here = fileURLToPath(import.meta.url);
@@ -79,7 +82,7 @@ async function linkOrCopy(src: string, dest: string) {
 }
 
 const composeMedia = (rows: MediaRow[]) =>
-  new Map<string, ComposeMedia>(rows.map((m) => [m.id, { id: m.id, kind: m.kind, width: m.width, height: m.height, durationMs: m.durationMs }]));
+  new Map<string, ComposeMedia>(rows.map((m) => [m.id, { id: m.id, kind: m.kind, assetType: m.assetType, width: m.width, height: m.height, durationMs: m.durationMs }]));
 
 /** The 'video.render' job: cut and grade the footage, render the composition with HyperFrames, balance loudness, save. */
 export async function renderJob({ renderId }: { renderId: string }) {
@@ -154,11 +157,18 @@ export async function renderJob({ renderId }: { renderId: string }) {
       brollSources[i] = m ? await picture(m, `o${i}`, { start: o.in, duration: o.end - o.start, zoom: 1, audio: false }) : null;
     }
 
-    // Everything else is used as-is: fonts, logos, music, sound effects.
+    // Everything else is used as-is: fonts, logos, the nasheed, sound effects.
     const fileIds = new Set([...spec.overlays.flatMap((o) => (o.type === 'image' ? [o.mediaId] : [])), ...spec.audio.sfx.map((s) => s.mediaId)]);
-    for (const id of [spec.audio.musicMediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) fileIds.add(id);
+    for (const id of [spec.audio.nasheed?.mediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) fileIds.add(id);
     const fileNames = new Map<string, string>();
     for (const id of fileIds) {
+      const builtin = builtinSfx(id);
+      if (builtin) {
+        const name = `sfx-${builtin.name}.ogg`;
+        await copyFile(builtinSfxPath(builtin.name), join(dir, 'media', name));
+        fileNames.set(id, name);
+        continue;
+      }
       const m = byId.get(id);
       if (!m) continue;
       const name = `${m.id}${extname(m.fileName).toLowerCase()}`;
@@ -191,7 +201,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
     );
 
     let final = output;
-    // A video with every clip muted and no music has no sound to level.
+    // A video with every clip muted and no nasheed or sound effects has no sound to level.
     if (spec.audio.normalize && (await probe(output)).hasAudio) {
       progress(0.94, 'Balancing loudness');
       const leveled = join(dir, 'final.mp4');

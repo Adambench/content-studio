@@ -12,7 +12,8 @@ import {
   type EditSpec,
   type OverlayAnimation,
 } from '../../../shared/edit';
-import type { MediaKind, Transcript } from '../../../shared/types';
+import { builtinSfx } from '../../../shared/sfx';
+import type { AssetType, MediaKind, Transcript } from '../../../shared/types';
 
 /**
  * Compiles an edit into a HyperFrames composition: one HTML page whose timed elements (data-start / data-duration)
@@ -20,7 +21,7 @@ import type { MediaKind, Transcript } from '../../../shared/types';
  * pictures come from differs (preview copies vs. full-quality segments cut for the render).
  */
 
-export type ComposeMedia = { id: string; kind: MediaKind; width: number | null; height: number | null; durationMs: number | null };
+export type ComposeMedia = { id: string; kind: MediaKind; assetType: AssetType | null; width: number | null; height: number | null; durationMs: number | null };
 /** Where a moving picture comes from, and the moment in that file the clip starts. Null while it's being prepared. */
 export type ComposeSource = { src: string; mediaStart: number } | null;
 
@@ -30,7 +31,7 @@ export type ComposeInput = {
   transcripts: Record<string, Transcript | null>;
   clipSource: (index: number) => ComposeSource;
   brollSource: (overlayIndex: number) => ComposeSource;
-  /** Original files: fonts, logos, music, sound effects. */
+  /** Original files: fonts, logos, the nasheed, sound effects (including the built-in ones, `builtin:<name>`). */
   fileUrl: (mediaId: string) => string;
   /** One of the bundled caption fonts. */
   fontUrl: (file: string) => string;
@@ -211,30 +212,34 @@ ${
 
   // ---------- sound ----------
   if (anyClipAudio) body.push(`<hf-audio-group id="voice" data-label="Voice" data-volume="${n(spec.audio.voiceVolume)}"${spec.audio.enhanceVoice ? ` data-fx-chain="${attrJson(VOICE_FX)}"` : ''}></hf-audio-group>`);
-  const music = spec.audio.musicMediaId ? media.get(spec.audio.musicMediaId) : undefined;
-  if (music) {
-    const full = spec.audio.musicVolume;
-    const spans = spec.audio.duck ? speechSpans(words, 0.9) : [];
-    const trackLen = music.durationMs ? music.durationMs / 1000 : Infinity;
+  // Never music: the one track an edit can have is a vocal-only nasheed, and only a nasheed asset plays.
+  const track = spec.audio.nasheed;
+  const nasheed = track ? media.get(track.mediaId) : undefined;
+  if (track && nasheed?.assetType === 'nasheed') {
+    const full = track.volume;
+    const spans = track.duck ? speechSpans(words, 0.9) : [];
+    const trackLen = nasheed.durationMs ? nasheed.durationMs / 1000 : Infinity;
     // Loop the track by laying copies end to end when it's shorter than the video.
     let at = 0;
-    let offset = Math.min(spec.audio.musicStart, Number.isFinite(trackLen) ? Math.max(0, trackLen - 1) : spec.audio.musicStart);
+    let offset = Math.min(track.start, Number.isFinite(trackLen) ? Math.max(0, trackLen - 1) : track.start);
     for (let k = 0; at < duration - 0.05 && k < 20; k++) {
       const len = Math.min(duration - at, trackLen - offset);
       if (len <= 0.05) break;
       const lane = duckLane(spans, at, len, full, full * DUCK_LEVEL);
       const fades = `${k === 0 ? ' data-fade-in="0.3"' : ''}${at + len >= duration - 0.05 ? ` data-fade-out="${n(Math.min(1.5, len / 2))}"` : ''}`;
       body.push(
-        `<audio id="m${k}" src="${esc(input.fileUrl(music.id))}"${app.media} data-start="${n(at)}" data-duration="${n(len)}" data-media-start="${n(offset)}" data-track-index="6" data-volume="${n(full)}"${fades}${lane ? ` data-automation="${attrJson(lane)}"` : ''}></audio>`,
+        `<audio id="n${k}" src="${esc(input.fileUrl(nasheed.id))}"${app.media} data-start="${n(at)}" data-duration="${n(len)}" data-media-start="${n(offset)}" data-track-index="6" data-volume="${n(full)}"${fades}${lane ? ` data-automation="${attrJson(lane)}"` : ''}></audio>`,
       );
       at += len;
       offset = 0;
     }
   }
   spec.audio.sfx.forEach((s, i) => {
-    if (s.at >= duration || !media.has(s.mediaId)) return;
-    const m = media.get(s.mediaId)!;
-    const len = Math.min(duration - s.at, m.durationMs ? m.durationMs / 1000 : duration - s.at);
+    const builtin = builtinSfx(s.mediaId);
+    const m = media.get(s.mediaId);
+    if (s.at >= duration || (!builtin && m?.assetType !== 'sfx')) return;
+    const seconds = builtin ? builtin.seconds : m?.durationMs ? m.durationMs / 1000 : Infinity;
+    const len = Math.min(duration - s.at, seconds);
     body.push(`<audio id="s${i}" src="${esc(input.fileUrl(s.mediaId))}"${app.media} data-start="${n(s.at)}" data-duration="${n(len)}" data-track-index="7" data-volume="${n(s.volume)}"></audio>`);
   });
 
@@ -312,7 +317,7 @@ function animate(target: string, kind: OverlayAnimation, start: number, len: num
   return out;
 }
 
-/** Music volume lane (clip-relative time) that dips under speech. */
+/** Nasheed volume lane (clip-relative time) that dips under speech. */
 function duckLane(spans: [number, number][], clipStart: number, clipLen: number, full: number, low: number) {
   const points: { t: number; v: number }[] = [{ t: 0, v: full }];
   for (const [s, e] of spans) {

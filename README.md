@@ -21,14 +21,22 @@ Open **Content Studio** from the app menu. No terminal needed.
 
 ## What's in it
 
-- **Workspaces** — one per brand/niche, fully isolated: board, footage, assets, chats, brand guide, voice.
-- **Pipeline board** — drag cards through your stages (customisable per workspace).
+- **Today** (the home page) — what needs you across every workspace: clips waiting for review, posts that failed or
+  missed their time, today's posts, what's running (renders, transcriptions, Claude jobs), each page at a glance and
+  Claude usage. First in the phone's bottom bar.
+- **Workspaces** — one per page, fully isolated: board, footage, assets, chats, brand guide, voice. Each has a kind —
+  **Personal brand**, **Business** or **Clipping page** — that presets its modules (Ideas & scripts, Filming,
+  Grading, Campaigns, Clipping, Research brief), its stages and Claude's instructions, and a one-line **niche**.
+  Modules can be switched on or off in workspace settings.
+- **Pipeline board** — drag cards through your stages (customisable per workspace; clipping pages go Making →
+  Review → Ready → Scheduled → Posted).
 - **Piece editor** — hook, script, notes and per-platform copy (TikTok, Instagram, YouTube Shorts, X) with
   character counters. Autosaves; **Save version** (Ctrl+S) snapshots it. **Alternatives** are parallel takes,
   each with its own history; compare any version with the current draft, restore it, or branch from it.
 - **Library** — footage, photos and voice memos, transcribed locally with Whisper (word timestamps for captions
   later). Search finds words *spoken* in your videos.
-- **Brand assets** — logos, fonts, LUTs, music, SFX and templates for the video studio.
+- **Brand assets** — logos, fonts, LUTs, vocal-only nasheeds, SFX and templates for the video studio, plus ~30
+  built-in sound effects (whooshes, risers, impacts, pops, clicks, dings, glitches) to listen to. No music, ever.
 - **Claude panel** (Ctrl+J) — reads your board, pieces, transcripts, video frames and how your posts did, researches
   the web, writes drafts straight into pieces as new versions, creates alternatives, moves cards. It never publishes.
 - **Voice learning** — when you rewrite Claude's text and save, it learns from the difference.
@@ -42,13 +50,14 @@ Open **Content Studio** from the app menu. No terminal needed.
     misheard words there — it corrects the transcript too.
   - **Text & images**: titles, labels, logos and b-roll cutaways (full screen, top half, picture in picture);
     one click puts the draft's hook on screen.
-  - **Sound**: music that dips under your voice, sound effects, voice clean-up, and loudness levelled to −14 LUFS
-    (what TikTok, Reels and Shorts play at).
+  - **Sound**: built-in and brand sound effects, voice clean-up, loudness levelled to −14 LUFS (what TikTok, Reels
+    and Shorts play at), and optionally a vocal-only nasheed that dips under your voice — only you can add one.
   - **Look**: 9:16 / 4:5 / 1:1, a LUT colour grade (applied in the render), a watermark. **Save this look** makes it
     the brand's default for new edits.
   - **Render** makes an MP4 on this laptop (about a minute for a short video) that lands in the piece's
     *Finished videos*. Every change is versioned — **History** restores any earlier edit.
-  - Claude can do all of it from the chat: pick the best takes, tighten, caption, reframe, add music and render.
+  - Claude can do all of it from the chat: pick the best takes, tighten, caption, reframe, add sound effects and
+    render. It never adds music or touches the nasheed.
 
 - **Calendar** — every post in week, month or list view. Drag a post to another day (or onto a free queue time) to
   move it; drag a piece from *Ready to schedule* onto the calendar to schedule it. Failed or missed posts show at the

@@ -4,7 +4,7 @@ import { and, asc, eq, isNull, max, notInArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { normalizeTemplate } from '../../../shared/edit';
-import { DEFAULT_STAGES, WORKSPACE_COLORS } from '../../../shared/types';
+import { KIND_PRESETS, MODULES, WORKSPACE_COLORS, WORKSPACE_KINDS, normalizeModules } from '../../../shared/types';
 import { config } from '../config';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
@@ -17,6 +17,9 @@ const stageSchema = z.object({ id: z.string().min(1).max(40), name: z.string().t
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(60).optional(),
   color: z.enum(WORKSPACE_COLORS).optional(),
+  kind: z.enum(WORKSPACE_KINDS).optional(),
+  modules: z.array(z.enum(MODULES)).max(MODULES.length).optional(),
+  niche: z.string().trim().max(300).optional(),
   description: z.string().max(2000).optional(),
   brandGuide: z.string().max(20000).optional(),
   voiceMemory: z.string().max(20000).optional(),
@@ -49,12 +52,19 @@ export async function workspaceRoutes(app: FastifyInstance) {
 
   app.post('/api/workspaces', async (req) => {
     const body = z
-      .object({ name: z.string().trim().min(1).max(60), color: z.enum(WORKSPACE_COLORS).default('violet'), description: z.string().max(2000).default('') })
+      .object({
+        name: z.string().trim().min(1).max(60),
+        color: z.enum(WORKSPACE_COLORS).default('violet'),
+        kind: z.enum(WORKSPACE_KINDS).default('personal'),
+        niche: z.string().trim().max(300).default(''),
+        description: z.string().max(2000).default(''),
+      })
       .parse(req.body);
     const last = db.select({ p: max(schema.workspaces.position) }).from(schema.workspaces).get();
     const id = newId();
+    const preset = KIND_PRESETS[body.kind];
     db.insert(schema.workspaces)
-      .values({ id, ...body, stages: DEFAULT_STAGES, position: (last?.p ?? -1) + 1 })
+      .values({ id, ...body, modules: preset.modules, stages: preset.stages, position: (last?.p ?? -1) + 1 })
       .run();
     setSetting('lastWorkspaceId', id);
     emit({ type: 'changed', entity: 'workspaces', workspaceId: id });
@@ -73,8 +83,12 @@ export async function workspaceRoutes(app: FastifyInstance) {
       const ids = body.stages.map((s) => s.id);
       if (new Set(ids).size !== ids.length) throw badRequest('Stage ids must be unique.');
     }
-    const { editTemplate, ...rest } = body;
-    const values = { ...rest, ...(editTemplate !== undefined ? { editTemplate: editTemplate && normalizeTemplate(editTemplate) } : {}) };
+    const { editTemplate, modules, ...rest } = body;
+    const values = {
+      ...rest,
+      ...(modules && { modules: normalizeModules(modules) }),
+      ...(editTemplate !== undefined ? { editTemplate: editTemplate && normalizeTemplate(editTemplate) } : {}),
+    };
     db.transaction((tx) => {
       tx.update(schema.workspaces).set({ ...values, updatedAt: now() }).where(eq(schema.workspaces.id, ws.id)).run();
       // Cards in a removed stage move to the first stage instead of disappearing.
