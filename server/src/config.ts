@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,9 @@ import { fileURLToPath } from 'node:url';
  */
 const resourcesDir = resolve(process.env.APP_RESOURCES ?? join(dirname(fileURLToPath(import.meta.url)), '../..'));
 const dataDir = resolve(process.env.CONTENT_STUDIO_DATA_DIR ?? join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local/share'), 'content-studio'));
+// The skills as a Claude plugin: shipped with the packaged app, built from `.claude/skills` in development.
+const packagedPluginDir = join(resourcesDir, 'claude-plugin');
+const devPluginDir = join(dataDir, 'claude-plugin');
 
 export const config = {
   isProd: process.env.NODE_ENV === 'production',
@@ -38,8 +41,11 @@ export const config = {
   cacheDir: join(dataDir, 'cache'),
   tmpDir: join(dataDir, 'tmp'),
   logsDir: join(dataDir, 'logs'),
-  // Claude's working directory; it has no file tools in phase 1, but sessions are stored per cwd.
+  // Claude's working directory (sessions are stored per cwd). Its only file tool, Read, is limited to the skills.
   claudeDir: join(dataDir, 'claude'),
+  skillsSource: join(resourcesDir, '.claude/skills'),
+  pluginDir: existsSync(join(packagedPluginDir, '.claude-plugin/plugin.json')) ? packagedPluginDir : devPluginDir,
+  devPluginDir,
   // Whisper's Python environment lives with the data so app updates don't wipe it.
   whisperVenv: join(dataDir, 'whisper'),
   whisperPython: join(dataDir, 'whisper/bin/python'),

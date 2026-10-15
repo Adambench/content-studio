@@ -6,6 +6,7 @@ import { emit } from '../lib/events';
 import { HttpError, notFound } from '../lib/http';
 import { getWorkspace } from '../services/pieces';
 import { baseOptions, resolveModel } from './options';
+import { skillOptions } from './plugin';
 import { chatSystemPrompt } from './prompt';
 import { buildTools, toolLabel } from './tools';
 import { recordUsage } from './usage';
@@ -58,6 +59,7 @@ export async function runChat(input: {
   input.onEvent({ type: 'start', messageId: assistantId, model });
 
   const { server, toolNames } = buildTools(ws.id);
+  const { tools: skillTools, ...skills } = skillOptions();
   const systemPrompt = chatSystemPrompt(ws, { piece: contextPiece && { id: contextPiece.id, title: contextPiece.title, branchName: branch?.name, view: input.contextView ?? undefined } });
 
   const attempt = (resume: string | undefined) =>
@@ -65,9 +67,10 @@ export async function runChat(input: {
       prompt: input.text,
       options: {
         ...baseOptions(),
+        ...skills,
         model,
         systemPrompt,
-        tools: WEB_TOOLS,
+        tools: [...WEB_TOOLS, ...skillTools],
         mcpServers: { studio: server },
         allowedTools: [...toolNames, ...WEB_TOOLS],
         // Anything outside the allow-list is refused rather than prompting nobody.

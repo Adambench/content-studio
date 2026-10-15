@@ -5,6 +5,7 @@ import fastifyStatic from '@fastify/static';
 import Fastify, { LogController } from 'fastify';
 import { ZodError } from 'zod';
 import { startAnalytics, stopAnalytics } from './analytics/schedule';
+import { preparePlugin } from './claude/plugin';
 import { config } from './config';
 import { runMigrations } from './db';
 import { registerHandlers } from './jobs/handlers';
@@ -26,6 +27,7 @@ import { workspaceRoutes } from './routes/workspaces';
 
 runMigrations();
 initPush();
+preparePlugin();
 
 const app = Fastify({
   logger: { level: config.isProd ? 'info' : 'warn' },

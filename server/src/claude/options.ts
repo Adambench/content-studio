@@ -10,7 +10,8 @@ export function baseOptions(): Options {
   const { ANTHROPIC_API_KEY: _drop, ...env } = process.env;
   return {
     cwd: config.claudeDir,
-    env: { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: 'content-studio/0.1.0' },
+    // The Claude login also brings my claude.ai connectors (Drive, Docs…) as tools: the app's Claude gets none of them.
+    env: { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: 'content-studio/0.1.0', ENABLE_CLAUDEAI_MCP_SERVERS: 'false' },
     // Don't load my personal Claude Code settings, hooks or CLAUDE.md files into the app's agent.
     settingSources: [],
   };

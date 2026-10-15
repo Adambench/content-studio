@@ -70,7 +70,8 @@ HyperFrames + FFmpeg) is usable and being extended.
   dependency trees by `desktop/scripts/package.mjs` — add new ones there.
 - `.claude/skills/` — third-party skills installed with `npx skills add <repo> -a claude-code --copy -s <names>`
   (tracked in `skills-lock.json`); `npx skills update -p` refreshes them — then delete `last30days/assets` again
-  (demo files, one of them music). `content-principles` has no license: personal use only.
+  (demo files, one of them music). `content-principles` has no license: personal use only. `playbook` is ours (not
+  in `skills-lock.json`): the shared knowledge base on hooks, retention, clipping, packaging, sound and halal.
 - Screenshot the app for checking UI: `CONTENT_STUDIO_DATA_DIR=/tmp/x PORT=8797 CS_OPEN_PATH=/settings
   CS_SCREENSHOT=/tmp/x.png CS_SCREENSHOT_QUIT=1 node_modules/electron/dist/electron desktop` (after building)
 
@@ -92,6 +93,11 @@ HyperFrames + FFmpeg) is usable and being extended.
   Rendering is local and allowed (`render_edit`); edits Claude saves are versions authored `claude`.
   The weekly review may rewrite the voice memory (with Undo, and only if it didn't change meanwhile), but queue-time
   changes and new idea cards from a review only happen on the user's click; `get_analytics` is read-only.
+- **Skills in the app** (`server/src/claude/plugin.ts`): `.claude/skills` loads as the `studio-skills` plugin (built in
+  the data dir in development, `claude-plugin/` in the package) with an allow-list (`CHAT_SKILLS`: knowledge skills
+  only); the chat's one file tool, Read, is held to the plugin folder by a PreToolUse hook. `baseOptions()` turns off
+  the login's claude.ai connectors (`ENABLE_CLAUDEAI_MCP_SERVERS=false`). Background prompts don't load skills: paste
+  the playbook files they need with `playbook(...)`, first in the system prompt.
 - The phone password can only be set from the desktop app (`/api/auth/setup` is refused when `DESKTOP_TOKEN`
   is set), so whoever reaches the Funnel URL first can't claim it.
 - Drafts have one shape, `DraftContent` in `shared/types.ts`; use `normalizeDraft`/`mergeDraft`.

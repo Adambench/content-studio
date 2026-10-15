@@ -3,6 +3,7 @@ import { DEFAULT_WEEKLY_REVIEW, lastReviewDue, type ReviewBody, type ReviewSlotS
 import type { QueueSlot } from '../../../shared/publish';
 import { askStructured } from '../claude/oneshot';
 import { resolveModel } from '../claude/options';
+import { playbook } from '../claude/plugin';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, HttpError, notFound } from '../lib/http';
@@ -143,6 +144,8 @@ const REVIEW_SCHEMA = {
 
 function systemPrompt(ws: typeof schema.workspaces.$inferSelect) {
   return [
+    // The same text every week first, so it caches.
+    playbook('hooks', 'retention', 'halal'),
     `You are Claude, built into Content Studio, doing the weekly review of the creator's "${ws.name}" short-form posts (TikTok, Instagram, YouTube Shorts). The numbers are already worked out for you; your job is to read them honestly and turn them into a few concrete next steps.`,
     `Rules:
 - Be specific and grounded: name posts by title and quote their numbers. Never invent numbers, posts, trends or reasons that the data doesn't support.
@@ -155,7 +158,9 @@ function systemPrompt(ws: typeof schema.workspaces.$inferSelect) {
 - Voice memory: return the full voice memory with what the results show works for this audience (hooks, topics, formats, lengths, caption style) folded in. Keep every existing rule unless the results clearly contradict it; mark rules that come from results with "(from results)"; stay under 350 words. If the results don't teach anything new yet, return it unchanged and leave voiceNote empty.
 - Plain, friendly language; no hype.`,
     `## The brand\n${ws.description || '(no description)'}\n\n### Brand guide\n${ws.brandGuide.trim() || '(not written)'}`,
-  ].join('\n\n');
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 const SLOT_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;

@@ -7,6 +7,7 @@ import type { Transcript } from '../../../shared/types';
 import { onReviewFailed, runReview } from '../analytics/review';
 import { statsJob } from '../analytics/schedule';
 import { askStructured } from '../claude/oneshot';
+import { playbook } from '../claude/plugin';
 import { config } from '../config';
 import { db, now, schema } from '../db';
 import { emit } from '../lib/events';
@@ -103,6 +104,8 @@ async function structureCapture(payload: { workspaceId: string; mediaId?: string
   if (raw) {
     idea = await askStructured<CapturedIdea>({
       system: [
+        // The same text every time first, so it caches.
+        playbook('hooks', 'halal'),
         `You turn a creator's rough spoken or typed notes into a content idea card for their "${ws.name}" brand.`,
         ws.description && `About the brand: ${ws.description}`,
         ws.brandGuide && `Brand guide:\n${ws.brandGuide}`,

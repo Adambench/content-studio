@@ -1,6 +1,6 @@
 // Builds everything and packages the desktop app into desktop/release/linux-unpacked.
 import { execSync } from 'node:child_process';
-import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +21,13 @@ rmSync(stage, { recursive: true, force: true });
 for (const rel of ['desktop/dist', 'desktop/icons', 'server/dist', 'server/drizzle', 'server/scripts', 'server/assets', 'web/dist']) {
   cpSync(join(root, rel), join(stage, rel), { recursive: true });
 }
+// The skills as a ready-made Claude plugin (the server builds the same folder in its data dir in development).
+cpSync(join(root, '.claude/skills'), join(stage, 'claude-plugin/skills'), { recursive: true, dereference: true });
+mkdirSync(join(stage, 'claude-plugin/.claude-plugin'), { recursive: true });
+writeFileSync(
+  join(stage, 'claude-plugin/.claude-plugin/plugin.json'),
+  JSON.stringify({ name: 'studio-skills', description: "Content Studio's skills: the playbook and the content skills it builds on", version: '1.0.0' }, null, 2),
+);
 
 /**
  * The server bundle includes everything except packages that find files inside themselves: the Claude Agent SDK

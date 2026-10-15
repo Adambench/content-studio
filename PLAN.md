@@ -142,9 +142,24 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
      marketing-psychology, content-strategy, offers), last30days (terminal), Contagious, Made to Stick,
      content-principles. Skipped: the MrBeast persona skill, social-media-skills (routes to paid tools), Apify/muapi
      (paid), a film sound-design skill (built on music)
-   - [ ] Steps 1–9 of the *Phase 7 build plan* below: 1 playbook skill · 2 skills in the app · 3 workspace kinds,
-     Today, music out of the code · 4 signed-in windows (desktop bridge) · 5 campaigns · 6 clipping v1 · 7 submissions
-     and earnings · 8 research and daily brief · 9 later formats
+   - The *Phase 7 build plan* below, step by step:
+   - [x] 1 Playbook skill (`.claude/skills/playbook`, 2026-10-15): `SKILL.md` + hooks, retention, clipping, packaging,
+     sound design, halal, platforms. Tested: a fresh Claude Code session asked to "pick moments" from a real 42-minute
+     podcast transcript loaded it, read `clipping.md`, `hooks.md` and `halal.md`, and gave 7 scored moments with hook
+     cards, music and swearing flags
+   - [x] 2 Skills in the app (2026-10-15): `.claude/skills` as the `studio-skills` plugin (built in the data dir in
+     development, shipped as `claude-plugin/` in the package), 16 knowledge skills allowed, Read limited to the
+     plugin folder by a PreToolUse hook, claude.ai connectors turned off for every Claude call, the halal rule and
+     skills in the chat prompt, `hooks.md` + `halal.md` (+ `retention.md` for the weekly review) pasted into the
+     background prompts. Tested in dev and from the packaged build: "what makes a good hook" opens the playbook and
+     reads `hooks.md`; reads outside the skills are refused; a captured idea follows the playbook
+   - [ ] 3 Workspace kinds, Today, music out of the code
+   - [ ] 4 Signed-in windows (desktop bridge)
+   - [ ] 5 Campaigns
+   - [ ] 6 Clipping v1
+   - [ ] 7 Submissions and earnings
+   - [ ] 8 Research and daily brief
+   - [ ] 9 Later formats
 
 ## Video studio decisions (2026-10-14)
 
@@ -566,8 +581,9 @@ Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usag
   one manual and one scheduled weekly review run on the real Claude, and the UI at desktop and phone sizes. Not yet
   installed as the desktop app (`npm run install-app`).
 - Next: phase 0 on the platforms' sites (now including the analytics scopes), then connect real accounts; video
-  studio extras (transitions, motion graphics). Phase 7 (clipping): skills installed (2026-10-15); next is *Before
-  step 1*, then step 1 of the *Phase 7 build plan*.
+  studio extras (transitions, motion graphics). Phase 7 (clipping): skills installed and the earlier work committed;
+  steps 1 (playbook skill) and 2 (skills in the app) done (2026-10-15); next is step 3 of the *Phase 7 build
+  plan*. The weekly review with the playbook in its prompt hasn't been run yet (no posts with numbers).
 - Phase 6 (Android app) is built: tested on an Android 15 emulator against a local server — pairing (link and deep
   link), share sheet from the Files app, background uploads with resume after a dropped connection, camera, voice memos,
   offline queue and banner, lock, video preview, launcher shortcuts, unpairing — and the desktop's pairing/Firebase

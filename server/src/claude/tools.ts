@@ -88,6 +88,13 @@ export function toolLabel(fullName: string, input: Record<string, any>): string 
       } catch {
         return 'Read a web page';
       }
+    case 'Skill':
+      return `Opened the ${String(input.skill ?? 'a').replace(/^[\w-]+:/, '')} skill`;
+    case 'Read': {
+      // Only the skills' files are readable: name the file by its skill, e.g. "playbook › hooks".
+      const m = /skills\/([^/]+)\/(?:.*\/)?([^/]+?)(?:\.md)?$/.exec(String(input.file_path ?? ''));
+      return m ? `Read ${m[1]} › ${m[2]}` : 'Read a skill file';
+    }
     default:
       return studioToolLabel(name, input) ?? name;
   }
