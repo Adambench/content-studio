@@ -30,6 +30,10 @@ HyperFrames + FFmpeg) is usable and being extended.
   such URLs with `fileUrl()`/`mediaFileUrl()`/`mediaThumbUrl()` and call the API through `api()`/`apiFetch()`, never a
   bare `/api/…` (the app's origin is `https://localhost`; the server answers it with CORS). Bump `API_VERSION`
   (`shared/devices.ts`) for changes an older app can't handle.
+- Workspaces have a `kind` (personal / business / clipping) that presets `modules`, stages and the chat prompt's
+  kind section (`KIND_PRESETS`, `MODULE_INFO` in `shared/types.ts`); modules are switches, not fences. Nav items with a
+  `module` show only when it's on. **Today** (`/today`, `GET /api/today` in `routes/today.ts`) gathers across
+  workspaces; it refetches on any live event (throttled) — new things that need the user go there too.
 - Data: `~/.local/share/content-studio` (override `CONTENT_STUDIO_DATA_DIR`). App files resolve from
   `APP_RESOURCES` (set by Electron) or the repo root.
 - Video studio (`server/src/studio`): an edit is JSON (`EditSpec`, `shared/edit.ts` — use `normalizeEdit`;
@@ -81,7 +85,11 @@ HyperFrames + FFmpeg) is usable and being extended.
   tracks, beds, stingers, trending sounds or TikTok "auto add music". SFX are fine (whooshes, pops, clicks, impacts,
   dings, risers); a vocal-only nasheed only when the user OKs that edit. Background music in source footage is removed
   (Demucs) or the clip is dropped, and nothing haram is promoted (PLAN.md *Halal*). The third-party skills in
-  `.claude/skills` assume music in places — that advice never applies here.
+  `.claude/skills` assume music in places — that advice never applies here. In the code: an edit's only track is
+  `audio.nasheed`, which plays only `nasheed` assets and which Claude's saves can't change (`withAuthorNasheed` in
+  `studio/edits.ts`); SFX cues are `sfx` assets or the built-ins (`builtin:<name>`, `shared/sfx.ts`,
+  `server/assets/sfx` — rebuild with `server/scripts/make-sfx.py`, never add anything tonal-melodic); there is no
+  music asset type.
 - **No Anthropic API key, ever.** Claude runs through `@anthropic-ai/claude-agent-sdk` on the user's Claude
   Pro login (`server/src/claude/options.ts` strips `ANTHROPIC_API_KEY`). Keep LLM calls few: mechanical work
   (transcription, probing, cutting) is done by Whisper/FFmpeg, background jobs use Haiku.
@@ -108,3 +116,39 @@ HyperFrames + FFmpeg) is usable and being extended.
   Mobile is first-class (Android PWA, bottom nav, share target). No `alert`/`confirm`/`prompt`.
 - Stopping a dev server with `pkill -f "<pattern>"` from a shell whose own command line contains that pattern
   kills the shell; use `[x]yz`-style patterns or a separate command.
+
+## Working rules
+
+- **Commit and push when a job is done.** Once a step or change is finished and checked (typecheck passes, the flow
+  tried), commit it with a clear message and `git push` — don't ask first. Never commit secrets.
+- Android releases: bump the root `package.json` version, commit, push a matching `v*` tag; CI signs the APK with the
+  release key held in the repo's `ANDROID_*` Actions secrets (the key file lives only on the laptop, in
+  `~/.config/content-studio/android-release/`). Never generate a new key: the phone could no longer update.
+- The user's use cases (personal brand, Whop Content Rewards clipping, clipping for their own businesses) and the
+  decisions on organising them are in PLAN.md *Use cases and organisation*, *Halal* and *Clipping plan*: read those
+  rather than asking again. Still unknown: how many businesses the user has and what they are.
+
+## Cloud sessions
+
+Work can go on in Claude Code cloud sessions (claude.ai/code, the phone's Code tab, `claude --cloud`) with the laptop
+off. The session clones `main` from GitHub, so only pushed work is there.
+
+- Setup: the SessionStart hook (`.claude/settings.json`) runs `scripts/cloud-setup.sh` — Node 24 on `PATH`, FFmpeg,
+  Xvfb, the Electron/Chrome libraries, espeak-ng, then `npm ci` (skipped while the lockfiles are unchanged). It does
+  nothing on the laptop. If something is missing, run the script again and read its `[cloud-setup]` lines.
+- Git: commit to the branch the session was given and push it; when the job is done, also bring `main` up to date
+  (`git fetch origin main && git rebase origin/main && git push origin HEAD:main`) so the next session and the laptop
+  start from it. Tags can't be pushed from the cloud (the GitHub proxy refuses them): releases are tagged on the laptop.
+- The VM runs as root with no display: start Electron with `xvfb-run -a node_modules/electron/dist/electron
+  --no-sandbox desktop` (the screenshot command above works this way). The renderer's Chrome already gets
+  `--no-sandbox` from HyperFrames and downloads from storage.googleapis.com, which is allowed.
+- Not there: the user's data (use a fresh `CONTENT_STUDIO_DATA_DIR=/tmp/…`), their platform accounts and site
+  sign-ins, a phone, the Android SDK (CI builds APKs). The app's own Claude calls (chat, capture, review) need the
+  user's Claude login, which a cloud VM usually doesn't have: try once, and if it fails test the tool handlers and
+  prompts directly and leave the real run for the laptop.
+- Test footage: make it, don't fetch it — `ffmpeg -f lavfi -i testsrc2` for picture and `espeak-ng -w` for speech
+  (never tones or music).
+- Network is the environment's allowlist (package registries, GitHub, Google APIs). Whisper's models (Hugging Face),
+  yt-dlp sources (YouTube, Twitch, Kick) and Whop/TikTok/Instagram pages need the environment set to Full network
+  access. When a check needs something the cloud can't reach, build the feature, test it against a local stand-in,
+  and write what the user still has to check under *Where things stand* in PLAN.md.

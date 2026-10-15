@@ -67,8 +67,8 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
    - [x] Captions from word timestamps (4 styles, brand fonts, fix misheard words); text/image/b-roll overlays
    - [x] Tighten: cut pauses/fillers from word timings (silence detection without a transcript), punch-ins
    - [x] Reframe (focus point + zoom), 9:16 / 4:5 / 1:1; preview copies of footage (HDR tone-mapped, HEVC → H.264)
-   - [x] Music with ducking under speech, SFX, voice clean-up, −14 LUFS loudness; LUT grading (FFmpeg) — the
-     music part is to be removed (see *Halal*)
+   - [x] SFX, voice clean-up, −14 LUFS loudness; LUT grading (FFmpeg). The music track became a vocal-only nasheed
+     track only the user sets (phase 7, step 3; see *Halal*)
    - [x] Render queue in a child process (headless Chrome downloaded on first render), result into the library
    - [x] Brand look (template) per workspace; Claude tools: get/update/tighten/render edits, list assets
    - [ ] Transitions between clips, animated motion-graphics templates (and Claude-written HyperFrames scenes)
@@ -153,7 +153,19 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
      skills in the chat prompt, `hooks.md` + `halal.md` (+ `retention.md` for the weekly review) pasted into the
      background prompts. Tested in dev and from the packaged build: "what makes a good hook" opens the playbook and
      reads `hooks.md`; reads outside the skills are refused; a captured idea follows the playbook
-   - [ ] 3 Workspace kinds, Today, music out of the code
+   - [x] 3 Workspace kinds, Today, music out of the code (2026-10-15): `kind`/`modules`/`niche` on workspaces
+     (`KIND_PRESETS`; kind cards on New workspace, kind + module switches + niche in settings; nav filters by module,
+     Capture lists workspaces with Ideas, the grade section and LUT assets need Grading), a section per kind in the
+     chat prompt (kind and niche also in the weekly review and idea capture); Today at `/today` (home, first in the
+     phone's bar, badge in the sidebar) from `GET /api/today`; music → `nasheed` (edit field, asset type with a
+     vocal-only confirmation, Claude's saves keep the user's nasheed, compose/render play only nasheed assets),
+     SFX only from sound-effect assets or the 31 built-ins (`server/assets/sfx`, `shared/sfx.ts`, built by
+     `server/scripts/make-sfx.py` from Kenney CC0 sounds and our own synthesis), TikTok's auto-add-music gone (always
+     `false`; older apps' value is dropped), `API_VERSION` 2. Tested: API checks, Claude's tool handlers, a real render
+     (nasheed + built-in whoosh and boom in the mix), a real chat on a clipping page (adds a built-in whoosh, refuses
+     music, leaves the nasheed), screenshots of Today, New workspace, settings, assets and the Sound tab at desktop
+     and phone width. Still to do: the user listens to the built-in SFX (Brand assets → Sound effects → Built in) and
+     approves or drops some
    - [ ] 4 Signed-in windows (desktop bridge)
    - [ ] 5 Campaigns
    - [ ] 6 Clipping v1
@@ -322,7 +334,8 @@ above and update *Where things stand*.
 **Before step 1**
 - The working tree has uncommitted work from before phase 7: `desktop/src/main.ts` + `server/src/index.ts` (the
   server exits when the desktop app's stdin pipe closes). Finish and commit that first. Then commit this plan,
-  `CLAUDE.md`, `.claude/skills/` and `skills-lock.json` (ask first, like every commit).
+  `CLAUDE.md`, `.claude/skills/` and `skills-lock.json`. (Since 2026-10-15: commit and push whenever a job is done,
+  without asking — CLAUDE.md *Working rules*.)
 - What's already measured is in the *Checked* table above. The steps say what still needs measuring.
 
 ### New data
@@ -581,9 +594,11 @@ Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usag
   one manual and one scheduled weekly review run on the real Claude, and the UI at desktop and phone sizes. Not yet
   installed as the desktop app (`npm run install-app`).
 - Next: phase 0 on the platforms' sites (now including the analytics scopes), then connect real accounts; video
-  studio extras (transitions, motion graphics). Phase 7 (clipping): skills installed and the earlier work committed;
-  steps 1 (playbook skill) and 2 (skills in the app) done (2026-10-15); next is step 3 of the *Phase 7 build
-  plan*. The weekly review with the playbook in its prompt hasn't been run yet (no posts with numbers).
+  studio extras (transitions, motion graphics). Phase 7 (clipping): steps 1 (playbook skill), 2 (skills in the app)
+  and 3 (kinds, Today, music out) done (2026-10-15); next is step 4 of the *Phase 7 build plan*. Waiting on the user:
+  listening to the built-in SFX. The weekly review with the playbook in its prompt hasn't been run yet (no posts with
+  numbers). The phone app needs a new release for Today and the nasheed change (`API_VERSION` 2: v0.1.0 asks to be
+  updated).
 - Phase 6 (Android app) is built: tested on an Android 15 emulator against a local server — pairing (link and deep
   link), share sheet from the Files app, background uploads with resume after a dropped connection, camera, voice memos,
   offline queue and banner, lock, video preview, launcher shortcuts, unpairing — and the desktop's pairing/Firebase
