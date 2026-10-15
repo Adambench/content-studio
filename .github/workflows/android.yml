@@ -17,7 +17,8 @@ concurrency:
 
 jobs:
   apk:
-    runs-on: ubuntu-latest
+    # Pinned: its image has the Android SDK preinstalled (ubuntu-latest moves to a new release on its own schedule).
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       # Only the web UI and the Android project are built here.
