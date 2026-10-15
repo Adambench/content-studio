@@ -95,6 +95,9 @@ function apply(event: LiveEvent) {
         inv(keys.devices);
         inv(keys.status);
         break;
+      case 'sites':
+        inv(keys.sites);
+        break;
     }
   } else if (event.type === 'notify') {
     // Phones get web push from the server; the desktop app shows a native notification when it isn't in front.

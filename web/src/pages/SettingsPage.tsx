@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import type { WeeklyReviewSetting } from '@shared/analytics';
 import { CLAUDE_MODELS } from '@shared/types';
+import { ConnectedSitesCard } from '@/components/ConnectedSites';
 import { PageHeader } from '@/components/PageHeader';
 import { FirebaseSetup, PairedDevices, PairPhone, ThisPhone } from '@/components/PhoneSettings';
 import { PublishingCard } from '@/components/publish/PublishingSettings';
@@ -98,6 +99,8 @@ export function SettingsPage() {
           <RenderingCard />
 
           <PublishingCard />
+
+          <ConnectedSitesCard />
 
           {s && <WeeklyReviewCard setting={s.weeklyReview} model={CLAUDE_MODELS.find((m) => m.id === s.defaultModel)?.label ?? 'Sonnet'} onChange={(weeklyReview) => patch({ weeklyReview })} />}
 

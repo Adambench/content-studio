@@ -5,6 +5,8 @@ import { createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, session, shell, Tray, type MenuItemConstructorOptions } from 'electron';
+import type { BridgeReply, BridgeRequest } from '../../shared/sites';
+import { handleSiteRequest, initSites, SiteError } from './sites';
 
 const APP_NAME = 'Content Studio';
 const PORT = Number(process.env.PORT ?? 8787);
@@ -29,6 +31,9 @@ let server: ChildProcess | null = null;
 let quitting = false;
 
 app.setName(APP_NAME);
+// A data folder given in the environment (tests, a second copy) gets its own Electron profile too — the window's
+// session and the signed-in sites — and its own single-instance lock, so it never touches the real ones.
+if (process.env.CONTENT_STUDIO_DATA_DIR) app.setPath('userData', join(dataDir, 'electron'));
 // A second launch (e.g. clicking the launcher again) just brings the existing window forward.
 const isFirstInstance = app.requestSingleInstanceLock();
 if (!isFirstInstance) app.quit();
@@ -63,11 +68,15 @@ function startServer() {
       CONTENT_STUDIO_DATA_DIR: dataDir,
       // Exit when the stdin pipe closes, i.e. when this process dies without stopping the server.
       CS_EXIT_WITH_PARENT: '1',
+      // The IPC channel below is the desktop bridge (signed-in windows, see sites.ts).
+      CS_DESKTOP_BRIDGE: '1',
     },
-    stdio: ['pipe', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
   });
   server.stdout?.pipe(log);
   server.stderr?.pipe(log);
+  const child = server;
+  child.on('message', (msg: { id?: unknown } & BridgeRequest) => void answerBridge(child, msg));
   server.on('exit', (code, signal) => {
     log.write(`--- server exited (code ${code}, signal ${signal}) ---\n`);
     server = null;
@@ -81,6 +90,18 @@ function startServer() {
     }
     setTimeout(startServer, 1000 * crashes.length);
   });
+}
+
+/** A request from the server over the bridge: do it, then answer with the same id. */
+async function answerBridge(child: ChildProcess, msg: { id?: unknown } & BridgeRequest) {
+  if (typeof msg?.id !== 'number') return;
+  let reply: BridgeReply;
+  try {
+    reply = { id: msg.id, ok: true, result: await handleSiteRequest(msg) };
+  } catch (err) {
+    reply = { id: msg.id, ok: false, error: (err as Error).message, code: err instanceof SiteError ? err.code : 'failed' };
+  }
+  if (child.connected) child.send(reply);
 }
 
 async function waitFor(url: string, timeoutMs = 45_000) {
@@ -323,6 +344,7 @@ app.whenReady().then(async () => {
     callback(isAppUrl(wc.getURL()) && ['media', 'notifications', 'clipboard-sanitized-write', 'fullscreen'].includes(permission));
   });
   registerIpc();
+  initSites({ dataDir, iconPath, onChange: () => server?.connected && server.send({ event: 'sites' }) });
 
   try {
     if (!DEV_URL) {

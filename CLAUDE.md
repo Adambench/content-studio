@@ -57,6 +57,14 @@ HyperFrames + FFmpeg) is usable and being extended.
   “× typical” (views after 24 h against the account's median), the page's overview and `digest()`, the text Claude reads.
   `review.ts` is the weekly review (`analytics.review` job, timer in `schedule.ts`). Keep the numbers mechanical; Claude
   only interprets the digest.
+- Signed-in windows (desktop bridge; `shared/sites.ts`, `desktop/src/sites.ts`, `server/src/lib/desktop.ts`): Electron
+  spawns the server with an IPC channel (`CS_DESKTOP_BRIDGE=1`) and keeps Whop (Content Rewards), TikTok and Instagram
+  signed in in a `persist:sites` session of their own. The server calls `readPage(url, { waitFor, scrolls })` (a hidden,
+  muted window; title, text, links, `loginWall`), `openSignIn(site)`, `signOutSite(site)` (clears that site's storage),
+  `sitesStatus()` (signed in = the site's HttpOnly session cookie). Reads go one at a time, ≥ 5 s apart, within a daily
+  cap (`CS_SITES_DAILY_CAP`, default 200), and never click, post or submit. Only when Electron started the server: in
+  `npm run dev`/`dev:web` these answer "needs the desktop app" (test with the built app). Page text → JSON with
+  `parsePage()` (`claude/extract.ts`, Haiku). Settings → Connected sites (`ConnectedSites.tsx`) has "Try a page".
 
 ## Commands
 
@@ -77,7 +85,11 @@ HyperFrames + FFmpeg) is usable and being extended.
   (demo files, one of them music). `content-principles` has no license: personal use only. `playbook` is ours (not
   in `skills-lock.json`): the shared knowledge base on hooks, retention, clipping, packaging, sound and halal.
 - Screenshot the app for checking UI: `CONTENT_STUDIO_DATA_DIR=/tmp/x PORT=8797 CS_OPEN_PATH=/settings
-  CS_SCREENSHOT=/tmp/x.png CS_SCREENSHOT_QUIT=1 node_modules/electron/dist/electron desktop` (after building)
+  CS_SCREENSHOT=/tmp/x.png CS_SCREENSHOT_QUIT=1 node_modules/electron/dist/electron desktop` (after building). A
+  `CONTENT_STUDIO_DATA_DIR` also moves Electron's profile to `<dir>/electron` (own cookies, site sign-ins and
+  single-instance lock), so a test copy never touches the real app. To drive it (click, read a sign-in window, phone
+  width), add `--remote-debugging-port=9223` and use `puppeteer-core`'s `connect({ browserURL })`; `DESKTOP_TOKEN=x`
+  lets a script get a session from `POST /api/auth/desktop` (header `x-desktop-token`)
 
 ## Rules that matter
 
@@ -134,8 +146,10 @@ Work can go on in Claude Code cloud sessions (claude.ai/code, the phone's Code t
 off. The session clones `main` from GitHub, so only pushed work is there.
 
 - Setup: the SessionStart hook (`.claude/settings.json`) runs `scripts/cloud-setup.sh` — Node 24 on `PATH`, FFmpeg,
-  Xvfb, the Electron/Chrome libraries, espeak-ng, then `npm ci` (skipped while the lockfiles are unchanged). It does
-  nothing on the laptop. If something is missing, run the script again and read its `[cloud-setup]` lines.
+  Xvfb, the Electron/Chrome libraries, espeak-ng, then `npm ci` (skipped while the lockfiles are unchanged) and the
+  Electron binary (Electron 44 has no install script: `node node_modules/electron/install.js`, also after an `npm ci`
+  of your own). It does nothing on the laptop. If something is missing, run the script again and read its
+  `[cloud-setup]` lines.
 - Git: commit to the branch the session was given and push it; when the job is done, also bring `main` up to date
   (`git fetch origin main && git rebase origin/main && git push origin HEAD:main`) so the next session and the laptop
   start from it. Tags can't be pushed from the cloud (the GitHub proxy refuses them): releases are tagged on the laptop.

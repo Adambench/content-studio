@@ -166,7 +166,21 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
      music, leaves the nasheed), screenshots of Today, New workspace, settings, assets and the Sound tab at desktop
      and phone width. Still to do: the user listens to the built-in SFX (Brand assets → Sound effects → Built in) and
      approves or drops some
-   - [ ] 4 Signed-in windows (desktop bridge)
+   - [x] 4 Signed-in windows (2026-10-15): the desktop app spawns the server with an IPC channel; `readPage` (a
+     hidden, muted window in the `persist:sites` session: waits for the text to settle, optional selector/scrolls,
+     inner scrolling panels too; title, text, links, login-wall flag), sign-in windows (muted, pop-ups kept in the
+     session), sign out clearing that site's cookies and storage, signed-in state from each site's HttpOnly session
+     cookie; one page at a time, ≥ 5 s apart, 200 a day; Settings → Connected sites (Whop = contentrewards.com, which
+     has its own sign-in; TikTok; Instagram; "Try a page") and `parsePage` (page text → JSON on Haiku). A
+     `CONTENT_STUDIO_DATA_DIR` now also gets its own Electron profile. Tested on the laptop (Xvfb, built app): a
+     stand-in joined-campaign page (rules drawn late by script, sections that load as you scroll, an inner scrolling
+     panel) comes back whole and Haiku turns it into its 7 rules and 2 source links; the real Content Rewards discover
+     page (campaign links) and a public campaign page read signed out, Haiku giving rate, min/max payout per platform
+     and budget, with rules empty (locked until joined); an Instagram page behind sign-in is flagged as a login wall;
+     three reads sent at once ran one at a time 8.7 s apart and a read over the cap was refused; sign-in windows open
+     on the real TikTok, Instagram and Content Rewards pages; signing out of TikTok cleared its cookies and local
+     storage and left the other sites'; Settings at desktop and phone width, in the app, a browser and without the
+     desktop app. Not tested: a real sign-in (see *Where things stand*)
    - [ ] 5 Campaigns
    - [ ] 6 Clipping v1
    - [ ] 7 Submissions and earnings
@@ -594,11 +608,19 @@ Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usag
   one manual and one scheduled weekly review run on the real Claude, and the UI at desktop and phone sizes. Not yet
   installed as the desktop app (`npm run install-app`).
 - Next: phase 0 on the platforms' sites (now including the analytics scopes), then connect real accounts; video
-  studio extras (transitions, motion graphics). Phase 7 (clipping): steps 1 (playbook skill), 2 (skills in the app)
-  and 3 (kinds, Today, music out) done (2026-10-15); next is step 4 of the *Phase 7 build plan*. Waiting on the user:
-  listening to the built-in SFX. The weekly review with the playbook in its prompt hasn't been run yet (no posts with
-  numbers). The phone app needs a new release for Today and the nasheed change (`API_VERSION` 2: v0.1.0 asks to be
-  updated).
+  studio extras (transitions, motion graphics). Phase 7 (clipping): steps 1 (playbook skill), 2 (skills in the app),
+  3 (kinds, Today, music out) and 4 (signed-in windows) done (2026-10-15); next is step 5 (campaigns) of the *Phase 7
+  build plan*. Waiting on the user:
+  - listening to the built-in SFX;
+  - in the desktop app (`npm run install-app` first), Settings → Connected sites: sign in to Whop (it opens
+    contentrewards.com's sign-in), TikTok (its QR code works from the phone) and Instagram, and check each then shows
+    "Signed in". Whop's sign-in cookie is a guess (`SITES.whop.sessionCookie` in `shared/sites.ts`): if it stays "Not
+    signed in", a session should list the HttpOnly cookies on contentrewards.com (remote debugging, as in CLAUDE.md)
+    and pin the right one. Then "Try a page" with a campaign you've joined: its rules and source files should be in
+    the text (signed out, they show "Join to unlock").
+
+  The weekly review with the playbook in its prompt hasn't been run yet (no posts with numbers). The phone app needs a
+  new release for Today and the nasheed change (`API_VERSION` 2: v0.1.0 asks to be updated).
 - Phase 6 (Android app) is built: tested on an Android 15 emulator against a local server — pairing (link and deep
   link), share sheet from the Files app, background uploads with resume after a dropped connection, camera, voice memos,
   offline queue and banner, lock, video preview, launcher shortcuts, unpairing — and the desktop's pairing/Firebase

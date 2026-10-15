@@ -2,6 +2,7 @@ import { QueryClient, useQuery } from '@tanstack/react-query';
 import { api } from './api';
 import type { PairedDevice } from '@shared/devices';
 import type { CreatorInfo } from '@shared/publish';
+import type { SitesStatus } from '@shared/sites';
 import type {
   Account,
   AnalyticsOverview,
@@ -57,6 +58,7 @@ export const keys = {
   devices: ['devices'] as const,
   fcm: ['fcm'] as const,
   today: ['today'] as const,
+  sites: ['sites'] as const,
 };
 
 export type AuthStatus = { setupRequired: boolean; authenticated: boolean; desktopManaged: boolean };
@@ -90,6 +92,9 @@ export const useSystemStatus = () => useQuery({ queryKey: keys.status, queryFn: 
 export const useDevices = () => useQuery({ queryKey: keys.devices, queryFn: () => api<PairedDevice[]>('/devices') });
 export type FcmStatus = { projectId: string | null; clientEmail: string | null; serviceAccount: boolean; app: boolean };
 export const useFcm = () => useQuery({ queryKey: keys.fcm, queryFn: () => api<FcmStatus>('/push/fcm') });
+
+/** Settings → Connected sites: the desktop app's signed-in windows. */
+export const useSites = () => useQuery({ queryKey: keys.sites, queryFn: () => api<SitesStatus>('/sites') });
 
 export const usePublishingSetup = () => useQuery({ queryKey: keys.publishingSetup, queryFn: () => api<PublishingSetup>('/publishing/setup') });
 export const useAccounts = (wid: string) => useQuery({ queryKey: keys.accounts(wid), queryFn: () => api<Account[]>(`/workspaces/${wid}/accounts`), enabled: !!wid });

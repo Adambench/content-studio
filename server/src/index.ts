@@ -20,6 +20,7 @@ import { deviceRoutes } from './routes/devices';
 import { mediaRoutes } from './routes/media';
 import { pieceRoutes } from './routes/pieces';
 import { publishingRoutes } from './routes/publishing';
+import { siteRoutes } from './routes/sites';
 import { studioRoutes } from './routes/studio';
 import { systemRoutes } from './routes/system';
 import { todayRoutes } from './routes/today';
@@ -107,6 +108,7 @@ await app.register(studioRoutes);
 await app.register(publishingRoutes);
 await app.register(analyticsRoutes);
 await app.register(todayRoutes);
+await app.register(siteRoutes);
 
 registerHandlers();
 startWorker();
