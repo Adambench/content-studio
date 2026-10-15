@@ -16,14 +16,14 @@ TikTok, Instagram and YouTube Shorts (X later), with Claude built in.
 | Claude | Claude Agent SDK on the Claude **Pro** subscription login — **no API key**. Model selectable in settings (Sonnet default). |
 | Claude autonomy | Edits ideas, drafts, versions freely; scheduling/publishing always needs my click |
 | Voice | Per-workspace brand guide + past posts + learning from my edits to Claude's drafts |
-| Workspaces | Separate brands/niches, fully isolated; I create them myself |
+| Workspaces | Separate brands/niches, fully isolated; I create them myself. Since 2026-10-15: one workspace = one page, with a kind (see *Use cases and organisation*) |
 | Versions | Alternatives (branches), each with its own version history; compare + restore |
 | Layout | Pipeline board + Claude side panel; dark, clean UI |
 | Formats | Short vertical video (TikTok, Reels, Shorts) + image posts/carousels (IG, TikTok photo) |
 | Video editing | HyperFrames (HTML → MP4) + FFmpeg: captions, cuts/reframe, motion graphics, b-roll, transitions, sound design, colour grading (LUTs), branded templates |
 | Scheduling | Drag-and-drop calendar, per-account time-slot queues, cross-post with staggered times |
 | v1 extras | Analytics, push notifications, idea capture from the phone |
-| Assets | Import area per workspace (logos, fonts, LUTs, music, SFX); none exist yet |
+| Assets | Import area per workspace (logos, fonts, LUTs, SFX — no music, see *Halal*); none exist yet |
 | X | Low priority — after the other three |
 
 ## Platform constraints (checked 2026-10)
@@ -67,7 +67,8 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
    - [x] Captions from word timestamps (4 styles, brand fonts, fix misheard words); text/image/b-roll overlays
    - [x] Tighten: cut pauses/fillers from word timings (silence detection without a transcript), punch-ins
    - [x] Reframe (focus point + zoom), 9:16 / 4:5 / 1:1; preview copies of footage (HDR tone-mapped, HEVC → H.264)
-   - [x] Music with ducking under speech, SFX, voice clean-up, −14 LUFS loudness; LUT grading (FFmpeg)
+   - [x] Music with ducking under speech, SFX, voice clean-up, −14 LUFS loudness; LUT grading (FFmpeg) — the
+     music part is to be removed (see *Halal*)
    - [x] Render queue in a child process (headless Chrome downloaded on first render), result into the library
    - [x] Brand look (template) per workspace; Claude tools: get/update/tighten/render edits, list assets
    - [ ] Transitions between clips, animated motion-graphics templates (and Claude-written HyperFrames scenes)
@@ -132,6 +133,18 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
      `~/.config/content-studio/android-release/` (back it up!) and the signing secrets; v0.1.0 released by CI
    - [ ] Real-phone test: install from Obtainium, pair, QR scanning (Google's code scanner needs Play services; the
      emulator image couldn't download it), FCM with a real Firebase project
+7. **Clipping, campaigns & research** — planned (2026-10-15); see *Use cases and organisation*, *Halal* and
+   *Clipping plan* below
+   - [x] Skills survey (shortlist → I picked, 2026-10-15): 35 skills in `.claude/skills` — HyperFrames (core,
+     animation, keyframes, creative, registry, cli, motion-graphics, embedded-captions, talking-head-recut; not its
+     audio/media/music skills), GSAP (core, timeline, plugins, utils, performance), Melvynx video-agent (clips,
+     studio-script, steal, broll), Vyral content-skills (all 7), Corey Haines (social, copywriting,
+     marketing-psychology, content-strategy, offers), last30days (terminal), Contagious, Made to Stick,
+     content-principles. Skipped: the MrBeast persona skill, social-media-skills (routes to paid tools), Apify/muapi
+     (paid), a film sound-design skill (built on music)
+   - [ ] Steps 1–9 of the *Phase 7 build plan* below: 1 playbook skill · 2 skills in the app · 3 workspace kinds,
+     Today, music out of the code · 4 signed-in windows (desktop bridge) · 5 campaigns · 6 clipping v1 · 7 submissions
+     and earnings · 8 research and daily brief · 9 later formats
 
 ## Video studio decisions (2026-10-14)
 
@@ -226,6 +239,317 @@ Steps (each ends with something installable):
 
 Before step 1 (on you): a GitHub repo (private or public), and for push a Firebase project (or install ntfy).
 
+## Use cases and organisation (2026-10-15)
+
+Three use cases: my personal brand (Muslim entrepreneurship, lifestyle, Islam; talking head and faceless; later
+documenting a business from the start), clipping for campaigns on Whop's Content Rewards, and clipping for my own
+businesses. Each one gets the same core: research, ideas, editing, animation/VFX, sound design, scheduling,
+analytics. Grading is mainly for the personal brand.
+
+| Topic | Decision |
+|---|---|
+| Workspace | One workspace = one **page**: an identity with its voice, look, pipeline and analytics, and its accounts on TikTok, Instagram and YouTube, which all post the same content. 1 personal brand, a page per business, 1–5 niche clipping pages |
+| Kind | Each workspace has a kind — **Personal brand**, **Business** or **Clipping page**. A kind is a preset of modules, pipeline stages and Claude instructions, not a fence: modules can be switched on or off per workspace |
+| Modules | Ideas & scripts, Filming, Grading, Campaigns, Clipping (sources → moments), Research brief; Characters later |
+| Campaign | Its own entity, outside workspaces, assigned to the page(s) it fits (usually one niche page). It comes either from Content Rewards (link, rules, payout per 1,000 views, budget, deadline, platforms, source material) or from one of my businesses (that workspace's brand guide, assets and footage), so business clips can also go out on niche pages. 1–3 to start, 2–3 more every 2–3 months |
+| Finding campaigns | I pick them on Whop and give the link. The app reads the page, turns the rules into a checklist and screens it (see *Halal*); I confirm |
+| Home | A **Today** view across all workspaces: clips waiting for approval, renders, posts due, submissions to prepare, campaign deadlines and budgets, the research brief |
+| Shared library | Formats (production recipes), SFX, the virality playbook and Claude skills are shared by every workspace; characters later |
+| Same clip on two pages | Rare, since each page has its own niche. When it happens, each page gets its own variant (hook, caption, crop) |
+| Direct clients | Not planned: clipping for others = Content Rewards only |
+
+## Halal (2026-10-15)
+
+| Topic | Decision |
+|---|---|
+| Music | Never music or musical instruments, anywhere. Remove the edit's music track and ducking, TikTok's "auto add music" option and music as an asset type. Claude's instructions state the rule |
+| Nasheeds | Vocal-only nasheeds only with my OK for each edit: a vocal track that only the UI can set. Claude can suggest one, but its tools can't add it |
+| SFX | Allowed: whooshes, pops, clicks, impacts/booms, dings/chimes, tonal risers/sweeps |
+| Source audio | Background music in source footage is removed from the chosen clip by voice isolation (a local model). If it can't be cleaned, the clip is rejected |
+| Campaigns and content | Music promotions are hidden. Nothing haram gets advertised: gambling/betting, alcohol/drugs/smoking, dating and immodest imagery, interest-based finance, or anything else haram. Briefs are screened when added; chosen moments are screened by transcript and by sampled frames |
+
+## Clipping plan (2026-10-15)
+
+Goal: crayo.ai, but better — clips made automatically to each campaign's rules, for a handful of niche pages,
+approved with one click. First format: stream/podcast clipping (long-form → vertical clips), 5–15 clips a day across
+the pages. Free and local only, apart from Claude on the Pro login.
+
+| Topic | Decision |
+|---|---|
+| Automation | Automatic up to the review queue: the app finds moments, edits and renders them, and I approve each clip with one click before it's queued. Scheduling, publishing and submitting stay my click |
+| Sources | Google Drive folders (public link, or the Google sign-in with Drive read access), YouTube, Twitch/Kick VODs (`yt-dlp` through `findBinary`), raw files (library/uploads) |
+| Transcripts | faster-whisper once per source (long VODs run in the background); captions use its word timings |
+| Finding moments | Mechanical filtering first: loudness spikes, speech pace, chat replay activity where yt-dlp can get it, keywords from the brief. Then one Claude request per source reads only the candidate windows, with the brief and the playbook, and picks moments (in/out points, hook, title, why). That keeps Pro usage to a few requests a day |
+| Edit | The existing edit model: cut, tighten, reframe (automatic face tracking, local), captions, hook text in the first seconds, SFX, the campaign's required elements, the page's look |
+| Review | Clips land in the page's pipeline (Candidates → Edit → Review → Ready → Scheduled → Posted) and in Today. Rejecting asks for a reason, which is kept so moment-picking learns from it |
+| Submissions | After posting, the app prepares the Content Rewards submission (post links, the rule checklist) and I submit it. It tracks pending/approved/rejected, counted views and earnings (views × rate where the campaign's own numbers can't be read) |
+| Analytics | The existing per-account stats, plus per campaign: clips, views, approval rate, earnings |
+| Research | A daily brief per niche page and campaign (Haiku): what's working now, with links. Skills are surveyed first (shortlist, I pick) and kept in `.claude/skills/`, so both Claude Code in the terminal and the app's Claude load them |
+| Playbook | A shared, editable knowledge base on hooks, retention, packaging and clipping, drawn from Hormozi, MrBeast's production doc, Paddy Galloway, Kallaway and clipping-specific guides. Each workspace adds its own learnings "(from results)", like the voice memory |
+| Later formats | Story + gameplay, fake texts, talking characters (2D, Minecraft, 3D; my voice or local TTS), UGC. AI-generated only if a free, local route exists |
+
+Checked (2026-10-15):
+
+| Question | Finding |
+|---|---|
+| Whop API | No Content Rewards API for clippers (Whop's "bounties" API is a different product). A campaign's public page (`contentrewards.com/c/campaigns/<id>`) shows title, rate per 1,000 views, min/max payout, budget left, platforms and type; rules, creator requirements, source files and views are locked until you join. So: an in-app window signed in to Whop reads them and the submission status; submitting stays my click on Whop |
+| Skills in the app | Agent SDK 0.3.300 has `skills` and local `plugins` options, so a bundled skills folder loads while `settingSources` stays `[]` — tested: `.claude/skills` copied into a plugin folder (`.claude-plugin/plugin.json` + `skills/`) gives all 35 as `studio-skills:<name>`, and none of my personal skills. But the app's Claude only has the web tools and our studio tools (no Bash, no Read): knowledge skills work (it needs Read on the skills folder for their reference files), and skills that run commands become app jobs/tools |
+| Free reel research | YouTube Shorts works with `yt-dlp` (search, a channel's Shorts with view counts, auto-captions for the spoken hook); tested. TikTok blocks `yt-dlp` from this machine, Instagram needs a login: use an in-app window signed in to my own accounts, or links I paste. `yt-dlp` now wants a JS runtime for YouTube: pass `--js-runtimes node` |
+| Voice isolation | Demucs `htdemucs` (two stems): 48 s for 70 s of speech over music, 1.5 GB RAM; the cleaned voice is silent where only music played (21 s silent vs 0.3 s in the original). MDX-Net Voc_FT: same result, 94 s and 3.4 GB. → Demucs, on chosen clips only (~30 s per 45 s clip). Install: PyTorch CPU (~900 MB venv) + `demucs` without `diffq` (needs a C compiler) |
+
+## Phase 7 build plan (2026-10-15)
+
+To pick this up in a new session, read `CLAUDE.md`, then *Use cases and organisation*, *Halal*, *Clipping plan* and
+this section. Work the steps in order. Each step ends with something usable and checked: typecheck, the flow tried at
+desktop and phone width, screenshots for UI, the real data where it exists. When a step is done, tick it in phase 7
+above and update *Where things stand*.
+
+**Before step 1**
+- The working tree has uncommitted work from before phase 7: `desktop/src/main.ts` + `server/src/index.ts` (the
+  server exits when the desktop app's stdin pipe closes). Finish and commit that first. Then commit this plan,
+  `CLAUDE.md`, `.claude/skills/` and `skills-lock.json` (ask first, like every commit).
+- What's already measured is in the *Checked* table above. The steps say what still needs measuring.
+
+### New data
+
+One migration per step that needs it (`npm run db:generate -w server`, then check the SQL for dropped `ON DELETE`).
+
+| Table / column | Step | What |
+|---|---|---|
+| `workspaces.kind` | 3 | `personal` \| `business` \| `clipping`; existing rows → `personal` |
+| `workspaces.modules` | 3 | JSON list of the modules switched on (preset by kind) |
+| `workspaces.niche` | 3 | The page's niche in a sentence: research keywords, and how moments are judged for fit |
+| `workspaces.research` | 8 | JSON: keywords, YouTube channels, TikTok/Instagram handles to watch |
+| `campaigns` | 5 | origin (`content_rewards` \| `business`), business workspace id, link, title, brand, type, status, rate per 1,000 views, min/max payout, flat fee, budget total/left, platforms, deadline, raw rules text, rule checklist (JSON), creator requirements, halal verdict + reasons, when it was last read |
+| `campaign_pages` | 5 | campaign ↔ the workspaces it posts on |
+| `campaign_sources` | 5 | campaign, kind (youtube/twitch/kick/drive/file), link, title, duration, file path (data dir `sources/<campaign>/`, not the library), transcript, status (queued → downloading → transcribing → scanning → ready / error) |
+| `moments` | 6 | source, campaign, target workspace, start/end, spoken first line, hook card text, title, why, standalone score, draft captions, music check, halal check, status (candidate → picked → made, or rejected + reason), piece id |
+| `submissions` | 7 | post, campaign, status (to submit → submitted → approved/rejected → paid), submitted at, counted views, earnings, last checked |
+| `research_items`, `research_briefs` | 8 | outliers found (platform, link, channel, views, channel median, score, spoken hook) and the daily brief per workspace |
+
+Media stays per workspace. A long VOD belongs to its campaign; only the cut clip (with margins) is adopted into the
+page's library (`adoptFile`), so `validateSpec`'s ownership check doesn't change. New entities need live events on
+both sides (`LiveEvent` in `shared/types.ts`, `web/src/lib/live.ts`). Bump `API_VERSION` if the Android app can't
+handle a change.
+
+### Step 1 — Playbook skill
+
+- `.claude/skills/playbook/` (ours, not in `skills-lock.json`): `SKILL.md` (when to use it, halal rules first) and
+  `references/`:
+  - `hooks.md`: spoken line, on-screen text and first frame. Archetypes from Kallaway, Hormozi's hook/retain/reward,
+    MrBeast's "match the promise", Galloway on packaging.
+  - `retention.md`: open loops, re-hooks, pacing, pattern resets, payoff timing, loops.
+  - `clipping.md`: what makes a clip stand alone (cold open, one idea, clean end, no outside reference, 20–60 s),
+    the 10-point score from Melvynx `clips`, in/out points on sentence boundaries, a hook card when the spoken
+    start is weak, following the campaign's rules.
+  - `packaging.md`: titles, captions, cover/first frame, hashtags per platform.
+  - `sound-design.md`: non-musical SFX only. Where whooshes, pops, impacts and risers go, levels under speech, never
+    on every cut.
+  - `halal.md`: no music or instruments; nasheeds only with the user's OK; haram topics. Religious content: never
+    issue rulings, quote the Qur'an or hadith only with a reference, and flag it for the user to check.
+  - `platforms.md`: what matters on TikTok, Reels and Shorts now (originality, length, safe zones).
+- Sources: MrBeast's production guide (the public PDF), Hormozi (*$100M Leads*, his talks on hooks), Kallaway, Paddy
+  Galloway, clipping guides (openclip's Whop guide, Opus' Content Rewards article), and the installed skills (Vyral
+  `viral-short-form` references, Melvynx `clips` and `studio-script` hooks, content-principles, Contagious, Made to
+  Stick). Write it in our own words, list the sources at the bottom of each file, and leave out any music advice.
+- Done when: Claude Code here loads it, and a test ("pick moments from this transcript") uses it.
+
+### Step 2 — Skills in the app
+
+- `desktop/scripts/package.mjs`: copy `.claude/skills` to `resources/claude-plugin/skills` and write
+  `resources/claude-plugin/.claude-plugin/plugin.json` (`name: studio-skills`). In dev, the server builds the same
+  folder in the data dir at start (copied when changed), so dev and the packaged app behave the same. Add
+  `config.pluginDir`.
+- `server/src/claude/agent.ts`: `plugins: [{ type: 'local', path: config.pluginDir }]`. `skills:` is an allow-list:
+  playbook, content-principles, the seven `viral-*` skills, contagious, made-to-stick, copywriting, social,
+  content-strategy, marketing-psychology, offers.
+  - Not in the app: skills that run commands (`last30days`, `hyperframes-cli`, `broll`, `steal`, `clips`,
+    `studio-script`; their knowledge reaches the app through the playbook).
+  - Also not yet: the HyperFrames/GSAP skills. The app's Claude only edits `EditSpec`, and those skills come in at
+    step 9.
+  - Add `Read` to `tools`, allowed only under `config.pluginDir` (checked in `canUseTool`, everything else refused).
+    `settingSources` stays `[]`.
+- `prompt.ts`: say that skills exist and the playbook comes first, and state the halal rule.
+- Background prompts (`askStructured` in `claude/oneshot.ts`) don't load skills. They paste in the playbook files
+  they need (`clipping.md`, `hooks.md`, `halal.md`), stable text first so it caches.
+- Already tested: the plugin loads every skill as `studio-skills:<name>`, without personal settings (*Checked*).
+  Done when: chat answers "what makes a good hook" from the playbook and reads one of its reference files.
+
+### Step 3 — Kinds, Today, halal in the code
+
+Kinds:
+- Schema: `kind`, `modules`, `niche`. In `shared/types.ts`: `WorkspaceKind`, `MODULES` and `KIND_PRESETS` (modules +
+  stages per kind). Clipping stages: `making` → `review` → `ready` → `scheduled` → `posted`. Keep the ids `scheduled`
+  and `posted`, because `advanceStage` in `publish/posts.ts` moves cards there. Personal and business keep
+  `DEFAULT_STAGES`.
+- `NewWorkspacePage`: pick the kind first (three cards), then name, colour and niche. `WorkspaceSettingsPage`: kind,
+  module switches, niche.
+- Nav (`AppShell.tsx`): items follow the modules (Campaigns only when it's on, and so on).
+- `prompt.ts`: one section per kind.
+  - Clipping: campaign rules come first; never misrepresent the source or the speaker.
+  - Personal brand: the user's voice; accuracy on religion.
+  - Business: offers and brand.
+
+Today:
+- `/` opens Today (instead of `HomeRedirect`'s last board), as `/today` in `router.tsx`, outside `w/:wid`. It's the
+  first item in the phone's bottom nav.
+- `GET /api/today` gathers across workspaces:
+  - clips waiting for review
+  - posts due today, and failed or missed ones
+  - submissions to make
+  - work running, with progress (renders, downloads, scans)
+  - campaigns (budget left, deadline)
+  - the latest research briefs
+  - Claude usage
+- It refetches on `changed` events.
+
+Halal:
+- Music → nasheed:
+  - `EditAudio`'s `music*` fields become `nasheed: { mediaId, start, volume, duck } | null`, and `normalizeEdit`
+    drops the old music fields (no music asset was ever imported).
+  - Asset type `music` becomes `nasheed`, with "vocal only, no instruments" confirmed on import (`ASSET_TYPES`,
+    `AssetsPage`). A migration turns any `music` asset into `other`.
+  - Claude can't set it: `update_edit`'s schema has no nasheed field, and `studio/edits.ts` keeps the previous
+    nasheed on versions authored `claude`.
+  - `compose.ts` and `render.ts` only play `nasheed` assets.
+  - UI: `SoundPanel`, `Timeline`, `StudioPage`, `LookPanel`, `EditHistory`. 19 files mention music
+    (`grep -rn -i music server/src web/src shared`).
+- TikTok: remove `autoAddMusic` (`shared/publish.ts`, `publish/posts.ts`, `ScheduleDialog`) and always send
+  `auto_add_music: false`.
+- Built-in SFX: a shared non-musical set in `server/assets/sfx/` (CC0, e.g. Kenney's interface and impact packs).
+  About 30 sounds (whoosh, pop, click, impact, boom, ding, riser), named by use; the user listens and approves the
+  list. `SfxCue` takes a `mediaId` or `builtin:<name>`, and `list_assets` lists them.
+- Done when: grep finds no way left to add music, the TikTok option is gone, kinds work end to end, and Today shows
+  real data at phone and desktop width.
+
+### Step 4 — Signed-in windows (desktop bridge)
+
+- Whop, TikTok and Instagram pages are read in the user's own sessions, inside the desktop app, in a
+  `persist:sites` Electron session separate from the app's.
+- `desktop/src/main.ts`: spawn the server with an IPC channel (`stdio: ['pipe', 'pipe', 'pipe', 'ipc']`; stdin stays
+  the exit signal).
+  - `{ op: 'read', url, waitFor?, scrolls? }` loads the page in a hidden `BrowserWindow` in `persist:sites`, waits,
+    scrolls, and returns `{ title, text, links: [{ href, text }] }`.
+  - `{ op: 'signin', site }` opens a visible window on that site's sign-in page.
+  - Throttle: one page at a time, at least 5 s apart, with a daily cap.
+- `server/src/lib/desktop.ts`: `desktopAvailable()`, `readPage()`, `openSignIn()`. Outside the desktop app
+  (`dev:web`), these features say they need the desktop app.
+- Settings → Connected sites: Whop, TikTok, Instagram, each with Sign in, signed-in state and Sign out (clears that
+  site's storage).
+- Parsing: page text → JSON through `askStructured` on Haiku. That survives layout changes, at a few calls a day.
+- Done when: a joined campaign's page comes back with its rules.
+
+### Step 5 — Campaigns
+
+- Schema as above. Routes in `server/src/routes/campaigns.ts`, logic in `server/src/campaigns/`.
+- Adding a campaign:
+  1. Paste the link. A public fetch gets title, rate, budget, min/max payout, platforms and type.
+  2. Signed in to Whop: the joined page gives the rules, creator requirements and source files.
+  3. Haiku turns that into the rule checklist (`{ text, kind: required|forbidden|format|caption, check?: { type:
+     maxSeconds|minSeconds|mention|hashtag|text|platform|watermark, value } }`) and the halal screen (verdict
+     ok/flag/reject with reasons; music promotions are rejected).
+  4. The user confirms and picks the pages. A business's own campaign has no link.
+- Sources: links from the campaign page, or added by hand (a YouTube/Twitch/Kick video or channel, a Drive folder, an
+  upload).
+  - `source.download`:
+    - YouTube/Twitch/Kick: yt-dlp with `-S res:1080,vcodec:h264` and `--js-runtimes node:<process.execPath>` plus
+      `ELECTRON_RUN_AS_NODE=1` (to test). Twitch and Kick VODs are untested.
+    - Drive: public folders with `gdown` in the tools venv (step 6), otherwise the signed-in window.
+  - Then `source.transcribe`.
+- Pages:
+  - `/campaigns`: rate, budget left, deadline, pages, clips made/approved, earnings.
+  - `/campaigns/:id`: rule checklist, sources with status, moments, clips, submissions.
+- Claude in chat gets `get_campaigns` and `get_campaign` (read-only).
+- Done when: a real campaign is added from its link, screened, assigned, and its sources downloaded.
+
+### Step 6 — Clipping v1 (streams and podcasts)
+
+Tools environment: `server/scripts/setup-tools.sh` creates a `<data>/tools` venv (about 1 GB) with:
+- PyTorch CPU (pinned, from the PyTorch CPU index)
+- `demucs` with `--no-deps`, plus `dora-search einops julius lameenc openunmix pyyaml tqdm huggingface-hub
+  safetensors sphn soundfile numpy` (no `diffq`)
+- `opencv-python-headless` and `gdown`
+- the `htdemucs` and YuNet face models, downloaded at install
+
+Settings → "Clip tools: Install", like Whisper. YuNet isn't tested yet.
+
+Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usage is above about 80 %.
+1. `source.transcribe`: YouTube sources use YouTube's own captions through yt-dlp (instant). Otherwise
+   faster-whisper on the whole audio. Measure its speed on a 2-hour VOD first; if it's too slow, scan with `base` and
+   re-transcribe only the cuts with `small`.
+2. `source.scan` (no Claude):
+   - windows of 20–75 s on sentence boundaries
+   - scored on loudness peaks (ebur128), speech pace, chat replay spikes (Twitch `rechat` or YouTube `live_chat`
+     subtitles, where yt-dlp gets them) and keywords from the brief
+   - keeps the top ~30 windows
+3. `source.pick`: one Sonnet `askStructured` call per source.
+   - In: the candidate windows' transcript, the campaign brief and rules, the page's niche, the playbook
+     (`clipping.md`, `hooks.md`, `halal.md`), the latest research brief, and past rejection reasons.
+   - Out: 3–8 moments, each with in/out points, spoken first line, hook card (≤ 6 words), title, why, standalone
+     score (kept at 7/10 or more), captions for each allowed platform (required mentions and hashtags included) and
+     halal flags.
+4. `clip.make`, once per moment:
+   1. Cut with 0.5 s margins (FFmpeg).
+   2. Music check with Demucs (two stems). Music is present when the no-voice stem is loud (above about −35 LUFS).
+      Keep the voice-only audio if the music-only gaps come out silent; otherwise reject: "the music can't be
+      removed".
+   3. Halal frames check: 3 frames to Haiku.
+   4. Adopt the cut into the page's library and transcribe it (word timings).
+   5. Face focus: YuNet on sampled frames → `focusX`/`focusY`; splitting at scene cuts comes later.
+   6. Create the piece in the page (stage `making`, tagged with the campaign), with Claude's captions as a version
+      authored `claude`.
+   7. Build the edit from the page's look: the clip, `tighten`, captions, a hook card overlay for the first ~2.5 s,
+      SFX (a pop on the hook card, sparing whooshes).
+   8. `video.render`, then stage `review`.
+5. Review, on Today's review card and in a `/review` queue (vertical player, swipe on the phone): the render, plus the
+   rule checklist with what can be checked automatically (length, platform, mention/hashtag/text in the caption)
+   and the rest as tick boxes.
+   - **Approve & queue** is the user's click: the next free queue time on the page's accounts whose platform the
+     campaign allows.
+   - **Reject** asks for a reason, which is kept for the next `source.pick`.
+   - **Open in studio**.
+- Claude in chat gets `find_moments(sourceId)` (queues `source.pick`) and `make_clip(momentId)` (queues `clip.make`:
+  local work, allowed). No tool to approve or schedule.
+- Done when: one real VOD becomes clips in the review queue, then approved and scheduled, with music stripped and
+  rules checked.
+
+### Step 7 — Submissions and earnings
+
+- When a campaign piece's post is `posted` with a `url`, a submission is created as `to submit`. Today shows it: the
+  links are copied, and **Open Whop** opens the campaign's submit page in the signed-in window. The user submits
+  and taps Done (`submitted`).
+- `submissions.sync` (daily, desktop bridge): read the user's submissions page (find it in this step), and Haiku
+  reads status, counted views and earnings. Manual edit as a fallback.
+- Campaign numbers: clips, views (from our stats), approval rate, earnings, earnings per clip, and a warning when the
+  budget runs low. On `/campaigns/:id`, and on the Analytics page with a campaign filter. The weekly review's digest
+  includes them.
+
+### Step 8 — Research and daily brief
+
+- Workspace settings → Research: keywords, YouTube channels, TikTok/Instagram handles, or "find channels for me"
+  (yt-dlp search, counted by channel).
+- `research.sweep` (daily, no Claude):
+  - YouTube via yt-dlp: a channel's 30 newest Shorts, skip the 3 newest, take the median of the next 12;
+    outlier = views ÷ median, kept at 3× or more, with the spoken hook from the auto-captions.
+  - TikTok/Instagram: profiles through the desktop bridge (the profile grid's text gives views per video).
+  - Results go into `research_items`.
+- `research.brief` (daily, Haiku, for each workspace with research on): from the outliers and the playbook, the
+  formulas and topics that over-perform, 3 ideas (Add to board) and hooks shaped for the page. Shown on Today, given
+  to `source.pick`, and readable in chat (`get_research`).
+- Paste a link (Today, or Library → Analyse):
+  - YouTube through yt-dlp (captions, stats), TikTok/Instagram through the bridge.
+  - Claude explains the hook, structure and edit (cuts per second from FFmpeg scene detection, caption density). It
+    never copies the words.
+
+### Step 9 — Later
+
+- Formats: story + gameplay, fake texts, talking characters (2D first, with lip sync from the audio, run locally),
+  UGC. AI-generated only if a free, local route exists.
+- Transitions and motion-graphics templates with the HyperFrames skills (`hyperframes-animation`, `motion-graphics`;
+  add them to the app's allow-list then).
+- Reframing that follows the speaker: split at scene cuts, handle two-speaker podcasts.
+- Delete a campaign's downloaded sources some days after it ends; keep transcripts and clips.
+
 ## Where things stand (2026-10-15)
 
 - Phase 1 is built and packaged as the desktop app (installed in `~/.local/lib/content-studio`).
@@ -242,7 +566,8 @@ Before step 1 (on you): a GitHub repo (private or public), and for push a Fireba
   one manual and one scheduled weekly review run on the real Claude, and the UI at desktop and phone sizes. Not yet
   installed as the desktop app (`npm run install-app`).
 - Next: phase 0 on the platforms' sites (now including the analytics scopes), then connect real accounts; video
-  studio extras (transitions, motion graphics).
+  studio extras (transitions, motion graphics). Phase 7 (clipping): skills installed (2026-10-15); next is *Before
+  step 1*, then step 1 of the *Phase 7 build plan*.
 - Phase 6 (Android app) is built: tested on an Android 15 emulator against a local server — pairing (link and deep
   link), share sheet from the Files app, background uploads with resume after a dropped connection, camera, voice memos,
   offline queue and banner, lock, video preview, launcher shortcuts, unpairing — and the desktop's pairing/Firebase

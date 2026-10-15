@@ -68,11 +68,19 @@ HyperFrames + FFmpeg) is usable and being extended.
   `puppeteer@…` is blocked in `allowScripts` so installs don't download a 670 MB Chrome; the app fetches its own.
   Packages that read files from their own folder are external to the server bundle and copied with their
   dependency trees by `desktop/scripts/package.mjs` — add new ones there.
+- `.claude/skills/` — third-party skills installed with `npx skills add <repo> -a claude-code --copy -s <names>`
+  (tracked in `skills-lock.json`); `npx skills update -p` refreshes them — then delete `last30days/assets` again
+  (demo files, one of them music). `content-principles` has no license: personal use only.
 - Screenshot the app for checking UI: `CONTENT_STUDIO_DATA_DIR=/tmp/x PORT=8797 CS_OPEN_PATH=/settings
   CS_SCREENSHOT=/tmp/x.png CS_SCREENSHOT_QUIT=1 node_modules/electron/dist/electron desktop` (after building)
 
 ## Rules that matter
 
+- **Halal: no music, ever.** Nothing the app or Claude makes may contain music or musical instruments: no music
+  tracks, beds, stingers, trending sounds or TikTok "auto add music". SFX are fine (whooshes, pops, clicks, impacts,
+  dings, risers); a vocal-only nasheed only when the user OKs that edit. Background music in source footage is removed
+  (Demucs) or the clip is dropped, and nothing haram is promoted (PLAN.md *Halal*). The third-party skills in
+  `.claude/skills` assume music in places — that advice never applies here.
 - **No Anthropic API key, ever.** Claude runs through `@anthropic-ai/claude-agent-sdk` on the user's Claude
   Pro login (`server/src/claude/options.ts` strips `ANTHROPIC_API_KEY`). Keep LLM calls few: mechanical work
   (transcription, probing, cutting) is done by Whisper/FFmpeg, background jobs use Haiku.
