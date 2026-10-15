@@ -149,9 +149,10 @@ The app is the same UI, installed on the phone, plus what a web app can't do wel
 - **Notifications** through Firebase (below), **launcher shortcuts** (long-press the icon: *Voice memo*, *Capture an
   idea*), the back button, and an optional **fingerprint lock** (App settings → This phone).
 
-**Install** with [Obtainium](https://obtainium.imranr.dev/): *Add app* → the repository's GitHub address → it installs
-the APK from the latest release and offers each new one. If the repository is private, give Obtainium a GitHub
-personal access token (Obtainium → Settings → GitHub) with read access to it.
+**Install** with [Obtainium](https://obtainium.imranr.dev/): *Add app* → `https://github.com/Adambench/content-studio`
+→ it installs the APK from the latest release and offers each new one. The repository is private, so first give
+Obtainium a GitHub personal access token (Obtainium → Settings → GitHub; a fine-grained token with read-only *Contents*
+access to this repository is enough).
 
 **Pair**: on the computer, Settings → Phone access → **Pair a phone** shows a QR code (one use, 10 minutes); in the app,
 **Scan the QR code** (or paste the link shown under it). The phone keeps its sign-in in Android's Keystore; there's no
@@ -173,10 +174,11 @@ Actions (`.github/workflows/android.yml`) builds the signed APK and attaches it 
 The tag has to match `package.json`. Every push to `main` also builds a debug APK (a workflow artifact, for trying
 changes; it can't update the release app, which is signed with another key).
 
-Release signing, one time: a keystore and four repository secrets — `ANDROID_KEYSTORE_BASE64` (`base64 -w0` of the
-keystore), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. **Keep a copy of the keystore
-off this laptop**: Android only accepts updates signed with the same key, so losing it means uninstalling the app
-(and pairing again) to move to a new one.
+Release signing: the keystore is in `~/.config/content-studio/android-release/` (its README has the alias and
+password) and in four repository secrets — `ANDROID_KEYSTORE_BASE64` (`base64 -w0` of the keystore),
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. **Keep a copy of that folder off this
+laptop**: Android only accepts updates signed with the same key, so losing it means uninstalling the app (and pairing
+again) to move to a new one.
 
 ## Data
 

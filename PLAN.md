@@ -128,8 +128,10 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
      survives restarts; in-app Upload/Camera use Android's picker and camera and the same queue
    - [x] Voice memos recorded natively and queued offline; text ideas queued offline; launcher shortcuts; back button;
      edge-to-edge insets; optional fingerprint/screen-lock
-   - [ ] First release (on you: create the GitHub repo, keystore + secrets — see README → Android app) and real-phone
-     test: QR scanning (Google's code scanner needs Play services; the emulator image couldn't download it), FCM
+   - [x] Repo on GitHub (private, `Adambench/content-studio`), release keystore in
+     `~/.config/content-studio/android-release/` (back it up!) and the signing secrets; v0.1.0 released by CI
+   - [ ] Real-phone test: install from Obtainium, pair, QR scanning (Google's code scanner needs Play services; the
+     emulator image couldn't download it), FCM with a real Firebase project
 
 ## Video studio decisions (2026-10-14)
 
@@ -244,7 +246,8 @@ Before step 1 (on you): a GitHub repo (private or public), and for push a Fireba
 - Phase 6 (Android app) is built: tested on an Android 15 emulator against a local server — pairing (link and deep
   link), share sheet from the Files app, background uploads with resume after a dropped connection, camera, voice memos,
   offline queue and banner, lock, video preview, launcher shortcuts, unpairing — and the desktop's pairing/Firebase
-  settings in the browser. FCM sending tested against a stand-in. Not yet: a real phone, a real Firebase project, a
-  GitHub release.
-- Nothing is committed to git yet.
+  settings in the browser. FCM sending tested against a stand-in. v0.1.0 is on GitHub Releases (signed APK built by
+  CI). Not yet: a real phone, a real Firebase project; the installed desktop app predates phase 6 (`npm run
+  install-app` updates it — the phone can't pair until then).
+- The code is on GitHub (private): `https://github.com/Adambench/content-studio`, branch `main`.
 
