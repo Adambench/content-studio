@@ -47,5 +47,12 @@ if ! sha256sum --check --status "$hashes" 2>/dev/null; then
   fi
 fi
 
+# Electron 44 has no install script any more: its binary downloads on first `require('electron')`, which the
+# `node_modules/electron/dist/electron` commands in CLAUDE.md never do. Fetch it now (from GitHub releases).
+if [ -f node_modules/electron/install.js ] && [ ! -x node_modules/electron/dist/electron ]; then
+  log "downloading the Electron binary"
+  node node_modules/electron/install.js || log "Electron download failed"
+fi
+
 log "ready (node $(node -v), $(ffmpeg -version 2>/dev/null | head -1 | cut -d' ' -f1-3))"
 exit 0
