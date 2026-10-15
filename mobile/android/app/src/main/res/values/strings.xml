@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Content Studio</string>
+    <string name="title_activity_main">Content Studio</string>
+    <string name="package_name">io.github.adambench.contentstudio</string>
+    <string name="custom_url_scheme">contentstudio</string>
+    <string name="shortcut_capture_short">Capture an idea</string>
+    <string name="shortcut_capture_long">Capture an idea</string>
+    <string name="shortcut_record_short">Voice memo</string>
+    <string name="shortcut_record_long">Record a voice memo</string>
+</resources>

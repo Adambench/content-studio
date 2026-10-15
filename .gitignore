@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.venv/
+*.log
+.env
+desktop/.stage/
+desktop/release/
+# The web UI built for the Android app (copied into the APK by `cap sync`).
+web/dist-app/

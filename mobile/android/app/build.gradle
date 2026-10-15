@@ -1,0 +1,67 @@
+apply plugin: 'com.android.application'
+
+// The app's version is the repository's (package.json): 1.2.3 → versionName "1.2.3", versionCode 10203.
+// Releases are tagged v<version> (see .github/workflows/android.yml).
+def appVersion = new groovy.json.JsonSlurper().parse(file('../../../package.json')).version as String
+def (major, minor, patch) = appVersion.tokenize('.-+').take(3).collect { it as int }
+
+// Release signing comes from the environment (CI secrets); without it, release builds are unsigned.
+def keystore = System.getenv('CS_KEYSTORE_FILE')
+
+android {
+    namespace = "io.github.adambench.contentstudio"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "io.github.adambench.contentstudio"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode major * 10000 + minor * 100 + patch
+        versionName appVersion
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (keystore) {
+            release {
+                storeFile file(keystore)
+                storePassword System.getenv('CS_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('CS_KEY_ALIAS')
+                keyPassword System.getenv('CS_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (keystore) signingConfig signingConfigs.release
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    implementation project(':capacitor-cordova-android-plugins')
+    // StudioPlugin: background uploads, the fingerprint lock, Google's QR scanner, Firebase started from the server's options.
+    implementation "androidx.work:work-runtime:2.11.2"
+    implementation "androidx.biometric:biometric:1.1.0"
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "com.google.android.gms:play-services-code-scanner:16.1.0"
+    implementation "com.google.android.gms:play-services-base:18.9.0"
+    implementation "com.google.firebase:firebase-messaging:$firebaseMessagingVersion"
+}
+
+apply from: 'capacitor.build.gradle'

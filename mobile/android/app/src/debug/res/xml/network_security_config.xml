@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds may pair with a dev server over plain HTTP on this device (adb reverse tcp:8787 tcp:8787 →
+     http://localhost:8787). Release builds only speak HTTPS. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

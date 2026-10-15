@@ -1,0 +1,404 @@
+import { readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
+import { and, desc, eq, inArray, isNull, like, or } from 'drizzle-orm';
+import { z } from 'zod';
+import { normalizeDraft, type DraftContent } from '../../../shared/types';
+import { config } from '../config';
+import { db, newId, now, schema } from '../db';
+import { emit } from '../lib/events';
+import { extractFrames } from '../lib/ffmpeg';
+import { formatTime, getMedia, mediaPath, readTranscript } from '../services/media';
+import { createBranch, createPiece, getBranch, getPiece, getPieceDetail, getWorkspace, mergeDraft, saveVersion } from '../services/pieces';
+import { digest } from '../analytics/report';
+import { accountLabel, listAccounts } from '../publish/accounts';
+import { piecePosts, upcomingPosts } from '../publish/posts';
+import { studioTools, studioToolLabel } from './studio-tools';
+import { ok, safe, ToolError } from './tool-helpers';
+
+export const SERVER_NAME = 'studio';
+
+
+const platformsShape = z
+  .object({
+    tiktok: z.object({ caption: z.string().optional(), hashtags: z.string().optional() }).optional(),
+    instagram: z.object({ caption: z.string().optional(), hashtags: z.string().optional() }).optional(),
+    youtube: z.object({ title: z.string().optional(), description: z.string().optional(), tags: z.string().optional() }).optional(),
+    x: z.object({ text: z.string().optional() }).optional(),
+  })
+  .optional()
+  .describe('Per-platform fields to set. Only the fields you include are changed.');
+
+const draftShape = {
+  hook: z.string().optional().describe('Opening line / first 1-2 seconds'),
+  script: z.string().optional().describe('The script or outline (markdown allowed)'),
+  notes: z.string().optional().describe('Production notes: shots, b-roll, on-screen text ideas'),
+  platforms: platformsShape,
+};
+
+type DraftPatch = { hook?: string; script?: string; notes?: string; platforms?: Partial<Record<string, Record<string, string | undefined>>> };
+
+function cleanPatch(patch: DraftPatch): Partial<DraftContent> {
+  const strip = (o?: Record<string, string | undefined>) => (o ? Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) : undefined);
+  const platforms = patch.platforms ? Object.fromEntries(Object.entries(patch.platforms).map(([k, v]) => [k, strip(v)])) : undefined;
+  return Object.fromEntries(
+    Object.entries({ hook: patch.hook, script: patch.script, notes: patch.notes, platforms }).filter(([, v]) => v !== undefined),
+  ) as Partial<DraftContent>;
+}
+
+/** Human-readable labels for the tool chips in the chat UI. */
+export function toolLabel(fullName: string, input: Record<string, any>): string {
+  const name = fullName.replace(`mcp__${SERVER_NAME}__`, '');
+  switch (name) {
+    case 'get_board':
+      return 'Read the board';
+    case 'search':
+      return `Searched “${input.query ?? ''}”`;
+    case 'list_media':
+      return 'Browsed the library';
+    case 'get_piece':
+      return 'Opened a piece';
+    case 'create_piece':
+      return `Created “${input.title ?? 'a piece'}”`;
+    case 'update_piece':
+      return input.stage ? 'Moved a piece' : 'Updated a piece';
+    case 'write_draft':
+      return input.message ? `Wrote: ${input.message}` : 'Wrote a draft';
+    case 'create_alternative':
+      return `New alternative “${input.name ?? ''}”`;
+    case 'get_version':
+      return 'Opened an older version';
+    case 'get_transcript':
+      return 'Read a transcript';
+    case 'view_frames':
+      return `Looked at ${input.atSeconds?.length ?? input.count ?? 4} frames`;
+    case 'link_media':
+      return input.pieceId ? 'Attached footage' : 'Detached footage';
+    case 'update_voice_memory':
+      return 'Updated voice memory';
+    case 'get_schedule':
+      return 'Read the posting schedule';
+    case 'get_analytics':
+      return input.pieceId ? 'Read how this piece did' : 'Read the analytics';
+    case 'WebSearch':
+      return `Searched the web: ${input.query ?? ''}`;
+    case 'WebFetch':
+      try {
+        return `Read ${new URL(input.url).hostname}`;
+      } catch {
+        return 'Read a web page';
+      }
+    default:
+      return studioToolLabel(name, input) ?? name;
+  }
+}
+
+/** The app's tools, scoped to one workspace so Claude can't touch other brands. */
+export function buildTools(workspaceId: string) {
+  const ownPiece = (pieceId: string) => {
+    const piece = getPiece(pieceId);
+    if (piece.workspaceId !== workspaceId) throw new ToolError('That piece belongs to another workspace.');
+    return piece;
+  };
+  const ownMedia = (mediaId: string) => {
+    const m = getMedia(mediaId);
+    if (m.workspaceId !== workspaceId) throw new ToolError('That file belongs to another workspace.');
+    return m;
+  };
+  const mediaSummary = (m: typeof schema.media.$inferSelect) => ({
+    id: m.id,
+    name: m.originalName,
+    kind: m.kind,
+    seconds: m.durationMs ? Math.round(m.durationMs / 1000) : undefined,
+    size: m.width && m.height ? `${m.width}x${m.height}` : undefined,
+    transcript: m.transcriptStatus,
+    pieceId: m.pieceId ?? undefined,
+    notes: m.notes || undefined,
+  });
+
+  const tools = [
+    tool('get_board', 'List the pipeline stages and every piece on the board (id, title, stage, tags, hook preview).', {}, safe(async () => {
+      const ws = getWorkspace(workspaceId);
+      const pieces = db.select().from(schema.pieces).where(eq(schema.pieces.workspaceId, workspaceId)).orderBy(schema.pieces.position).all();
+      const activeIds = pieces.map((p) => p.activeBranchId).filter((id): id is string => !!id);
+      const branches = activeIds.length
+        ? db.select({ id: schema.branches.id, working: schema.branches.working }).from(schema.branches).where(inArray(schema.branches.id, activeIds)).all()
+        : [];
+      const hookOf = new Map(branches.map((b) => [b.id, normalizeDraft(b.working).hook]));
+      return ok({
+        stages: ws.stages.map((s) => ({
+          id: s.id,
+          name: s.name,
+          pieces: pieces
+            .filter((p) => p.stage === s.id)
+            .map((p) => ({ id: p.id, title: p.title, tags: p.tags, hook: (hookOf.get(p.activeBranchId ?? '') ?? '').slice(0, 120) || undefined, updated: new Date(p.updatedAt).toISOString().slice(0, 10) })),
+        })),
+      });
+    })),
+
+    tool(
+      'search',
+      'Search pieces (titles and draft text) and the media library (file names, notes and spoken transcripts).',
+      { query: z.string().min(1) },
+      safe(async ({ query }) => {
+        const q = `%${query}%`;
+        const pieceRows = db
+          .selectDistinct({ id: schema.pieces.id, title: schema.pieces.title, stage: schema.pieces.stage })
+          .from(schema.pieces)
+          .leftJoin(schema.branches, eq(schema.branches.pieceId, schema.pieces.id))
+          .where(and(eq(schema.pieces.workspaceId, workspaceId), or(like(schema.pieces.title, q), like(schema.branches.working, q))))
+          .limit(20)
+          .all();
+        const mediaRows = db
+          .select()
+          .from(schema.media)
+          .where(and(eq(schema.media.workspaceId, workspaceId), or(like(schema.media.originalName, q), like(schema.media.notes, q), like(schema.media.transcriptText, q))))
+          .limit(20)
+          .all();
+        const snippet = (text: string | null) => {
+          if (!text) return undefined;
+          const i = text.toLowerCase().indexOf(query.toLowerCase());
+          return i < 0 ? undefined : `…${text.slice(Math.max(0, i - 80), i + query.length + 80)}…`;
+        };
+        return ok({ pieces: pieceRows, media: mediaRows.map((m) => ({ ...mediaSummary(m), match: snippet(m.transcriptText) })) });
+      }),
+    ),
+
+    tool(
+      'list_media',
+      'List footage in the library, newest first.',
+      { unattachedOnly: z.boolean().optional().describe('Only files not attached to any piece'), limit: z.number().int().min(1).max(100).optional() },
+      safe(async ({ unattachedOnly, limit }) => {
+        const rows = db
+          .select()
+          .from(schema.media)
+          .where(and(eq(schema.media.workspaceId, workspaceId), isNull(schema.media.assetType), unattachedOnly ? isNull(schema.media.pieceId) : undefined))
+          .orderBy(desc(schema.media.createdAt))
+          .limit(limit ?? 30)
+          .all();
+        return ok(rows.map(mediaSummary));
+      }),
+    ),
+
+    tool(
+      'get_piece',
+      'Get a piece: its alternatives (each with the full current draft and recent version history) and attached footage.',
+      { pieceId: z.string() },
+      safe(async ({ pieceId }) => {
+        ownPiece(pieceId);
+        const d = getPieceDetail(pieceId);
+        return ok({
+          id: d.id,
+          title: d.title,
+          stage: d.stage,
+          tags: d.tags,
+          alternatives: d.branches.map((b) => ({
+            id: b.id,
+            name: b.name,
+            active: b.id === d.activeBranchId,
+            draft: b.working,
+            versions: b.versions.slice(0, 8).map((v) => ({ id: v.id, number: v.number, author: v.author, message: v.message, at: new Date(v.createdAt).toISOString() })),
+          })),
+          footage: d.media.map(mediaSummary),
+        });
+      }),
+    ),
+
+    tool(
+      'create_piece',
+      'Create a new piece (card) on the board, optionally with a first draft.',
+      { title: z.string().min(1), stage: z.string().optional().describe('Stage id; defaults to the first stage'), tags: z.array(z.string()).optional(), ...draftShape },
+      safe(async ({ title, stage, tags, ...draft }) => {
+        const content = cleanPatch(draft);
+        const hasContent = Object.keys(content).length > 0;
+        const { pieceId, branchId } = createPiece(workspaceId, { title, stage, tags, content: hasContent ? content : undefined, author: 'claude', message: 'Created by Claude' });
+        return ok({ pieceId, alternativeId: branchId });
+      }),
+    ),
+
+    tool(
+      'update_piece',
+      'Rename a piece, move it to another stage, or replace its tags.',
+      { pieceId: z.string(), title: z.string().optional(), stage: z.string().optional().describe('Stage id'), tags: z.array(z.string()).optional() },
+      safe(async ({ pieceId, title, stage, tags }) => {
+        const piece = ownPiece(pieceId);
+        const ws = getWorkspace(workspaceId);
+        if (stage && !ws.stages.some((s) => s.id === stage)) throw new ToolError(`Unknown stage. Valid ids: ${ws.stages.map((s) => s.id).join(', ')}`);
+        db.update(schema.pieces)
+          .set({ title: title ?? piece.title, stage: stage ?? piece.stage, tags: tags ?? piece.tags, updatedAt: now() })
+          .where(eq(schema.pieces.id, pieceId))
+          .run();
+        emit({ type: 'changed', entity: 'pieces', workspaceId, id: pieceId });
+        return ok('Updated.');
+      }),
+    ),
+
+    tool(
+      'write_draft',
+      'Write into a piece’s draft and save it as a new version authored by you. Only the fields you pass change. ' +
+        'Defaults to the active alternative. The user can compare and restore versions.',
+      { pieceId: z.string(), alternativeId: z.string().optional(), message: z.string().describe('Short version note, e.g. "Punchier hook"'), ...draftShape },
+      safe(async ({ pieceId, alternativeId, message, ...draft }) => {
+        const piece = ownPiece(pieceId);
+        const branchId = alternativeId ?? piece.activeBranchId;
+        if (!branchId) throw new ToolError('This piece has no alternative to write into.');
+        const branch = getBranch(branchId);
+        if (branch.pieceId !== pieceId) throw new ToolError('That alternative belongs to another piece.');
+        const content = mergeDraft(normalizeDraft(branch.working), cleanPatch(draft));
+        const { version, unchanged } = saveVersion(branchId, { author: 'claude', message, content });
+        return ok(unchanged ? 'No changes — the draft already had that content.' : `Saved v${version.number} on “${branch.name}”.`);
+      }),
+    ),
+
+    tool(
+      'create_alternative',
+      'Start a new alternative (a parallel take, e.g. a different hook or angle) of a piece, copied from an existing alternative or version, with your changes applied.',
+      {
+        pieceId: z.string(),
+        name: z.string().describe('Short name, e.g. "Story hook"'),
+        fromAlternativeId: z.string().optional(),
+        fromVersionId: z.string().optional(),
+        message: z.string().optional(),
+        ...draftShape,
+      },
+      safe(async ({ pieceId, name, fromAlternativeId, fromVersionId, message, ...draft }) => {
+        ownPiece(pieceId);
+        const { branchId, version } = createBranch(pieceId, { name, fromBranchId: fromAlternativeId, fromVersionId, content: cleanPatch(draft), author: 'claude', message });
+        return ok({ alternativeId: branchId, version: version.number });
+      }),
+    ),
+
+    tool('get_version', 'Read the full content of an older version.', { versionId: z.string() }, safe(async ({ versionId }) => {
+      const v = db.select().from(schema.versions).where(eq(schema.versions.id, versionId)).get();
+      if (!v) throw new ToolError('Version not found.');
+      ownPiece(v.pieceId);
+      return ok({ number: v.number, author: v.author, message: v.message, draft: normalizeDraft(v.content) });
+    })),
+
+    tool(
+      'get_transcript',
+      'Read the spoken transcript of a video or voice memo, with timestamps.',
+      { mediaId: z.string() },
+      safe(async ({ mediaId }) => {
+        const m = ownMedia(mediaId);
+        if (m.transcriptStatus !== 'done') throw new ToolError(`No transcript (status: ${m.transcriptStatus}).`);
+        const t = await readTranscript(mediaId);
+        if (!t) throw new ToolError('Transcript file is missing.');
+        const lines = t.segments.map((s) => `[${formatTime(s.start)}] ${s.text}`).join('\n');
+        return ok(`${m.originalName} — language: ${t.language}, ${formatTime(t.duration)} long\n\n${lines.slice(0, 40_000)}`);
+      }),
+    ),
+
+    tool(
+      'view_frames',
+      'Look at still frames from a video. Either evenly spaced (count) or at specific seconds.',
+      { mediaId: z.string(), count: z.number().int().min(1).max(8).optional(), atSeconds: z.array(z.number().min(0)).max(8).optional() },
+      safe(async ({ mediaId, count, atSeconds }) => {
+        const m = ownMedia(mediaId);
+        if (m.kind !== 'video' && m.kind !== 'image') throw new ToolError('Only videos and images have frames.');
+        if (m.kind === 'image') {
+          const data = await readFile(mediaPath(m));
+          if (data.length > 4_500_000) throw new ToolError('Image too large to view.');
+          return { content: [{ type: 'image', data: data.toString('base64'), mimeType: m.mime }] };
+        }
+        const duration = (m.durationMs ?? 0) / 1000;
+        const n = count ?? 4;
+        const times = atSeconds?.length ? atSeconds.map((t) => Math.min(t, Math.max(0, duration - 0.1))) : Array.from({ length: n }, (_, i) => (duration * (i + 0.5)) / n);
+        const prefix = join(config.framesDir, `${newId()}`);
+        const files = await extractFrames(mediaPath(m), times, (i) => `${prefix}-${i}.jpg`);
+        try {
+          const images = await Promise.all(files.map((f) => readFile(f)));
+          return {
+            content: [
+              { type: 'text', text: `Frames at ${times.map((t) => formatTime(t)).join(', ')} (video is ${formatTime(duration)}, ${m.width}x${m.height})` },
+              ...images.map((img) => ({ type: 'image' as const, data: img.toString('base64'), mimeType: 'image/jpeg' })),
+            ],
+          };
+        } finally {
+          await Promise.all(files.map((f) => rm(f, { force: true })));
+        }
+      }),
+    ),
+
+    tool(
+      'link_media',
+      'Attach a library file to a piece, or detach it (pieceId null).',
+      { mediaId: z.string(), pieceId: z.string().nullable() },
+      safe(async ({ mediaId, pieceId }) => {
+        const m = ownMedia(mediaId);
+        if (pieceId) ownPiece(pieceId);
+        db.update(schema.media).set({ pieceId }).where(eq(schema.media.id, mediaId)).run();
+        emit({ type: 'changed', entity: 'media', workspaceId, id: mediaId });
+        for (const id of [m.pieceId, pieceId]) if (id) emit({ type: 'changed', entity: 'pieces', workspaceId, id });
+        return ok('Done.');
+      }),
+    ),
+
+    tool(
+      'update_voice_memory',
+      'Replace the workspace’s voice memory — your notes on how this creator wants things written. Use when they state a lasting preference. Send the full updated notes, not a diff.',
+      { memory: z.string().describe('Full updated notes as short markdown bullets') },
+      safe(async ({ memory }) => {
+        db.update(schema.workspaces).set({ voiceMemory: memory.trim(), updatedAt: now() }).where(eq(schema.workspaces.id, workspaceId)).run();
+        emit({ type: 'changed', entity: 'workspaces', workspaceId });
+        return ok('Voice memory updated.');
+      }),
+    ),
+
+    tool(
+      'get_schedule',
+      'Read the posting schedule: connected accounts with their queue times, and posts (scheduled, going out, posted, failed or missed) from the last week onwards. ' +
+        'Read-only: you cannot schedule, publish or change posts — the creator does that with a click.',
+      { pieceId: z.string().optional().describe('Only this piece’s posts') },
+      safe(async ({ pieceId }) => {
+        if (pieceId) ownPiece(pieceId);
+        const when = (ms: number) => new Date(ms).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        const posts = (pieceId ? piecePosts(pieceId) : upcomingPosts(workspaceId)).map((p) => ({
+          piece: p.pieceTitle,
+          pieceId: p.pieceId,
+          account: p.accountLabel,
+          when: when(p.scheduledAt),
+          status: p.status,
+          note: p.error ?? (p.stage || undefined),
+          url: p.url ?? undefined,
+        }));
+        const accounts = listAccounts(workspaceId).map((a) => ({
+          account: accountLabel(a),
+          status: a.status,
+          queue: a.slots.map((s) => `${s.time} on ${s.days.map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join('/')}`),
+        }));
+        return ok({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, now: when(now()), accounts, posts });
+      }),
+    ),
+
+    tool(
+      'get_analytics',
+      'Read how published posts did: views, likes, comments, shares, saves, watch time and how each compares with the account’s typical post ' +
+        '(views after 24 hours), plus each account’s followers, queue times and which times of day and weekdays have done best, and the latest weekly review. ' +
+        'Numbers come from the platforms and are refreshed every few hours. Read-only.',
+      {
+        days: z.number().int().min(1).max(90).optional().describe('How many days of posts to list in detail (default 28)'),
+        pieceId: z.string().optional().describe('Only this piece’s posts'),
+      },
+      safe(async ({ days, pieceId }) => {
+        if (pieceId) ownPiece(pieceId);
+        const { text } = digest(workspaceId, days ?? 28, { pieceId });
+        const review = db
+          .select({ body: schema.reviews.body, createdAt: schema.reviews.createdAt })
+          .from(schema.reviews)
+          .where(and(eq(schema.reviews.workspaceId, workspaceId), eq(schema.reviews.status, 'done')))
+          .orderBy(desc(schema.reviews.createdAt))
+          .get();
+        const last = review?.body
+          ? `\n\n## Latest weekly review (${new Date(review.createdAt).toDateString()})\n${review.body.headline}\n${review.body.summary}\nLessons:${review.body.lessons.map((l) => `\n- ${l}`).join('')}`
+          : '';
+        return ok(text.replace(/\[(A|P)\d+\] /g, '') + last);
+      }),
+    ),
+
+    ...studioTools(workspaceId, ownPiece),
+  ];
+
+  const server = createSdkMcpServer({ name: SERVER_NAME, version: '0.1.0', tools, alwaysLoad: true });
+  return { server, toolNames: tools.map((t) => `mcp__${SERVER_NAME}__${t.name}`) };
+}

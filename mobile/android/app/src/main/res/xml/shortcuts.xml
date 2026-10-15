@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the app icon. They open contentstudio:// links the web UI turns into screens (lib/native.ts). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="record"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_record"
+        android:shortcutShortLabel="@string/shortcut_record_short"
+        android:shortcutLongLabel="@string/shortcut_record_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="contentstudio://capture?record=1"
+            android:targetClass="io.github.adambench.contentstudio.MainActivity"
+            android:targetPackage="io.github.adambench.contentstudio" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="capture"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_capture"
+        android:shortcutShortLabel="@string/shortcut_capture_short"
+        android:shortcutLongLabel="@string/shortcut_capture_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="contentstudio://capture"
+            android:targetClass="io.github.adambench.contentstudio.MainActivity"
+            android:targetPackage="io.github.adambench.contentstudio" />
+    </shortcut>
+</shortcuts>

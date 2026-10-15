@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status bar icon for notifications: white on transparent, the system colours it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="320"
+    android:viewportHeight="320">
+    <group android:translateX="-96" android:translateY="-96">
+        <path android:fillColor="#FFFFFFFF" android:pathData="M144,214a26,26 0 0,1 26,26v32a26,26 0 0,1 -52,0v-32a26,26 0 0,1 26,-26zM218,150a26,26 0 0,1 26,26v160a26,26 0 0,1 -52,0v-160a26,26 0 0,1 26,-26zM292,112a26,26 0 0,1 26,26v236a26,26 0 0,1 -52,0v-236a26,26 0 0,1 26,-26zM366,182a26,26 0 0,1 26,26v96a26,26 0 0,1 -52,0v-96a26,26 0 0,1 26,-26z" />
+    </group>
+</vector>

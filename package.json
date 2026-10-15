@@ -1,0 +1,35 @@
+{
+  "name": "content-studio",
+  "private": true,
+  "repository": "https://github.com/Adambench/content-studio",
+  "type": "module",
+  "workspaces": [
+    "server",
+    "web",
+    "desktop",
+    "mobile"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,web,app -c blue,magenta,green \"DESKTOP_TOKEN=dev-desktop-token npm run dev -w server\" \"npm run dev -w web\" \"DESKTOP_TOKEN=dev-desktop-token DEV_URL=http://localhost:5173 npm run dev -w desktop\"",
+    "dev:web": "concurrently -k -n server,web -c blue,magenta \"npm run dev -w server\" \"npm run dev -w web\"",
+    "build": "npm run build -w web && npm run build -w server && npm run build -w desktop",
+    "install-app": "npm run package -w desktop && npm run install-app -w desktop",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w web && npm run typecheck -w desktop && npm run typecheck -w mobile",
+    "android": "npm run build:app -w web && npm run sync -w mobile"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "allowScripts": {
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "electron@44.7.2": true,
+    "electron-winstaller": false,
+    "puppeteer@25.14.0": false
+  },
+  "version": "0.1.0"
+}
