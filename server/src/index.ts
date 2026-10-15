@@ -112,12 +112,19 @@ startAnalytics();
 await app.listen({ port: config.port, host: config.host });
 console.log(`Content Studio is running on http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);
 
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, async () => {
-    stopWorker();
-    stopScheduler();
-    stopAnalytics();
-    await app.close();
-    process.exit(0);
-  });
+let stopping = false;
+async function shutdown() {
+  if (stopping) return;
+  stopping = true;
+  stopWorker();
+  stopScheduler();
+  stopAnalytics();
+  await app.close();
+  process.exit(0);
+}
+for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, shutdown);
+// The desktop app holds our stdin open; it closes when the app goes away, even if it crashed and couldn't stop us,
+// so we don't linger holding the port.
+if (process.env.CS_EXIT_WITH_PARENT) {
+  process.stdin.on('end', shutdown).on('close', shutdown).on('error', shutdown).resume();
 }

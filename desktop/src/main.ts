@@ -61,8 +61,10 @@ function startServer() {
       DESKTOP_TOKEN: desktopToken,
       APP_RESOURCES: root,
       CONTENT_STUDIO_DATA_DIR: dataDir,
+      // Exit when the stdin pipe closes, i.e. when this process dies without stopping the server.
+      CS_EXIT_WITH_PARENT: '1',
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
   });
   server.stdout?.pipe(log);
   server.stderr?.pipe(log);
