@@ -38,7 +38,7 @@ function pieceFootage(pieceId: string) {
 
 export function clipFromMedia(m: Pick<MediaRow, 'id' | 'kind' | 'durationMs'>): EditClip {
   const length = m.kind === 'image' ? 3 : Math.max(0.5, (m.durationMs ?? 3000) / 1000);
-  return { id: crypto.randomUUID().slice(0, 8), mediaId: m.id, in: 0, out: Math.round(length * 1000) / 1000, focusX: 0.5, focusY: 0.5, zoom: 1, volume: 1 };
+  return { id: crypto.randomUUID().slice(0, 8), mediaId: m.id, in: 0, out: Math.round(length * 1000) / 1000, focusX: 0.5, focusY: 0.5, zoom: 1, volume: 1, transition: null };
 }
 
 /** Start a piece's edit: the brand's video template, with the piece's footage laid end to end. */

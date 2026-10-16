@@ -1,6 +1,6 @@
 import { AudioLines, Image as ImageIcon, Type, Video } from 'lucide-react';
 import { useRef } from 'react';
-import { clipLength, clipStarts, editDuration } from '@shared/edit';
+import { TRANSITION_INFO, clipLength, clipStarts, editDuration, transitionWindows } from '@shared/edit';
 import { mediaThumbUrl } from '@/lib/api';
 import { sfxName } from '@/lib/sfx';
 import { cn } from '@/lib/utils';
@@ -63,6 +63,15 @@ export function Timeline({ className }: { className?: string }) {
               </button>
             );
           })}
+          {/* transitions: the stretch where the two shots overlap, over the cut */}
+          {transitionWindows(spec).map((w) => (
+            <span
+              key={`tr${w.index}`}
+              className="pointer-events-none absolute inset-y-2 z-10 rounded-sm border border-white/70 bg-brand/50"
+              style={{ left: pct(w.start), width: pct(w.end - w.start), minWidth: 6 }}
+              title={TRANSITION_INFO[w.type].label}
+            />
+          ))}
         </div>
 
         {/* overlays */}

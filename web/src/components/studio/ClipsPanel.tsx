@@ -4,16 +4,36 @@ import { CSS } from '@dnd-kit/utilities';
 import { ChevronDown, Copy, GripVertical, Plus, ScanFace, Scissors, Trash2, Wand2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { EDIT_FORMATS, clipAt, clipLength, clipStarts, editDuration, fillGeometry, newEditId, splitClipAt, type EditClip } from '@shared/edit';
+import {
+  EDIT_FORMATS,
+  TRANSITION_INFO,
+  TRANSITION_MAX,
+  TRANSITION_MIN,
+  TRANSITIONS,
+  clipAt,
+  clipLength,
+  clipStarts,
+  editDuration,
+  fillGeometry,
+  newEditId,
+  splitClipAt,
+  type ClipTransition,
+  type EditClip,
+  type TransitionType,
+} from '@shared/edit';
+import { builtinSfx, builtinSfxId } from '@shared/sfx';
 import { MediaIcon } from '@/components/MediaCard';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { Switch } from '@/components/ui/switch';
 import { api, errorMessage, mediaThumbUrl } from '@/lib/api';
 import type { Media } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useStudio } from './context';
-import { PanelEmpty, preciseClock, SecondsField, SliderField } from './controls';
+import { Field, PanelEmpty, preciseClock, SecondsField, SliderField } from './controls';
 import { MediaPicker } from './MediaPicker';
 
 export const clipFromMedia = (m: Media): EditClip => ({
@@ -25,6 +45,7 @@ export const clipFromMedia = (m: Media): EditClip => ({
   focusY: 0.5,
   zoom: 1,
   volume: 1,
+  transition: null,
 });
 
 export function ClipsPanel() {
@@ -161,6 +182,7 @@ export function ClipsPanel() {
 }
 
 function ClipRow({ clip, index, media, active, onSelect }: { clip: EditClip; index: number; media: Media | undefined; active: boolean; onSelect: () => void }) {
+  const comesIn = index > 0 && clip.transition ? TRANSITION_INFO[clip.transition.type].label : null;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: clip.id });
   return (
     <li
@@ -181,6 +203,7 @@ function ClipRow({ clip, index, media, active, onSelect }: { clip: EditClip; ind
             {media?.kind === 'image' ? 'Photo' : `${preciseClock(clip.in)} – ${preciseClock(clip.out)}`}
             {clip.zoom > 1.001 && ` · ${clip.zoom.toFixed(2)}×`}
             {clip.volume === 0 && ' · muted'}
+            {comesIn && ` · ${comesIn} in`}
           </p>
         </div>
         <span className="text-xs text-muted-foreground tabular-nums">{clipLength(clip).toFixed(1)}s</span>
@@ -190,7 +213,7 @@ function ClipRow({ clip, index, media, active, onSelect }: { clip: EditClip; ind
 }
 
 function ClipEditor({ clip, start }: { clip: EditClip; start: number }) {
-  const { spec, update, time, select, media } = useStudio();
+  const { spec, update, time, seek, select, media } = useStudio();
   const m = media.get(clip.mediaId);
   const set = (patch: Partial<EditClip>) => update((s) => ({ ...s, clips: s.clips.map((c) => (c.id === clip.id ? { ...c, ...patch } : c)) }));
   const sourceMax = m?.durationMs ? m.durationMs / 1000 : undefined;
@@ -245,7 +268,75 @@ function ClipEditor({ clip, start }: { clip: EditClip; start: number }) {
 
       <SliderField label="Zoom" value={clip.zoom} min={1} max={2} step={0.01} format={(v) => `${v.toFixed(2)}×`} onChange={(zoom) => set({ zoom })} />
       {m?.kind === 'video' && <SliderField label="Clip sound" value={clip.volume} min={0} max={2} step={0.05} format={(v) => (v === 0 ? 'Muted' : `${Math.round(v * 100)}%`)} onChange={(volume) => set({ volume })} />}
+
+      {spec.clips[0]?.id !== clip.id && (
+        <TransitionEditor
+          value={clip.transition}
+          onChange={(transition) => {
+            set({ transition });
+            // Show it: from just before the cut.
+            if (transition) seek(Math.max(0, start - transition.duration / 2 - 0.4));
+          }}
+          onAll={() =>
+            update((s) => ({ ...s, clips: s.clips.map((c, i) => (i === 0 ? c : { ...c, transition: clip.transition })) }))
+          }
+        />
+      )}
     </section>
+  );
+}
+
+const CUT = 'cut';
+
+/** How the clip comes in from the one before: a straight cut or a transition, its length and its sound. */
+function TransitionEditor({ value, onChange, onAll }: { value: ClipTransition | null; onChange: (t: ClipTransition | null) => void; onAll: () => void }) {
+  return (
+    <div className="space-y-3 border-t pt-3">
+      <Field label="Comes in with" hint={value ? TRANSITION_INFO[value.type].hint : 'Straight cut'}>
+        <div className="flex gap-2">
+          <Select
+            value={value?.type ?? CUT}
+            onValueChange={(v) =>
+              onChange(v === CUT ? null : { type: v as TransitionType, duration: TRANSITION_INFO[v as TransitionType].duration, sound: value?.sound ?? true })
+            }
+          >
+            <SelectTrigger size="sm" className="w-full min-w-0" aria-label="Transition">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={CUT}>Cut</SelectItem>
+              {TRANSITIONS.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {TRANSITION_INFO[t].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" variant="ghost" onClick={onAll} title="Use this on every cut of the edit">
+            Use on every cut
+          </Button>
+        </div>
+      </Field>
+      {value && (
+        <>
+          <SliderField
+            label="Length"
+            value={value.duration}
+            min={TRANSITION_MIN}
+            max={TRANSITION_MAX}
+            step={0.01}
+            format={(v) => `${v.toFixed(2)} s`}
+            onChange={(duration) => onChange({ ...value, duration })}
+          />
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="transition-sound" className="text-xs">
+              Sound effect <span className="font-normal text-muted-foreground">({builtinSfx(builtinSfxId(TRANSITION_INFO[value.type].sound))?.label.toLowerCase()})</span>
+            </Label>
+            <Switch id="transition-sound" checked={value.sound} onCheckedChange={(sound) => onChange({ ...value, sound })} />
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

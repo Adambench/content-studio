@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { and, eq, inArray } from 'drizzle-orm';
-import { EDIT_FORMATS, LOUDNESS_TARGET, clipLength, editDuration, normalizeEdit, type EditSpec } from '../../../shared/edit';
+import { EDIT_FORMATS, LOUDNESS_TARGET, clipLength, editDuration, normalizeEdit, transitionHandles, transitionSounds, type EditSpec } from '../../../shared/edit';
 import { builtinSfx } from '../../../shared/sfx';
 import { REVIEW_STAGE } from '../../../shared/types';
 import { config } from '../config';
@@ -131,7 +131,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
     const brolls = spec.overlays.map((o, i) => ({ o, i })).filter((x) => x.o.type === 'broll');
     const total = spec.clips.length + brolls.length;
     let done = 0;
-    const picture = async (m: MediaRow, name: string, cut: { start: number; duration: number; zoom: number; audio: boolean }): Promise<ComposeSource> => {
+    const picture = async (m: MediaRow, name: string, cut: { start: number; duration: number; zoom: number; audio: boolean; before?: number; after?: number }): Promise<ComposeSource> => {
       if (abort.signal.aborted) throw new Error('cancelled');
       progress(0.05 + 0.25 * (done / total), `Preparing footage ${done + 1} of ${total}`);
       done++;
@@ -143,13 +143,18 @@ export async function renderJob({ renderId }: { renderId: string }) {
         return { src: `media/${name}.jpg`, mediaStart: 0 };
       }
       const info = await probe(mediaPath(m));
-      await cutSegment({ file: mediaPath(m), out: join(dir, 'media', `${name}.mp4`), info, ...cut, audio: cut.audio && info.hasAudio, box, lut, cwd: dir, signal: abort.signal });
-      return { src: `media/${name}.mp4`, mediaStart: 0 };
+      // Transitions need a little of the source either side of the clip (as much as the file has).
+      const from = Math.max(0, cut.start - (cut.before ?? 0));
+      const fileEnd = info.durationMs ? info.durationMs / 1000 : Infinity;
+      const to = Math.min(fileEnd, cut.start + cut.duration + (cut.after ?? 0));
+      await cutSegment({ file: mediaPath(m), out: join(dir, 'media', `${name}.mp4`), info, start: from, duration: to - from, zoom: cut.zoom, audio: cut.audio && info.hasAudio, box, lut, cwd: dir, signal: abort.signal });
+      return { src: `media/${name}.mp4`, mediaStart: Math.round((cut.start - from) * 1000) / 1000, duration: to - from };
     };
     const clipSources: ComposeSource[] = [];
+    const handles = transitionHandles(spec);
     for (const [i, clip] of spec.clips.entries()) {
       const m = byId.get(clip.mediaId);
-      clipSources[i] = m ? await picture(m, `c${i}`, { start: clip.in, duration: clipLength(clip), zoom: clip.zoom, audio: clip.volume > 0 }) : null;
+      clipSources[i] = m ? await picture(m, `c${i}`, { start: clip.in, duration: clipLength(clip), zoom: clip.zoom, audio: clip.volume > 0, ...handles[i] }) : null;
     }
     const brollSources: ComposeSource[] = [];
     for (const { o, i } of brolls) {
@@ -159,7 +164,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
     }
 
     // Everything else is used as-is: fonts, logos, the nasheed, sound effects.
-    const fileIds = new Set([...spec.overlays.flatMap((o) => (o.type === 'image' ? [o.mediaId] : [])), ...spec.audio.sfx.map((s) => s.mediaId)]);
+    const fileIds = new Set([...spec.overlays.flatMap((o) => (o.type === 'image' ? [o.mediaId] : [])), ...[...spec.audio.sfx, ...transitionSounds(spec)].map((s) => s.mediaId)]);
     for (const id of [spec.audio.nasheed?.mediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) fileIds.add(id);
     const fileNames = new Map<string, string>();
     for (const id of fileIds) {

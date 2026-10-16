@@ -1,6 +1,7 @@
 // The video studio's edit document, shared by the server (compile + render), the web editor and Claude's tools.
 // An edit is plain JSON; the server compiles it to a HyperFrames composition for preview and rendering.
 
+import { builtinSfxId } from './sfx';
 import type { Transcript } from './types';
 
 export const EDIT_FPS = 30;
@@ -30,7 +31,32 @@ export type EditClip = {
   zoom: number;
   /** Clip sound, 0 = muted, 1 = as recorded. */
   volume: number;
+  /** How this clip comes in after the one before it (ignored on the first clip); null = a straight cut. */
+  transition: ClipTransition | null;
 };
+
+// ---------- transitions ----------
+
+export const TRANSITIONS = ['fade', 'dip', 'flash', 'zoom', 'whip', 'slide', 'blur', 'glitch'] as const;
+export type TransitionType = (typeof TRANSITIONS)[number];
+/** Each one's default length and the built-in sound it plays when `sound` is on (non-musical, shared/sfx.ts). */
+export const TRANSITION_INFO: Record<TransitionType, { label: string; hint: string; duration: number; sound: string }> = {
+  fade: { label: 'Crossfade', hint: 'One shot melts into the next', duration: 0.5, sound: 'whoosh-soft' },
+  dip: { label: 'Dip to black', hint: 'A beat of black: a new section, or the end', duration: 0.6, sound: 'whoosh-soft' },
+  flash: { label: 'Flash', hint: 'A burst of white light: energy, a reveal', duration: 0.3, sound: 'shutter' },
+  zoom: { label: 'Zoom through', hint: 'Punches through into the next shot', duration: 0.36, sound: 'whoosh-fast' },
+  whip: { label: 'Whip pan', hint: 'A fast blurred swipe sideways', duration: 0.3, sound: 'whoosh-fast' },
+  slide: { label: 'Push up', hint: 'The next shot pushes this one up, like a scroll', duration: 0.4, sound: 'swish' },
+  blur: { label: 'Blur', hint: 'Soft focus out, and in on the next shot', duration: 0.5, sound: 'whoosh-soft' },
+  glitch: { label: 'Glitch', hint: 'A digital stutter', duration: 0.3, sound: 'glitch' },
+};
+/**
+ * Only the pictures overlap: each shot runs a little past the cut (the source either side of the in/out points) while
+ * the sound still cuts where it did, so the timeline, captions and timings never move.
+ */
+export type ClipTransition = { type: TransitionType; duration: number; sound: boolean };
+export const TRANSITION_MIN = 0.15;
+export const TRANSITION_MAX = 1.2;
 
 export const CAPTION_PRESETS = ['bold', 'karaoke', 'clean', 'subtitle'] as const;
 export type CaptionPreset = (typeof CAPTION_PRESETS)[number];
@@ -246,6 +272,13 @@ function normalizeWatermark(input: unknown, base = emptyEdit().watermark): Water
   };
 }
 
+function normalizeTransition(input: unknown): ClipTransition | null {
+  const t = obj(input);
+  if (!TRANSITIONS.includes(t.type as TransitionType)) return null;
+  const type = t.type as TransitionType;
+  return { type, duration: round(num(t.duration, TRANSITION_INFO[type].duration, TRANSITION_MIN, TRANSITION_MAX)), sound: typeof t.sound === 'boolean' ? t.sound : false };
+}
+
 function normalizeClip(input: Loose): EditClip | null {
   if (typeof input.mediaId !== 'string' || !input.mediaId) return null;
   const inPoint = round(num(input.in, 0, 0));
@@ -259,6 +292,7 @@ function normalizeClip(input: Loose): EditClip | null {
     focusY: round(num(input.focusY, 0.5, 0, 1)),
     zoom: round(num(input.zoom, 1, 1, 3)),
     volume: round(num(input.volume, 1, 0, 2)),
+    transition: normalizeTransition(input.transition),
   };
 }
 
@@ -353,6 +387,47 @@ export function clipAt(spec: Pick<EditSpec, 'clips'>, time: number) {
   const starts = clipStarts(spec);
   for (let i = spec.clips.length - 1; i >= 0; i--) if (time >= starts[i]) return { index: i, clip: spec.clips[i], start: starts[i] };
   return null;
+}
+
+/** A transition's window on the finished video: the cut at `at`, the pictures overlapping from `start` to `end`. */
+export type TransitionWindow = { index: number; type: TransitionType; start: number; end: number; at: number; sound: boolean };
+
+/**
+ * Where each transition plays. Half of it sits either side of the cut, never more than 45 % of either clip, so two
+ * transitions around a short clip can't overlap.
+ */
+export function transitionWindows(spec: Pick<EditSpec, 'clips'>): TransitionWindow[] {
+  const starts = clipStarts(spec);
+  const out: TransitionWindow[] = [];
+  spec.clips.forEach((c, j) => {
+    if (j === 0 || !c.transition) return;
+    const half = Math.min(c.transition.duration / 2, clipLength(spec.clips[j - 1]) * 0.45, clipLength(c) * 0.45);
+    if (half < 0.04) return;
+    out.push({ index: j, type: c.transition.type, start: round(starts[j] - half), end: round(starts[j] + half), at: round(starts[j]), sound: c.transition.sound });
+  });
+  return out;
+}
+
+/** How much source each clip needs past its in and out points for the transitions around it (seconds). */
+export function transitionHandles(spec: Pick<EditSpec, 'clips'>) {
+  const handles = spec.clips.map(() => ({ before: 0, after: 0 }));
+  for (const w of transitionWindows(spec)) {
+    handles[w.index].before = w.at - w.start;
+    handles[w.index - 1].after = w.end - w.at;
+  }
+  return handles;
+}
+
+/** The built-in sounds of transitions that have `sound` on, as cues on the finished video. */
+export function transitionSounds(spec: Pick<EditSpec, 'clips'>): SfxCue[] {
+  return transitionWindows(spec)
+    .filter((w) => w.sound)
+    .map((w) => {
+      const name = TRANSITION_INFO[w.type].sound;
+      // Whooshes peak in their middle: centre them on the cut. Short clicks land just before it.
+      const lead = name.startsWith('whoosh') || name === 'swish' ? Math.min(0.35, w.at - w.start + 0.12) : 0.06;
+      return { id: `tr-${w.index}`, mediaId: builtinSfxId(name), at: round(Math.max(0, w.at - lead)), volume: 0.7 };
+    });
 }
 
 /** A spoken word placed on the finished video's timeline, with where it came from. */
@@ -482,7 +557,8 @@ export function tightenClips(clips: EditClip[], speech: Record<string, [number, 
     }
     keep
       .filter(([s, e]) => e - s >= 0.2)
-      .forEach(([s, e], i) => out.push({ ...clip, id: i === 0 ? clip.id : newEditId(), in: round(s), out: round(e) }));
+      // Only the first piece keeps the way the clip came in.
+      .forEach(([s, e], i) => out.push({ ...clip, id: i === 0 ? clip.id : newEditId(), in: round(s), out: round(e), ...(i > 0 && { transition: null }) }));
   }
   if (opts.punchIn) {
     let alt = false;
@@ -502,7 +578,7 @@ export function splitClipAt(spec: EditSpec, time: number): EditSpec {
   const cut = round(hit.clip.in + (time - hit.start));
   if (cut - hit.clip.in < 0.1 || hit.clip.out - cut < 0.1) return spec;
   const clips = [...spec.clips];
-  clips.splice(hit.index, 1, { ...hit.clip, out: cut }, { ...hit.clip, id: newEditId(), in: cut });
+  clips.splice(hit.index, 1, { ...hit.clip, out: cut }, { ...hit.clip, id: newEditId(), in: cut, transition: null });
   return { ...spec, clips };
 }
 

@@ -185,7 +185,7 @@ export function applyFocusSpans(clips: EditClip[], mediaId: string, spans: Focus
       const onSpan = Math.abs(clip.focusX - s.x) < 0.002 && Math.abs(clip.focusY - s.y) < 0.002;
       const own = onSpan && s.zoom > 0 ? clip.zoom / s.zoom : clip.zoom;
       const punch = Math.abs(own - 1.12) < 0.01 ? 1.12 : 1;
-      const piece: EditClip = { ...clip, id: pieces.length ? newEditId() : clip.id, in: r3(a), out: r3(b), focusX: s.x, focusY: s.y, zoom: r3(Math.min(3, punch * s.zoom)) };
+      const piece: EditClip = { ...clip, id: pieces.length ? newEditId() : clip.id, in: r3(a), out: r3(b), focusX: s.x, focusY: s.y, zoom: r3(Math.min(3, punch * s.zoom)), ...(pieces.length && { transition: null }) };
       const last = pieces[pieces.length - 1];
       // Slivers under 0.4 s aren't worth a reframe: they stay with the piece before.
       if (last && b - a < 0.4) last.out = piece.out;

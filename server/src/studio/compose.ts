@@ -8,9 +8,12 @@ import {
   fillGeometry,
   speechSpans,
   timelineWords,
+  transitionSounds,
+  transitionWindows,
   type CaptionPreset,
   type EditSpec,
   type OverlayAnimation,
+  type TransitionWindow,
 } from '../../../shared/edit';
 import { builtinSfx } from '../../../shared/sfx';
 import type { AssetType, MediaKind, Transcript } from '../../../shared/types';
@@ -22,8 +25,11 @@ import type { AssetType, MediaKind, Transcript } from '../../../shared/types';
  */
 
 export type ComposeMedia = { id: string; kind: MediaKind; assetType: AssetType | null; width: number | null; height: number | null; durationMs: number | null };
-/** Where a moving picture comes from, and the moment in that file the clip starts. Null while it's being prepared. */
-export type ComposeSource = { src: string; mediaStart: number } | null;
+/**
+ * Where a moving picture comes from, and the moment in that file the clip starts. `duration` is how long the file is
+ * when that isn't the media's own length (a segment cut for the render). Null while it's being prepared.
+ */
+export type ComposeSource = { src: string; mediaStart: number; duration?: number } | null;
 
 export type ComposeInput = {
   spec: EditSpec;
@@ -121,6 +127,44 @@ export function composeEdit(input: ComposeInput) {
   });
   if (!spec.clips.length && input.preview) {
     body.push(`<div id="c0" class="clip ph" data-start="0" data-duration="${n(duration)}" data-track-index="0"><span>Add footage to start editing</span></div>`);
+  }
+
+  // ---------- transitions ----------
+  // Over the cut, a muted copy of each shot runs on past it (the outgoing one past its out point, the incoming one
+  // from before its in point) on a black backing; the transition animates those copies. The clips' own sound still cuts
+  // at the cut, so nothing else moves.
+  for (const w of transitionWindows(spec)) {
+    const pics: string[] = [];
+    // A photo's slow push-in: where it is at that moment (the outgoing one has finished it).
+    const scales = { a: 1, b: 1 };
+    for (const [side, i] of [['a', w.index - 1], ['b', w.index]] as const) {
+      const clip = spec.clips[i];
+      const m = media.get(clip.mediaId);
+      const source = m ? input.clipSource(i) : null;
+      if (!m || !source) break;
+      const { w: sw, h: sh } = sizeOf(clip.mediaId);
+      const g = fillGeometry(sw, sh, W, H, clip.focusX, clip.focusY, clip.zoom);
+      // Only the frame's part of the picture shows, so pushes and slides don't reveal what the crop leaves out.
+      const inset = [-g.top, g.width + g.left - W, g.height + g.top - H, -g.left].map(px).join(' ');
+      const style = `left:${px(g.left)};top:${px(g.top)};width:${px(g.width)};height:${px(g.height)};clip-path:inset(${inset});transform-origin:${n(clip.focusX * 100)}% ${n(clip.focusY * 100)}%;z-index:${side === 'a' ? 6 : 7}`;
+      const timing = `data-start="${n(w.start)}" data-duration="${n(w.end - w.start)}" data-track-index="5"`;
+      const id = `t${side}${w.index}`;
+      if (m.kind === 'image') {
+        if (side === 'a') scales.a = 1.07;
+        pics.push(`<img id="${id}" class="clip pic" src="${esc(source.src)}" alt="" ${timing} style="${style};transform:scale(${scales[side]})">`);
+        continue;
+      }
+      const len = clipLength(clip);
+      const fileLen = source.duration ?? (m.durationMs ? source.mediaStart - clip.in + m.durationMs / 1000 : Infinity);
+      // The picture either side of the cut, pulled back inside the file when it ends (or starts) right at the cut.
+      const want = side === 'a' ? source.mediaStart + len - (w.at - w.start) : source.mediaStart - (w.at - w.start);
+      const from = Math.max(0, Math.min(want, fileLen - (w.end - w.start) - 0.02));
+      pics.push(`<video id="${id}" class="pic" src="${esc(source.src)}"${app.video} ${timing} data-media-start="${n(from)}" muted playsinline preload="auto" style="${style}"></video>`);
+    }
+    if (pics.length < 2) continue;
+    body.push(`<div id="tk${w.index}" class="clip layer" data-start="${n(w.start)}" data-duration="${n(w.end - w.start)}" data-track-index="5" style="background:#000;z-index:5"></div>`, ...pics);
+    if (w.type === 'flash') body.push(`<div id="tw${w.index}" class="clip layer" data-start="${n(w.start)}" data-duration="${n(w.end - w.start)}" data-track-index="5" style="background:#fff;opacity:0;z-index:8"></div>`);
+    tl.push(...transitionTweens(w, W, H, scales));
   }
 
   // ---------- overlays ----------
@@ -236,7 +280,7 @@ ${
       offset = 0;
     }
   }
-  spec.audio.sfx.forEach((s, i) => {
+  [...spec.audio.sfx, ...transitionSounds(spec)].forEach((s, i) => {
     const builtin = builtinSfx(s.mediaId);
     const m = media.get(s.mediaId);
     if (s.at >= duration || (!builtin && m?.assetType !== 'sfx')) return;
@@ -309,6 +353,86 @@ document.querySelectorAll('video').forEach((v) => v.addEventListener('loadeddata
 </html>
 `;
   return { html, duration };
+}
+
+/**
+ * GSAP for one transition: `#ta<i>` is the outgoing shot, `#tb<i>` the incoming one (on top), `#tw<i>` the white of a
+ * flash. Everything is seek-safe: fromTo with explicit start states, no randomness.
+ */
+function transitionTweens(w: TransitionWindow, W: number, H: number, scales: { a: number; b: number }) {
+  const a = js(`#ta${w.index}`);
+  const b = js(`#tb${w.index}`);
+  const both = js(`#ta${w.index}, #tb${w.index}`);
+  const s = n(w.start);
+  const m = n(w.at);
+  const half = w.at - w.start;
+  const d = n(w.end - w.start);
+  const h = n(half);
+  const { a: sa, b: sb } = scales;
+  // The incoming shot shows from the cut on (for the transitions that hand over at the middle).
+  const showB = `tl.fromTo(${b}, { opacity: 0 }, { opacity: 1, duration: 0.001 }, ${m});`;
+  switch (w.type) {
+    case 'fade':
+      return [`tl.fromTo(${b}, { opacity: 0 }, { opacity: 1, duration: ${d}, ease: 'sine.inOut' }, ${s});`];
+    case 'dip':
+      return [`tl.fromTo(${a}, { opacity: 1 }, { opacity: 0, duration: ${h}, ease: 'power1.in' }, ${s});`, `tl.fromTo(${b}, { opacity: 0 }, { opacity: 1, duration: ${h}, ease: 'power1.out' }, ${m});`];
+    case 'flash': {
+      const white = js(`#tw${w.index}`);
+      return [
+        `tl.fromTo(${white}, { opacity: 0 }, { opacity: 0.95, duration: ${h}, ease: 'power2.in' }, ${s});`,
+        `tl.fromTo(${a}, { filter: 'brightness(1)' }, { filter: 'brightness(2.4)', duration: ${h}, ease: 'power2.in' }, ${s});`,
+        showB,
+        `tl.fromTo(${b}, { filter: 'brightness(2.4)' }, { filter: 'brightness(1)', duration: ${h}, ease: 'power2.out' }, ${m});`,
+        `tl.to(${white}, { opacity: 0, duration: ${h}, ease: 'power2.out' }, ${m});`,
+      ];
+    }
+    case 'zoom':
+      return [
+        `tl.fromTo(${a}, { scale: ${sa}, filter: 'blur(0px)' }, { scale: ${n(sa * 1.6)}, filter: 'blur(14px)', duration: ${h}, ease: 'power3.in' }, ${s});`,
+        showB,
+        `tl.fromTo(${b}, { scale: ${n(sb * 1.5)}, filter: 'blur(14px)' }, { scale: ${sb}, filter: 'blur(0px)', duration: ${h}, ease: 'power3.out' }, ${m});`,
+      ];
+    case 'whip':
+      return [
+        `tl.fromTo(${a}, { x: 0 }, { x: ${-W}, duration: ${d}, ease: 'power4.inOut' }, ${s});`,
+        `tl.fromTo(${b}, { x: ${W} }, { x: 0, duration: ${d}, ease: 'power4.inOut' }, ${s});`,
+        `tl.fromTo(${both}, { filter: 'blur(0px)' }, { filter: 'blur(18px)', duration: ${h}, ease: 'power2.in' }, ${s});`,
+        `tl.to(${both}, { filter: 'blur(0px)', duration: ${h}, ease: 'power2.out' }, ${m});`,
+      ];
+    case 'slide':
+      return [
+        `tl.fromTo(${a}, { y: 0 }, { y: ${-H}, duration: ${d}, ease: 'power3.inOut' }, ${s});`,
+        `tl.fromTo(${b}, { y: ${H} }, { y: 0, duration: ${d}, ease: 'power3.inOut' }, ${s});`,
+        `tl.fromTo(${both}, { filter: 'blur(0px)' }, { filter: 'blur(6px)', duration: ${h}, ease: 'power2.in' }, ${s});`,
+        `tl.to(${both}, { filter: 'blur(0px)', duration: ${h}, ease: 'power2.out' }, ${m});`,
+      ];
+    case 'blur':
+      return [
+        `tl.fromTo(${a}, { filter: 'blur(0px)' }, { filter: 'blur(26px)', duration: ${n(half * 1.3)}, ease: 'sine.in' }, ${s});`,
+        `tl.fromTo(${b}, { opacity: 0, filter: 'blur(26px)' }, { opacity: 1, filter: 'blur(0px)', duration: ${n(half * 1.4)}, ease: 'sine.out' }, ${n(w.end - half * 1.4)});`,
+      ];
+    case 'glitch': {
+      // A fixed stutter: the shots jump sideways, skew and shift colour, the incoming one taking over halfway.
+      const steps = [
+        { x: -46, skew: 8, hue: 90, on: 'a' },
+        { x: 34, skew: -6, hue: -60, on: 'a' },
+        { x: -18, skew: 12, hue: 160, on: 'b' },
+        { x: 52, skew: -10, hue: -120, on: 'a' },
+        { x: -30, skew: 5, hue: 40, on: 'b' },
+        { x: 14, skew: -3, hue: 0, on: 'b' },
+      ];
+      const step = (w.end - w.start) / (steps.length + 1);
+      const out = [`tl.fromTo(${b}, { opacity: 0 }, { opacity: 0, duration: 0.001 }, ${s});`];
+      steps.forEach((st, k) => {
+        const t = n(w.start + step * (k + 0.5));
+        const target = st.on === 'a' ? a : b;
+        out.push(`tl.set(${b}, { opacity: ${st.on === 'b' ? 1 : 0} }, ${t});`);
+        out.push(`tl.set(${target}, { x: ${st.x}, skewX: ${st.skew}, filter: 'hue-rotate(${st.hue}deg) contrast(1.6) saturate(1.8)' }, ${t});`);
+      });
+      out.push(`tl.set(${b}, { opacity: 1, x: 0, skewX: 0, filter: 'none' }, ${n(w.end - step / 2)});`);
+      return out;
+    }
+  }
 }
 
 function animate(target: string, kind: OverlayAnimation, start: number, len: number) {

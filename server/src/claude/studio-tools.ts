@@ -6,6 +6,10 @@ import {
   CAPTION_PRESETS,
   SHORT_MAX_SECONDS,
   TIGHTEN_PRESETS,
+  TRANSITION_INFO,
+  TRANSITION_MAX,
+  TRANSITION_MIN,
+  TRANSITIONS,
   clipStarts,
   editDuration,
   normalizeEdit,
@@ -31,6 +35,15 @@ const clipShape = z.object({
   focusY: z.number().min(0).max(1).optional(),
   zoom: z.number().min(1).max(3).optional().describe('1 = fill the frame; 1.1–1.2 is a punch-in'),
   volume: z.number().min(0).max(2).optional().describe('Clip sound, 0 = muted'),
+  transition: z
+    .object({
+      type: z.enum(TRANSITIONS).describe(TRANSITIONS.map((t) => `${t}: ${TRANSITION_INFO[t].hint}`).join('; ')),
+      duration: z.number().min(TRANSITION_MIN).max(TRANSITION_MAX).optional().describe('Seconds; short (0.2–0.4) for energy, longer (0.5–0.8) for calm'),
+      sound: z.boolean().optional().describe('Play a matching built-in sound effect (a whoosh, a shutter, a glitch)'),
+    })
+    .nullable()
+    .optional()
+    .describe('How this clip comes in after the one before (not on the first clip). Leave it out for a straight cut — most cuts should stay cuts; save transitions for a change of scene, topic or a reveal'),
 });
 
 const overlayShape = z.object({
