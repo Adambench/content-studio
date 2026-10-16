@@ -15,7 +15,7 @@ import { db, newId, schema } from '../db';
 import { findBinary } from '../lib/bin';
 import { extractAudio, probe } from '../lib/ffmpeg';
 import { badRequest } from '../lib/http';
-import { getSetting } from '../lib/settings';
+import { getSetting, setSetting } from '../lib/settings';
 import { enqueue, JobError } from '../jobs/queue';
 import { clipToolsInstalled, toolsEnv } from '../services/cliptools';
 import { whisperInstalled, type UploadedFile } from '../services/media';
@@ -95,6 +95,11 @@ type YtInfo = {
   id?: string;
   title?: string;
   duration?: number;
+  view_count?: number;
+  timestamp?: number;
+  upload_date?: string;
+  channel?: string;
+  uploader?: string;
   webpage_url?: string;
   url?: string;
   ie_key?: string;
@@ -106,10 +111,64 @@ type YtInfo = {
   automatic_captions?: Record<string, { ext: string; url: string }[]>;
 };
 
-async function ytInfo(url: string, extra: string[] = []): Promise<YtInfo> {
+export async function ytInfo(url: string, extra: string[] = []): Promise<YtInfo> {
   const y = ytdlp();
   // --no-playlist: a watch link copied from a playlist is that one video (channels and playlists still list).
   return JSON.parse(await run(y.bin, [...y.args, '-J', '--no-playlist', ...extra, url], { env: y.env, timeoutMs: 120_000 })) as YtInfo;
+}
+
+/** The videos of a yt-dlp listing, added to the campaign as "not downloaded" (views and dates kept for ranking). */
+function addListed(campaignId: string, info: YtInfo) {
+  const videos = (info.entries ?? []).filter((e) => e?.id && e._type !== 'playlist' && !/Tab$/.test(e.ie_key ?? '') && (e.webpage_url || e.url));
+  return videos.map((e) =>
+    insertSource(campaignId, {
+      kind: sourceKindOf(e.webpage_url ?? e.url!),
+      link: e.webpage_url ?? e.url!,
+      title: e.title ?? '',
+      durationMs: e.duration ? Math.round(e.duration * 1000) : null,
+      views: typeof e.view_count === 'number' ? e.view_count : null,
+      uploadedAt: uploadedAtOf(e),
+      creator: e.channel ?? e.uploader ?? info.channel ?? info.uploader ?? null,
+    }),
+  );
+}
+
+/** A channel or playlist the campaign lists videos from, kept (the listing row itself goes) so the finder can list it again. */
+function rememberListing(campaignId: string, link: string) {
+  const all = getSetting('sourceListings') ?? {};
+  const canonical = canonicalLink(link);
+  if (all[campaignId]?.includes(canonical)) return;
+  setSetting('sourceListings', { ...all, [campaignId]: [...(all[campaignId] ?? []), canonical].slice(-10) });
+}
+export const rememberedListings = (campaignId: string) => getSetting('sourceListings')?.[campaignId] ?? [];
+
+/** List a remembered channel again: new videos arrive as "not downloaded", known ones get their latest views. */
+export async function relistChannel(campaignId: string, link: string) {
+  const info = await ytInfo(listingUrl(link), ['--flat-playlist', '--playlist-end', String(MAX_LISTED)]);
+  const added = info._type === 'playlist' ? addListed(campaignId, info) : [];
+  emitCampaign(campaignId);
+  return added;
+}
+
+/** When a listing entry was uploaded, in ms (yt-dlp gives a timestamp, or a YYYYMMDD date). */
+export function uploadedAtOf(e: Pick<YtInfo, 'timestamp' | 'upload_date'>) {
+  if (e.timestamp) return e.timestamp * 1000;
+  const d = /^(\d{4})(\d{2})(\d{2})$/.exec(e.upload_date ?? '');
+  return d ? Date.UTC(Number(d[1]), Number(d[2]) - 1, Number(d[3])) : null;
+}
+
+/** Whether a link is a channel, playlist or folder (starting it lists its videos) rather than one video. */
+export function isListingLink(link: string) {
+  try {
+    const u = new URL(link);
+    const host = u.hostname.replace(/^www\.|^m\./, '');
+    if (host === 'youtube.com') return /^\/(@[^/]+|channel\/|c\/|user\/|playlist)/.test(u.pathname);
+    if (host.endsWith('twitch.tv')) return /^\/[^/]+\/?$/.test(u.pathname);
+    if (host === 'drive.google.com') return /\/folders\//.test(u.pathname);
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 /** A channel's front page lists its tabs; its videos (or a Twitch channel's past broadcasts) are what we want. */
@@ -142,7 +201,7 @@ async function listDriveFolder(folderId: string) {
 // ---------- adding ----------
 
 /** Add a source unless the campaign has that video already (then that one is returned). */
-export function insertSource(campaignId: string, values: { kind: SourceKind; link: string | null; title?: string; durationMs?: number | null; status?: SourceRow['status'] }) {
+export function insertSource(campaignId: string, values: { kind: SourceKind; link: string | null; title?: string; durationMs?: number | null; status?: SourceRow['status']; views?: number | null; uploadedAt?: number | null; creator?: string | null }) {
   if (values.link) values = { ...values, link: canonicalLink(values.link) };
   if (values.link) {
     const dup = db
@@ -150,11 +209,27 @@ export function insertSource(campaignId: string, values: { kind: SourceKind; lin
       .from(schema.campaignSources)
       .where(and(eq(schema.campaignSources.campaignId, campaignId), eq(schema.campaignSources.link, values.link)))
       .get();
-    if (dup) return dup;
+    if (dup) {
+      // A fresh listing brings the current view count (and fills in what an older row lacked).
+      const fresh = { views: values.views ?? dup.views, uploadedAt: dup.uploadedAt ?? values.uploadedAt ?? null, creator: dup.creator ?? values.creator ?? null };
+      if (fresh.views !== dup.views || fresh.uploadedAt !== dup.uploadedAt || fresh.creator !== dup.creator) return updateSource(dup.id, fresh);
+      return dup;
+    }
   }
   const id = newId();
   db.insert(schema.campaignSources)
-    .values({ id, campaignId, kind: values.kind, link: values.link, title: values.title?.slice(0, 300) ?? '', durationMs: values.durationMs ?? null, status: values.status ?? 'found' })
+    .values({
+      id,
+      campaignId,
+      kind: values.kind,
+      link: values.link,
+      title: values.title?.slice(0, 300) ?? '',
+      durationMs: values.durationMs ?? null,
+      status: values.status ?? 'found',
+      views: values.views ?? null,
+      uploadedAt: values.uploadedAt ?? null,
+      creator: values.creator ?? null,
+    })
     .run();
   return getSource(id);
 }
@@ -205,11 +280,9 @@ export async function startSource(sourceId: string) {
       throw badRequest(`yt-dlp couldn’t open it: ${err.message}`);
     });
     if (info._type === 'playlist') {
-      const videos = (info.entries ?? []).filter((e) => e?.id && e._type !== 'playlist' && !/Tab$/.test(e.ie_key ?? '') && (e.webpage_url || e.url));
-      if (!videos.length) throw badRequest('No videos found there.');
-      const added = videos.map((e) =>
-        insertSource(s.campaignId, { kind: sourceKindOf(e.webpage_url ?? e.url!), link: e.webpage_url ?? e.url!, title: e.title ?? '', durationMs: e.duration ? Math.round(e.duration * 1000) : null }),
-      );
+      const added = addListed(s.campaignId, info);
+      if (!added.length) throw badRequest('No videos found there.');
+      rememberListing(s.campaignId, s.link);
       db.delete(schema.campaignSources).where(eq(schema.campaignSources.id, s.id)).run();
       emitCampaign(s.campaignId);
       return added;
@@ -491,7 +564,14 @@ export async function transcribeSource({ sourceId }: { sourceId: string }) {
   updateSource(sourceId, { transcriptFrom: from });
   // An active campaign's source goes on to be scanned for moments; otherwise it waits, ready, for "Find moments".
   const c = getCampaignRow(s.campaignId);
-  if (c.status === 'active' && pagesOf([c.id]).get(c.id)?.length) queueScan(sourceId);
+  if (c.status === 'active' && pagesOf([c.id]).get(c.id)?.length) {
+    // Clips of this video other people got big on: their stretches go to the scan (best effort, never blocks it).
+    updateSource(sourceId, { detail: 'Looking for moments that already went viral' });
+    const { attachViral } = await import('../finder/finder');
+    await attachViral(getSource(sourceId)).catch((err: Error) => console.warn(`[sources] viral search for ${sourceId}: ${err.message}`));
+    if (!exists(sourceId)) return;
+    queueScan(sourceId);
+  }
   else updateSource(sourceId, { status: 'ready', detail: '' });
 }
 

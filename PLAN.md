@@ -123,7 +123,7 @@ versionCode from the tag (`v1.2.3` → 10203).
    - [ ] Step 3 — Compute workers on the home PCs
    - [x] Step 4 — Skills and the creative arsenal (2026-10-16; no new skills installed, see the step)
    - [x] Step 5 — Creative directions (personal/business) and varied clip edits (clipping) (2026-10-16; the pitch untried against a real Claude login)
-   - [ ] Step 6 — One-button finder for clipping pages
+   - [x] Step 6 — One-button finder for clipping pages (2026-10-16; only tried against stand-ins, see the step)
    - [ ] Step 7 — Effects library, local only
 
 ## Waiting on me
@@ -140,7 +140,8 @@ versionCode from the tag (`v1.2.3` → 10203).
   be in the text).
 - After a clip is posted and submitted: campaign → Submissions → *Check now*; if nothing matches, the submissions page
   doesn't show post links → adjust `syncSubmissions`.
-- Not run with a real chat yet: `write_scene`/`view_overlay`, `write_format_video`, `write_ugc_video`, transitions;
+- Find clips: check `DISCOVER_URL` (`server/src/finder/discover.ts`) is the page that lists Content Rewards campaigns; run it once with a real creator and see that the viral search finds their clips (`ytsearch` for "<creator> clips").
+- Not run with a real chat yet: directions (`direction.pitch`), `view_render` and the package notes; `write_scene`/`view_overlay`, `write_format_video`, `write_ugc_video`, transitions;
   the weekly review with the playbook.
 
 ## TikTok audit demo (record once Content Posting works)
@@ -219,7 +220,7 @@ arsenal) → 2–3 directions on the package; picking one writes the script/edit
 edit direction per clip from the arsenal (hook card style, captions, graphics, transitions, effects) and varies it
 across the page's recent clips.
 
-**Step 6 — Finder.** Campaign discovery (the signed-in window reads Content Rewards' campaign list; rank and screen;
+**Step 6 — Finder (built; untried with network).** Done: *Find clips* panel on a clipping page's Find (`FinderPanel`), `finder.run` job (`server/src/finder/finder.ts`) that chains campaigns → videos → viral → clips with a progress list, every morning after 7:00 unless switched off; `rankVideos` (views × recency × length, mined videos last; `shared/finder.ts`); channels are remembered (`sourceListings`) and listed again, views/dates/creator kept on `campaign_sources`; the best 2 per campaign start downloading (max 3 in progress); viral moments: `finder/viral.ts` searches YouTube for the creator's short clips (yt-dlp `ytsearch`), takes outliers (≥ 3× median, ≥ 20k views), matches their captions to the source transcript (`matchToSource`, trigram offsets) and stores `viral` hints, run between transcript and scan, whose stretches the scan always includes and the pick reads first; campaign discovery (`finder/discover.ts`): reads `DISCOVER_URL` in the signed-in window with one Haiku call (rate, budget, halal screen), leads with Add (= paste the link) / open on Whop. Not done: TikTok/Instagram searches for viral clips (YouTube only); auto-suggesting niche channels for research; `DISCOVER_URL` is a guess (in *Waiting on me*). Original plan: Campaign discovery (the signed-in window reads Content Rewards' campaign list; rank and screen;
 Today/Find shows them to join), creator sources (channels from the brief, yt-dlp listings, ranked), viral-moment
 matching (YouTube Shorts / TikTok searches for the creator's clips, outliers by views, their transcript found in the
 source), auto research (channels suggested and added), the *Find clips* button with one progress view. Daily.

@@ -1,5 +1,6 @@
 import { QueryClient, useQuery } from '@tanstack/react-query';
 import { api } from './api';
+import type { CampaignLeads, FinderRun } from '@shared/finder';
 import type { PairedDevice } from '@shared/devices';
 import type { CreatorInfo } from '@shared/publish';
 import type { Campaign, CampaignDetail } from '@shared/campaigns';
@@ -71,6 +72,7 @@ export const keys = {
   review: ['review'] as const,
   submissionsSync: ['submissions-sync'] as const,
   research: (wid: string) => ['research', wid] as const,
+  finder: (wid: string) => ['finder', wid] as const,
 };
 
 export type AuthStatus = { setupRequired: boolean; authenticated: boolean; desktopManaged: boolean };
@@ -123,6 +125,15 @@ export const useResearch = (wid: string) =>
     queryFn: () => api<ResearchOverview>(`/workspaces/${wid}/research`),
     enabled: !!wid,
     refetchInterval: (q) => (q.state.data?.running || q.state.data?.analyses.some((a) => a.analysisStatus === 'queued' || a.analysisStatus === 'running') ? 8000 : false),
+  });
+
+/** A clipping page's finder: its last run, whether it runs each morning, and campaigns found to add. Polls while it runs. */
+export const useFinder = (wid: string) =>
+  useQuery({
+    queryKey: keys.finder(wid),
+    queryFn: () => api<{ run: FinderRun; auto: boolean; leads: CampaignLeads }>(`/workspaces/${wid}/finder`),
+    enabled: !!wid,
+    refetchInterval: (q) => (q.state.data?.run.status === 'running' ? 4000 : false),
   });
 
 /** A video's summary (latest render or how it's going, its moment, campaign, rules, where it goes); any stage. */

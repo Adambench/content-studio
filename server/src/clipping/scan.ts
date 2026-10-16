@@ -344,7 +344,8 @@ export async function scanSource({ sourceId }: { sourceId: string }) {
     whole,
     chat: chat.length,
     windows: (whole ? [...picked].sort((a, b) => b.score - a.score).slice(0, 30) : picked).map((w) => ({ ...w, start: round(w.start), end: round(w.end) })),
-    stretches: whole ? [{ start: 0, end: round(duration) }] : toStretches(picked, lines).map((st) => ({ start: round(st.start), end: round(st.end) })),
+    // The stretches other clippers already got big on always go to Claude, whatever the scan scored them.
+    stretches: whole ? [{ start: 0, end: round(duration) }] : toStretches([...picked, ...s.viral.map((h) => ({ start: h.start, end: h.end }) as ScanWindow)], lines).map((st) => ({ start: round(st.start), end: round(st.end) })),
   };
   await writeFile(sourceScanPath(s), JSON.stringify(result));
   if (!exists(sourceId)) return;

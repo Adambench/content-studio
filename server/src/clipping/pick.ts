@@ -182,6 +182,8 @@ export async function pickMoments({ sourceId }: { sourceId: string }) {
     pages.map((p) => `- ${p.id}: ${p.name}${p.niche ? ` — ${p.niche}` : ''}${p.voiceMemory ? `\n  Voice notes: ${p.voiceMemory.slice(0, 800).replace(/\n/g, ' ')}` : ''}`).join('\n'),
     kept.length && `# Already taken from this source (don’t overlap)\n${kept.map((m) => `- ${m.start.toFixed(1)}–${m.end.toFixed(1)} “${m.title}” (${m.status})`).join('\n')}`,
     rejected.length && `# Clips I rejected before, and why\n${rejected.map((r) => `- “${r.title || r.firstLine.slice(0, 80)}” — ${r.reason ?? 'no reason given'}`).join('\n')}`,
+    s.viral.length > 0 &&
+      `# Stretches other clippers already got big on (their clips of this video, matched to the source by their words)\nLook at these first: if a stretch makes a clip that stands alone and fits the rules, pick it (trim to the best in and out points, make the hook your own), and say in \`why\` that it already worked. Never copy their edit, title or caption.\n${s.viral.map((h) => `- ${h.start.toFixed(1)}–${h.end.toFixed(1)} (${h.views.toLocaleString('en-US')} views): “${h.title.slice(0, 100)}”`).join('\n')}`,
     research.length && `# What's working in the page's niche now (its research brief)\n${research.join('\n\n')}`,
     `# The source: ${s.title || 'untitled'}\nLength ${clock(scan.duration)}${s.link ? ` · ${s.link}` : ''}${scan.whole ? ' · the whole transcript follows' : ` · ${scan.stretches.length} stretches the scan found liveliest follow (loudness, pace${scan.chat ? ', chat' : ''}, the brief’s words); the rest isn’t shown`}`,
     transcriptBlock(lines, scan.stretches),

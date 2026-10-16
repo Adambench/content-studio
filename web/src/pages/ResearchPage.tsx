@@ -19,6 +19,7 @@ import { compact, timeAgo } from '@/lib/format';
 import { openExternal } from '@/lib/native';
 import { keys, queryClient, useResearch } from '@/lib/queries';
 import { cn } from '@/lib/utils';
+import { FinderPanel } from '@/components/FinderPanel';
 
 const refresh = (wid: string) => queryClient.invalidateQueries({ queryKey: keys.research(wid) });
 
@@ -454,6 +455,7 @@ export function ResearchPage() {
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-6">
+          {workspace.kind === 'clipping' && <FinderPanel wid={wid} />}
           {!d ? (
             <>
               <Skeleton className="h-48 rounded-xl" />

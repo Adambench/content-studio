@@ -7,6 +7,8 @@ import { ZodError } from 'zod';
 import { startAnalytics, stopAnalytics } from './analytics/schedule';
 import { startCampaignUpkeep, stopCampaignUpkeep } from './campaigns/schedule';
 import { startResearch, stopResearch } from './research/schedule';
+import { startFinderSchedule, stopFinderSchedule } from './finder/schedule';
+import { finderRoutes } from './routes/finder';
 import { stopAllSources } from './campaigns/sources';
 import { preparePlugin } from './claude/plugin';
 import { config } from './config';
@@ -121,6 +123,7 @@ await app.register(campaignRoutes);
 await app.register(submissionRoutes);
 await app.register(clippingRoutes);
 await app.register(researchRoutes);
+await app.register(finderRoutes);
 
 registerHandlers();
 startWorker();
@@ -128,6 +131,7 @@ startScheduler();
 startAnalytics();
 startCampaignUpkeep();
 startResearch();
+startFinderSchedule();
 
 await app.listen({ port: config.port, host: config.host });
 console.log(`Content Studio is running on http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);
@@ -141,6 +145,7 @@ async function shutdown() {
   stopAnalytics();
   stopCampaignUpkeep();
   stopResearch();
+  stopFinderSchedule();
   stopAllSources();
   await app.close();
   process.exit(0);

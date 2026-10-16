@@ -26,6 +26,14 @@ type SettingsShape = {
   sourceRetentionDays: number;
   /** The last read of my submissions page on Content Rewards. */
   submissionsSync: import('../campaigns/submissions').SubmissionsSync;
+  /** Channels and playlists each campaign lists videos from (by campaign id), so the finder can list them again. */
+  sourceListings: Record<string, string[]>;
+  /** The finder's last run on each clipping page (by workspace id). */
+  finderRuns: Record<string, import('../../../shared/finder').FinderRun>;
+  /** Whether each clipping page's finder runs by itself each morning (default on). */
+  finderAuto: Record<string, boolean>;
+  /** Campaigns found on Content Rewards that aren't added yet. */
+  campaignLeads: import('../../../shared/finder').CampaignLeads;
 };
 
 export function getSetting<K extends keyof SettingsShape>(key: K): SettingsShape[K] | undefined {

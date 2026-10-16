@@ -115,6 +115,10 @@ function apply(event: LiveEvent) {
         inv(keys.campaigns);
         inv(event.id ? keys.campaign(event.id) : ['campaign']);
         break;
+      case 'finder':
+        inv(wid ? keys.finder(wid) : ['finder']);
+        
+        break;
       case 'research':
         inv(wid ? keys.research(wid) : ['research']);
         break;

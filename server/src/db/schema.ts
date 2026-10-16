@@ -4,6 +4,7 @@ import type { PostStats, ReviewBody, ReviewStatus } from '../../../shared/analyt
 import type { FramesCheck, MomentCaptions, MomentKind, MomentStatus, MusicCheck, StandaloneScores } from '../../../shared/clipping';
 import type { CampaignOrigin, CampaignPlatform, CampaignStatus, HalalVerdict, Payout, RuleItem, SourceKind, SourceStatus, SubmissionStatus } from '../../../shared/campaigns';
 import type { EditSpec, EditTemplate } from '../../../shared/edit';
+import type { ViralHint } from '../../../shared/finder';
 import type { PieceDirections } from '../../../shared/direction';
 import type { AnalysisStatus, ItemPlatform, ResearchAnalysis, ResearchBriefBody, ResearchSettings, ResearchSource } from '../../../shared/research';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
@@ -502,6 +503,12 @@ export const campaignSources = sqliteTable(
     progress: real('progress'),
     detail: text('detail').notNull().default(''),
     transcriptFrom: text('transcript_from').$type<'captions' | 'whisper'>(),
+    // From the channel listing (the finder ranks videos by these) and the creator's name for searching their clips.
+    views: integer('views'),
+    uploadedAt: integer('uploaded_at'),
+    creator: text('creator'),
+    // Moments other clippers' clips of this video got big on (shared/finder.ts), found by the finder; the pick reads them.
+    viral: text('viral', { mode: 'json' }).$type<ViralHint[]>().notNull().default(sql`'[]'`),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

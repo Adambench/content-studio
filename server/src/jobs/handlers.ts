@@ -34,6 +34,7 @@ import { buildFormat, onFormatBuildFailed } from '../studio/formats';
 import { onUgcScriptFailed, writeUgcScript } from '../campaigns/ugc';
 import { enqueue, onJobFailed, registerJob } from './queue';
 import { onPitchFailed, pitchDirections } from '../studio/directions';
+import { onFinderFailed, runFinder } from '../finder/finder';
 
 const execFile = promisify(execFileCb);
 
@@ -258,6 +259,9 @@ export function registerHandlers() {
   onJobFailed('research.brief', onBriefFailed);
   registerJob('research.analyse', analyseItem, 1);
   onJobFailed('research.analyse', onAnalyseFailed);
+  // The finder: a run per clipping page, one at a time (it only starts the jobs above).
+  registerJob('finder.run', runFinder, 1);
+  onJobFailed('finder.run', onFinderFailed);
   // Creative directions for a video (one Sonnet call).
   registerJob('direction.pitch', pitchDirections, 1);
   onJobFailed('direction.pitch', onPitchFailed);
