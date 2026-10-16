@@ -331,6 +331,14 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
        five shots, ten requirements, `#myshop @myshop myshop.example` in every caption), a posted UGC post getting its
        `to_submit` submission, the card at desktop width
 
+8. **Streamlined video pipeline** — planned 2026-10-16; see *Phase 8 build plan*
+   - [ ] Step 1 — Every video is a package; nav per kind; Inbox + search instead of the Library
+   - [ ] Step 2 — Feedback loop in the package (timestamped notes → Claude edits → re-render → before/after)
+   - [ ] Step 3 — Skills and the creative arsenal
+   - [ ] Step 4 — Creative directions (personal/business) and varied clip edits (clipping)
+   - [ ] Step 5 — One-button finder for clipping pages
+   - [ ] Step 6 — Effects library, local only
+
 ## Formats decisions (2026-10-16)
 
 | Topic | Decision |
@@ -756,6 +764,65 @@ Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usag
   add them to the app's allow-list then).
 - Reframing that follows the speaker: split at scene cuts, handle two-speaker podcasts.
 - Delete a campaign's downloaded sources some days after it ends; keep transcripts and clips.
+
+## Phase 8 build plan (2026-10-16)
+
+What I asked for: the video pipeline streamlined, with boring work automated and decisions easy. A viral finder that
+runs on one click; one place per video where I watch it and steer Claude (feedback before posting) with more control
+over how it looks and feels; no big library to dig through; tabs in an order that shows where to start, per kind; and
+Claude using every useful skill so videos differ from other pages (considered every time, used where they fit).
+
+| Topic | Decision |
+|---|---|
+| Unit of work | Every video is a **package** (a piece): its direction, footage, edit, renders, copy, posts, results and its own Claude chat, on one page. A personal-brand video I film and upload belongs to its idea |
+| Library | Gone. Uploads made inside a package attach to it. Shares, the camera and uploads made elsewhere land in an **Inbox**: Claude (Haiku, one call per batch) suggests the idea each file belongs to from its transcript or frames; one click files it there or makes a new idea from it. One search (Ctrl K) finds any package or file |
+| Control | Per kind. Clipping: clips are made automatically, then I review each in its package and give Claude feedback pinned to a moment until it's right; approve/reject there. Personal brand and business: a new video starts with 2–3 creative directions Claude pitches (hook, structure, look, effects, pacing); I pick or mix, then the edit is built to it |
+| Finder | One button on a clipping page, **Find clips**, chains: new Content Rewards campaigns (ranked by pay, budget left, fit, halal-screened — joining stays my click on Whop) → for each active campaign the creator's long videos found and pulled in (newest, most viewed, those whose clips already went viral) → **already-viral moments** (other clippers' clips of the creator that went viral, matched to the source by transcript) go first, then the usual scan/pick → clips made → Review. Niche research runs with no watch list to set up (channels found from the niche and the campaigns) and feeds the pick and the edit. Also runs every morning |
+| Arsenal | A catalog (`shared/arsenal.ts`) of everything a video can use — effects, transitions, graphics, scenes, caption looks, formats, sound moves — with when each fits. Direction pitches and clip edits choose from it (and from the skills) and avoid repeating what the page's last videos used, so videos differ |
+| Skills | The chat loads every installed knowledge skill; more are surveyed and installed (`find-skills`). Background prompts paste the parts they need |
+| Effects | Free and local only, rebuilt in code (HyperFrames + FFmpeg): orbit, couch wall, UI world, frame break, digital zoom, phone mockup, checklist, headline wall, zoom-through cut, chart grow, pull-back reveal, green screen, paper cut, doodle boil, vertigo, cover story, glass type; plus paper collage, hand-drawn and film looks. Cut-outs of a person by a local matting model. No paid image/video generation. onetake isn't used (non-commercial licence); Clawd is Anthropic's mascot, so the cartoon style uses my own characters |
+| Brand assets | Not on clipping pages: a page's look (captions, fonts, accent, sounds) is in its settings → Style. On personal and business pages *Brand* sits at the bottom of the nav |
+
+Nav, in working order (Today stays the home across pages; Settings at the bottom):
+
+| Kind | Order |
+|---|---|
+| Clipping | Find → Clips (packages by stage; Review is the column that matters) → Campaigns → Calendar → Analytics |
+| Personal brand | Ideas (research brief, Inbox, capture) → Videos (packages by stage) → Calendar → Analytics → Brand |
+| Business | Ideas → Videos → Campaigns → Calendar → Analytics → Brand |
+
+Phone: Today, Videos/Clips, Capture, Calendar, Claude.
+
+**Step 1 — Packages, nav, Inbox, search.** `/w/:wid/v/:pid` is the package (old `/p/:pid` links redirect): header with
+the stage as a stepper and the next action as the main button; sections Direction/Script, Footage (its files, upload
+here), Video (preview of the latest render or the edit, *Open editor*), Copy, Post, Results. Each package has its own
+Claude thread (`chat_threads.piece_id`), docked beside it. Inbox (`media.piece_id` null, not an asset) with Claude's
+suggestions; search across packages, files and transcripts. Nav per kind as above; Library and the global Review page
+go (Review → the Clips board's Review column and Today); Brand assets hidden on clipping pages.
+
+**Step 2 — Feedback in the package.** The player takes notes pinned to a time ("0:07 — cut this pause", or a drawn
+box later); a note goes to the package's Claude thread with the time and a frame. Claude changes the edit (studio
+tools), the package re-renders by itself when it's in Review, and shows before/after with the version. Approve /
+reject / schedule live in the package.
+
+**Step 3 — Skills and the arsenal.** Survey and install more skills (video styles, direction, ads/UGC scripting,
+storytelling), keep licences in mind (personal use only where unlicensed). Allow-list every knowledge skill in the
+chat. `shared/arsenal.ts` + `get_arsenal`; the prompts tell Claude to consider the arsenal for every video and say
+which pieces it chose and why.
+
+**Step 4 — Directions and variety.** Personal/business: `direction.pitch` (one Sonnet call with the playbook and the
+arsenal) → 2–3 directions on the package; picking one writes the script/edit plan. Clipping: `clip.make` chooses an
+edit direction per clip from the arsenal (hook card style, captions, graphics, transitions, effects) and varies it
+across the page's recent clips.
+
+**Step 5 — Finder.** Campaign discovery (the signed-in window reads Content Rewards' campaign list; rank and screen;
+Today/Find shows them to join), creator sources (channels from the brief, yt-dlp listings, ranked), viral-moment
+matching (YouTube Shorts / TikTok searches for the creator's clips, outliers by views, their transcript found in the
+source), auto research (channels suggested and added), the *Find clips* button with one progress view. Daily.
+
+**Step 6 — Effects library.** The effects above as templates/scenes/edit effects with previews in the editor and in
+the arsenal; a local person matte (u2net human seg via onnxruntime or HyperFrames' `remove-background`) cached per
+clip for frame break, green screen, vertigo, cover story and couch wall.
 
 ## Where things stand (2026-10-16)
 
