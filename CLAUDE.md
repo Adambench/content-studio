@@ -87,6 +87,13 @@ HyperFrames + FFmpeg) is usable and being extended.
   (`<data>/tools`, `scripts/setup-tools.sh`, Settings → Clip tools). Background Claude jobs wait (not fail) while the
   5-hour usage is ≥ 80 %: `waitForUsage()` throws a `JobError` with `wait`. Claude gets `find_moments`/`make_clip`
   (local work), never approve or schedule.
+- Research (`server/src/research`, `shared/research.ts`, `/w/:wid/research`): `workspaces.research` is the watch list
+  (`normalizeResearch`). `sweep.ts` (`research.sweep`, daily via `schedule.ts`, no Claude): YouTube Shorts tabs and
+  keyword searches through yt-dlp, TikTok/Instagram profiles through `readPage` (the grid's link text is the views;
+  dates from ids), `scoreAccount` against the median of posts ≥ 2 days old → outliers (≥ `OUTLIER_AT`) in
+  `research_items`. `brief.ts` (`research.brief`, Haiku) writes the day's brief (`briefForPrompt` feeds `source.pick`);
+  `analyse.ts` (`research.analyse`) explains one video (link or library) from measured cuts/pace, frames and the
+  transcript. Claude reads it with `get_research`.
 
 ## Commands
 

@@ -1,4 +1,4 @@
-import { BadgeDollarSign, CalendarDays, ChartColumn, FolderOpen, KanbanSquare, ListChecks, Mic, Palette, Settings, Sparkles, Sun } from 'lucide-react';
+import { BadgeDollarSign, CalendarDays, ChartColumn, FolderOpen, KanbanSquare, ListChecks, Mic, Palette, Settings, Sparkles, Sun, Telescope } from 'lucide-react';
 import { NavLink, Outlet, useMatch } from 'react-router';
 import { REVIEW_STAGE, type ModuleId } from '@shared/types';
 import { Badge } from '@/components/ui/badge';
@@ -12,12 +12,13 @@ import { AppBanners, UploadsButton } from './AppChrome';
 import { UsageMeter } from './UsageMeter';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 
-/** A workspace's pages. Those with a module show only when it's on (Clipping and Research join later; Campaigns sit
- * with Today, outside workspaces). */
+/** A workspace's pages. Those with a module show only when it's on (Campaigns and Review sit with Today, outside
+ * workspaces). */
 const navItems: { to: string; label: string; icon: typeof KanbanSquare; module?: ModuleId }[] = [
   { to: 'board', label: 'Board', icon: KanbanSquare },
   { to: 'calendar', label: 'Calendar', icon: CalendarDays },
   { to: 'analytics', label: 'Analytics', icon: ChartColumn },
+  { to: 'research', label: 'Research', icon: Telescope, module: 'research' },
   { to: 'library', label: 'Library', icon: FolderOpen },
   { to: 'assets', label: 'Brand assets', icon: Palette },
 ];
@@ -170,6 +171,13 @@ export function AppShell() {
               <Button variant="ghost" size="icon" asChild aria-label="Analytics">
                 <NavLink to={`/w/${wid}/analytics`}>
                   <ChartColumn />
+                </NavLink>
+              </Button>
+            )}
+            {wid && modules.includes('research') && (
+              <Button variant="ghost" size="icon" asChild aria-label="Research">
+                <NavLink to={`/w/${wid}/research`}>
+                  <Telescope />
                 </NavLink>
               </Button>
             )}

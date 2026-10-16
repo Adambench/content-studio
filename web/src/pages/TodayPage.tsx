@@ -1,4 +1,4 @@
-import { AlertCircle, BadgeDollarSign, CalendarCheck, Clapperboard, Loader2, Sparkles } from 'lucide-react';
+import { AlertCircle, BadgeDollarSign, CalendarCheck, Clapperboard, Loader2, Sparkles, Telescope } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { money } from '@shared/campaigns';
@@ -345,6 +345,24 @@ export function TodayPage() {
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
                   {activeCampaigns.map((c) => (
                     <CampaignTile key={c.id} c={c} />
+                  ))}
+                </div>
+              </Section>
+            )}
+            {(data.briefs ?? []).length > 0 && (
+              <Section title="Research">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                  {data.briefs.map((b) => (
+                    <Link key={b.id} to={`/w/${b.workspaceId}/research`} className="block space-y-1.5 rounded-lg border bg-card p-3 hover:border-foreground/20">
+                      <p className="flex items-start gap-2 text-sm font-medium">
+                        <Telescope className="mt-0.5 size-4 shrink-0 text-brand" /> {b.headline}
+                      </p>
+                      {b.patterns.length > 0 && <p className="line-clamp-2 text-xs text-muted-foreground">{b.patterns.join(' · ')}</p>}
+                      <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <WsTag ws={wsById.get(b.workspaceId)} />
+                        {b.ideas > 0 && <span>· {b.ideas} idea{b.ideas === 1 ? '' : 's'}</span>}
+                      </p>
+                    </Link>
                   ))}
                 </div>
               </Section>

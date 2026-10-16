@@ -367,6 +367,8 @@ export type TodayData = {
   submissions: Submission[];
   /** The desktop app runs the server: Content Rewards opens in its signed-in window. */
   desktop: boolean;
+  /** Each page's latest research brief (from the last day and a half). */
+  briefs: { id: string; workspaceId: string; day: string; headline: string; ideas: number; patterns: string[] }[];
   usage: ClaudeUsage | null;
   reviews: { id: string; workspaceId: string; finishedAt: number | null }[];
 };

@@ -77,7 +77,8 @@ export type PageRead = {
   url: string;
   title: string;
   text: string;
-  links: { href: string; text: string }[];
+  /** `alt`: the alt text of the link's picture, when it has one (TikTok puts a video's caption there). */
+  links: { href: string; text: string; alt?: string }[];
   /** The read landed on this site's sign-in page: sign in from Settings → Connected sites first. */
   loginWall: SiteId | null;
 };

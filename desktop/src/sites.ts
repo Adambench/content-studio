@@ -224,7 +224,8 @@ const EXTRACT_JS = `(() => {
     const href = a.href;
     if (!/^https?:/.test(href) || seen.has(href)) continue;
     seen.add(href);
-    links.push({ href, text: clean(a.innerText || a.getAttribute('aria-label') || a.title).slice(0, 200) });
+    const alt = clean(a.querySelector('img[alt]')?.getAttribute('alt')).slice(0, 300);
+    links.push({ href, text: clean(a.innerText || a.getAttribute('aria-label') || a.title).slice(0, 200), ...(alt && { alt }) });
     if (links.length >= 1000) break;
   }
   return { url: location.href, title: document.title, text: text.slice(0, 300000), links };

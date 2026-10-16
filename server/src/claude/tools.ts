@@ -15,6 +15,7 @@ import { clock, MOMENT_KIND_LABELS } from '../../../shared/clipping';
 import { campaignsForWorkspace, listMoments, listSources } from '../campaigns/campaigns';
 import { campaignResults, listSubmissions } from '../campaigns/submissions';
 import { SUBMISSION_STATUS_LABELS } from '../../../shared/campaigns';
+import { analyses, latestBriefs, recentOutliers, researchSettings } from '../research/research';
 import { getMoment, queueMake } from '../clipping/moments';
 import { findMoments } from '../routes/clipping';
 import { accountLabel, listAccounts } from '../publish/accounts';
@@ -94,6 +95,8 @@ export function toolLabel(fullName: string, input: Record<string, any>): string 
       return 'Started finding moments';
     case 'make_clip':
       return 'Started making a clip';
+    case 'get_research':
+      return 'Read the research brief';
     case 'WebSearch':
       return `Searched the web: ${input.query ?? ''}`;
     case 'WebFetch':
@@ -540,6 +543,36 @@ export function buildTools(workspaceId: string) {
         if (campaignsForWorkspace(workspaceId).find((c) => c.id === m.campaignId)?.status !== 'active') throw new ToolError('The campaign isn’t active.');
         queueMake(m.id);
         return ok('Queued: the clip lands in Review once it’s rendered.');
+      }),
+    ),
+
+    tool(
+      'get_research',
+      'Read what’s working in this page’s niche: today’s research brief (patterns that over-perform, topics, ideas, hooks; on a clipping page, what moments to ' +
+        'look for), the outliers behind it (posts from the accounts the page watches that got several times their usual views: title or caption, first spoken words, ' +
+        'views, × the account’s median) and videos the creator had analysed (hook, structure, edit, why it works). Learn from the formulas; never copy anyone’s words. Read-only.',
+      { outliers: z.number().int().min(0).max(40).optional().describe('How many outliers to list (default 15)') },
+      safe(async ({ outliers }) => {
+        const { done } = latestBriefs(workspaceId);
+        const items = recentOutliers(workspaceId, 21, outliers ?? 15);
+        const watched = researchSettings(workspaceId);
+        return ok({
+          watching: watched,
+          brief: done?.body ? { day: done.day, sweep: done.sweep, ...done.body, patterns: done.body.patterns.map(({ pattern, why }) => ({ pattern, why })) } : 'No brief yet.',
+          outliers: items.map((it) => ({
+            platform: it.platform,
+            account: it.channel,
+            title: it.title || undefined,
+            firstWords: it.hook || undefined,
+            views: it.views ?? undefined,
+            timesUsual: it.score ? Number(it.score.toFixed(1)) : undefined,
+            posted: it.postedAt ? new Date(it.postedAt).toDateString() : undefined,
+            url: it.url,
+          })),
+          analysed: analyses(workspaceId, 8)
+            .filter((a) => a.analysis)
+            .map((a) => ({ title: a.title || a.url, account: a.channel || undefined, whyItWorks: a.analysis!.whyItWorks, takeaways: a.analysis!.takeaways, metrics: a.analysis!.metrics })),
+        });
       }),
     ),
 

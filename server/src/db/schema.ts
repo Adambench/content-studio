@@ -4,6 +4,7 @@ import type { PostStats, ReviewBody, ReviewStatus } from '../../../shared/analyt
 import type { FramesCheck, MomentCaptions, MomentKind, MomentStatus, MusicCheck, StandaloneScores } from '../../../shared/clipping';
 import type { CampaignOrigin, CampaignPlatform, CampaignStatus, HalalVerdict, Payout, RuleItem, SourceKind, SourceStatus, SubmissionStatus } from '../../../shared/campaigns';
 import type { EditSpec, EditTemplate } from '../../../shared/edit';
+import type { AnalysisStatus, ItemPlatform, ResearchAnalysis, ResearchBriefBody, ResearchSettings, ResearchSource } from '../../../shared/research';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
 import type { SessionKind } from '../../../shared/devices';
 import type { AssetType, ChatPart, DraftContent, MediaKind, MediaSource, ModuleId, ProxyStatus, RenderStatus, Stage, TranscriptStatus, WorkspaceKind } from '../../../shared/types';
@@ -42,6 +43,8 @@ export const workspaces = sqliteTable('workspaces', {
   modules: text('modules', { mode: 'json' }).$type<ModuleId[]>().notNull().default(sql`'[]'`),
   // The page's niche in a sentence: research keywords, and how moments are judged for fit.
   niche: text('niche').notNull().default(''),
+  // What the Research brief watches: keywords, YouTube channels, TikTok and Instagram handles (normalizeResearch).
+  research: text('research', { mode: 'json' }).$type<ResearchSettings>().notNull().default(sql`'{}'`),
   description: text('description').notNull().default(''),
   brandGuide: text('brand_guide').notNull().default(''),
   // Claude-maintained notes about my voice, learned from my edits.
@@ -560,4 +563,54 @@ export const submissions = sqliteTable(
     updatedAt: updatedAt(),
   },
   (t) => [uniqueIndex('submissions_post_idx').on(t.postId), index('submissions_campaign_idx').on(t.campaignId), index('submissions_status_idx').on(t.status)],
+);
+
+/**
+ * A video the research looked at: an outlier from an account a page watches or a keyword search (views against the
+ * account's median), or one I asked to have analysed (a link, or a video in the library).
+ */
+export const researchItems = sqliteTable(
+  'research_items',
+  {
+    id: id(),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    platform: text('platform').$type<ItemPlatform>().notNull(),
+    externalId: text('external_id').notNull(),
+    url: text('url').notNull(),
+    channel: text('channel').notNull().default(''),
+    channelUrl: text('channel_url'),
+    title: text('title').notNull().default(''),
+    views: integer('views'),
+    channelMedian: integer('channel_median'),
+    score: real('score'),
+    postedAt: integer('posted_at'),
+    hook: text('hook').notNull().default(''),
+    source: text('source').$type<ResearchSource>().notNull(),
+    keyword: text('keyword'),
+    mediaId: text('media_id').references(() => media.id, { onDelete: 'set null' }),
+    analysis: text('analysis', { mode: 'json' }).$type<ResearchAnalysis>(),
+    analysisStatus: text('analysis_status').$type<AnalysisStatus>().notNull().default('none'),
+    analysisError: text('analysis_error'),
+    firstSeenAt: integer('first_seen_at').notNull(),
+    lastSeenAt: integer('last_seen_at').notNull(),
+  },
+  (t) => [uniqueIndex('research_items_key_idx').on(t.workspaceId, t.platform, t.externalId), index('research_items_score_idx').on(t.workspaceId, t.score)],
+);
+
+/** A page's daily research brief: what over-performs in its niche, ideas and hooks shaped for it. */
+export const researchBriefs = sqliteTable(
+  'research_briefs',
+  {
+    id: id(),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    // Local date, yyyy-mm-dd.
+    day: text('day').notNull(),
+    status: text('status').$type<'running' | 'done' | 'error'>().notNull().default('running'),
+    body: text('body', { mode: 'json' }).$type<ResearchBriefBody>(),
+    sweep: text('sweep').notNull().default(''),
+    error: text('error'),
+    createdAt: createdAt(),
+    finishedAt: integer('finished_at'),
+  },
+  (t) => [index('research_briefs_workspace_idx').on(t.workspaceId, t.createdAt)],
 );

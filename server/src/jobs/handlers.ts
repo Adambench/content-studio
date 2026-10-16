@@ -8,6 +8,9 @@ import { onReviewFailed, runReview } from '../analytics/review';
 import { statsJob } from '../analytics/schedule';
 import { onReadFailed, readCampaign, refreshBudgets } from '../campaigns/read';
 import { onSyncFailed, syncSubmissions } from '../campaigns/submissions';
+import { analyseItem, onAnalyseFailed } from '../research/analyse';
+import { onBriefFailed, writeBrief } from '../research/brief';
+import { onSweepFailed, researchSweep } from '../research/sweep';
 import { downloadSource, onSourceFailed, transcribeSource } from '../campaigns/sources';
 import { makeClip, onMakeFailed } from '../clipping/make';
 import { pickMoments } from '../clipping/pick';
@@ -229,4 +232,12 @@ export function registerHandlers() {
   registerJob('campaign.budget', refreshBudgets, 1);
   registerJob('submissions.sync', syncSubmissions, 1);
   onJobFailed('submissions.sync', onSyncFailed);
+  // Research: the daily sweep (yt-dlp and page reads, no Claude), the brief (one Haiku call) and analyses of single
+  // videos (a download, FFmpeg and one Claude call with frames).
+  registerJob('research.sweep', researchSweep, 1);
+  onJobFailed('research.sweep', onSweepFailed);
+  registerJob('research.brief', writeBrief, 1);
+  onJobFailed('research.brief', onBriefFailed);
+  registerJob('research.analyse', analyseItem, 1);
+  onJobFailed('research.analyse', onAnalyseFailed);
 }

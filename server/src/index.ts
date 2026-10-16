@@ -6,6 +6,7 @@ import Fastify, { LogController } from 'fastify';
 import { ZodError } from 'zod';
 import { startAnalytics, stopAnalytics } from './analytics/schedule';
 import { startCampaignUpkeep, stopCampaignUpkeep } from './campaigns/schedule';
+import { startResearch, stopResearch } from './research/schedule';
 import { stopAllSources } from './campaigns/sources';
 import { preparePlugin } from './claude/plugin';
 import { config } from './config';
@@ -18,6 +19,7 @@ import { startScheduler, stopScheduler } from './publish/scheduler';
 import { analyticsRoutes } from './routes/analytics';
 import { authRoutes, cookieSecret, isAuthenticated } from './routes/auth';
 import { campaignRoutes, submissionRoutes } from './routes/campaigns';
+import { researchRoutes } from './routes/research';
 import { clippingRoutes } from './routes/clipping';
 import { chatRoutes } from './routes/chat';
 import { deviceRoutes } from './routes/devices';
@@ -116,12 +118,14 @@ await app.register(siteRoutes);
 await app.register(campaignRoutes);
 await app.register(submissionRoutes);
 await app.register(clippingRoutes);
+await app.register(researchRoutes);
 
 registerHandlers();
 startWorker();
 startScheduler();
 startAnalytics();
 startCampaignUpkeep();
+startResearch();
 
 await app.listen({ port: config.port, host: config.host });
 console.log(`Content Studio is running on http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);
@@ -134,6 +138,7 @@ async function shutdown() {
   stopScheduler();
   stopAnalytics();
   stopCampaignUpkeep();
+  stopResearch();
   stopAllSources();
   await app.close();
   process.exit(0);

@@ -5,6 +5,7 @@ import { REVIEW_STAGE, normalizeModules } from '../../../shared/types';
 import { busySources, listCampaigns } from '../campaigns/campaigns';
 import { campaignResults, listSubmissions } from '../campaigns/submissions';
 import { desktopAvailable } from '../lib/desktop';
+import { latestBriefs } from '../research/research';
 import { db, schema } from '../db';
 import { getSetting } from '../lib/settings';
 import { todayPosts } from '../publish/posts';
@@ -19,6 +20,9 @@ const JOB_LABELS: Record<string, string> = {
   'analytics.review': 'Writing the weekly review',
   'campaign.read': 'Reading a campaign',
   'submissions.sync': 'Checking your submissions on Content Rewards',
+  'research.sweep': 'Looking at what’s working in the niche',
+  'research.brief': 'Writing the research brief',
+  'research.analyse': 'Analysing a video',
 };
 
 /**
@@ -228,6 +232,15 @@ export async function todayRoutes(app: FastifyInstance) {
       // Posted clips to submit on Content Rewards (the campaign page opens in the signed-in window on the computer).
       submissions: listSubmissions({ statuses: ['to_submit'] }).filter((s) => wsIds.includes(s.workspaceId)),
       desktop: desktopAvailable(),
+      // Each page's latest research brief from the last day and a half.
+      briefs: workspaces
+        .filter((w) => normalizeModules(w.modules).includes('research'))
+        .flatMap((w) => {
+          const b = latestBriefs(w.id).done;
+          return b?.body && b.finishedAt && b.finishedAt > from - 36 * 3600_000
+            ? [{ id: b.id, workspaceId: w.id, day: b.day, headline: b.body.headline, ideas: b.body.ideas.length, patterns: b.body.patterns.slice(0, 2).map((p) => p.pattern) }]
+            : [];
+        }),
       usage: getSetting('claudeUsage') ?? null,
       // The most recent finished weekly reviews, newest first, so their suggestions aren't missed.
       reviews: db

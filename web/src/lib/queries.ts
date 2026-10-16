@@ -3,6 +3,7 @@ import { api } from './api';
 import type { PairedDevice } from '@shared/devices';
 import type { CreatorInfo } from '@shared/publish';
 import type { Campaign, CampaignDetail } from '@shared/campaigns';
+import type { ResearchOverview } from '@shared/research';
 import type { SubmissionsSyncState } from './types';
 import type { ReviewClip } from '@shared/clipping';
 import type { SitesStatus } from '@shared/sites';
@@ -66,6 +67,7 @@ export const keys = {
   campaign: (id: string) => ['campaign', id] as const,
   review: ['review'] as const,
   submissionsSync: ['submissions-sync'] as const,
+  research: (wid: string) => ['research', wid] as const,
 };
 
 export type AuthStatus = { setupRequired: boolean; authenticated: boolean; desktopManaged: boolean };
@@ -106,6 +108,15 @@ export const useCampaign = (id: string) => useQuery({ queryKey: keys.campaign(id
 /** When Content Rewards was last read for my submissions, and whether it can be (the desktop app). */
 export const useSubmissionsSync = () =>
   useQuery({ queryKey: keys.submissionsSync, queryFn: () => api<SubmissionsSyncState>('/submissions/sync'), refetchInterval: (q) => (q.state.data?.running ? 5000 : false) });
+
+/** A page's research: what it watches, its latest brief, outliers and analyses. Polls while something runs. */
+export const useResearch = (wid: string) =>
+  useQuery({
+    queryKey: keys.research(wid),
+    queryFn: () => api<ResearchOverview>(`/workspaces/${wid}/research`),
+    enabled: !!wid,
+    refetchInterval: (q) => (q.state.data?.running || q.state.data?.analyses.some((a) => a.analysisStatus === 'queued' || a.analysisStatus === 'running') ? 8000 : false),
+  });
 
 /** Clips waiting in Review across every page, oldest first. */
 export const useReview = () => useQuery({ queryKey: keys.review, queryFn: () => api<ReviewClip[]>('/review') });

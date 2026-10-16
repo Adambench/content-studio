@@ -1,4 +1,4 @@
-import { Download, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { Download, Microscope, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ASSET_TYPE_LABELS, ASSET_TYPES, type AssetType } from '@shared/types';
@@ -12,7 +12,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { VocalOnlyDialog } from '@/components/VocalOnlyDialog';
 import { api, errorMessage, fileUrl, mediaFileUrl } from '@/lib/api';
 import { bytes, clock, duration } from '@/lib/format';
-import { queryClient, useBoard, useMediaItem } from '@/lib/queries';
+import { keys, queryClient, useBoard, useMediaItem, useWorkspace } from '@/lib/queries';
+import { useNavigate } from 'react-router';
 import { openClaude } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
 import { MediaIcon } from './MediaCard';
@@ -26,6 +27,8 @@ export function MediaDialog({ wid, mediaId, onClose }: { wid: string; mediaId: s
   const [time, setTime] = useState(0);
   const [notes, setNotes] = useState('');
   const [confirmNasheed, setConfirmNasheed] = useState(false);
+  const ws = useWorkspace(wid);
+  const navigate = useNavigate();
 
   useEffect(() => setNotes(m?.notes ?? ''), [m?.id, m?.notes]);
 
@@ -45,6 +48,19 @@ export function MediaDialog({ wid, mediaId, onClose }: { wid: string; mediaId: s
       queryClient.invalidateQueries({ queryKey: ['media', wid] });
       toast.success('Deleted');
       onClose();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
+
+  /** Someone else's video saved to the library: what makes it work (on the Research page). */
+  async function analyseIt() {
+    try {
+      const item = await api<{ id: string }>(`/workspaces/${wid}/research/analyse`, { body: { mediaId } });
+      queryClient.invalidateQueries({ queryKey: keys.research(wid) });
+      onClose();
+      navigate(`/w/${wid}/research?item=${item.id}`);
+      toast('Analysing it: a few minutes');
     } catch (err) {
       toast.error(errorMessage(err));
     }
@@ -154,6 +170,11 @@ export function MediaDialog({ wid, mediaId, onClose }: { wid: string; mediaId: s
                       }}
                     >
                       <Sparkles className="text-brand" /> Ask Claude
+                    </Button>
+                  )}
+                  {!isAsset && m.kind === 'video' && m.source !== 'render' && ws.data?.modules.includes('research') && (
+                    <Button size="sm" variant="outline" onClick={analyseIt}>
+                      <Microscope /> Analyse
                     </Button>
                   )}
                   <Button size="sm" variant="outline" asChild>

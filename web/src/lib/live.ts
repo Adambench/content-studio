@@ -112,6 +112,9 @@ function apply(event: LiveEvent) {
         inv(keys.campaigns);
         inv(event.id ? keys.campaign(event.id) : ['campaign']);
         break;
+      case 'research':
+        inv(wid ? keys.research(wid) : ['research']);
+        break;
       case 'submissions':
         inv(['campaign']);
         inv(keys.submissionsSync);
@@ -132,6 +135,8 @@ function apply(event: LiveEvent) {
     if (event.status === 'error' && event.jobType === 'analytics.review') toast.error('The review didn’t finish', { description: event.message?.slice(0, 200) });
     if (event.status === 'error' && event.jobType === 'campaign.read') toast.error('Couldn’t read the campaign', { description: event.message?.slice(0, 200) });
     if (event.status === 'done' && event.jobType === 'source.pick') toast.success(event.message ?? 'Moments found');
+    if (event.status === 'done' && event.jobType === 'research.analyse') toast.success(event.message ?? 'Analysis ready');
+    if (event.status === 'error' && event.jobType === 'research.analyse') toast.error('The video couldn’t be analysed', { description: event.message?.slice(0, 200) });
     if (event.status === 'done' && event.jobType === 'submissions.sync') toast.success(event.message ?? 'Submissions checked');
     if (event.status === 'error' && event.jobType === 'submissions.sync') toast.error('Couldn’t read Content Rewards', { description: event.message?.slice(0, 200) });
     if (event.status === 'error' && event.jobType === 'clip.make') toast.error('A clip couldn’t be made', { description: event.message?.slice(0, 200) });

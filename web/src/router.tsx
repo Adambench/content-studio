@@ -17,6 +17,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import { NewWorkspacePage } from '@/pages/NewWorkspacePage';
 import { PairPage } from '@/pages/PairPage';
 import { PiecePage } from '@/pages/PiecePage';
+import { ResearchPage } from '@/pages/ResearchPage';
 import { ReviewPage } from '@/pages/ReviewPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { SharePage } from '@/pages/SharePage';
@@ -56,6 +57,7 @@ export const router = createBrowserRouter([
               { path: 'calendar', element: <CalendarPage /> },
               { path: 'accounts', element: <AccountsPage /> },
               { path: 'analytics', element: <AnalyticsPage /> },
+              { path: 'research', element: <ResearchPage /> },
               { path: 'settings', element: <WorkspaceSettingsPage /> },
             ],
           },

@@ -252,7 +252,32 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
      of $20,000); screenshots of Today, the campaign page, the edit dialog and Analytics at desktop and phone width.
      Not tested: the real submissions page signed in (no Whop account to try), so its layout (and whether it gives post
      links) is unknown
-   - [ ] 8 Research and daily brief
+   - [x] 8 Research and daily brief (2026-10-16): `workspaces.research` (keywords, YouTube channels, TikTok and Instagram
+     handles), `research_items`, `research_briefs` (migration 0009). The watch list is edited on the page's Research
+     page and in Workspace settings; *Find channels for me* searches YouTube Shorts for the keywords (or the niche)
+     and suggests channels that keep coming up (established ones first). `research.sweep` (daily after 7:00 per page
+     with the module on, or *Run now*; no Claude): a YouTube channel's Shorts tab via yt-dlp (30 newest with views,
+     5 s each), keyword searches (`ytsearch… #shorts`, the busiest new channels scored too), TikTok and Instagram
+     profiles through the desktop window (signed out works: the grid's links carry each post's views; post dates
+     come from TikTok ids and Instagram shortcodes). Each account's usual = the median of its latest posts at least
+     two days old (accounts posting ten reels a day have many hours-old ones; without dates, after the 3 newest);
+     outliers at 3× or more, posted within 45 days; YouTube outliers get their first spoken words from the captions,
+     TikTok/Instagram ones their caption via yt-dlp. `research.brief` (one Haiku call, waits while usage ≥ 80 %):
+     patterns with the outliers behind them, topics, 3 ideas (*Add to board*), 5 hooks, and on a clipping page what
+     moments to look for (fed to `source.pick`); skips anything musical or haram. Shown on Today and the Research
+     page (`/w/:wid/research`, nav item and phone top bar when the module is on), readable in chat (`get_research`).
+     *Analyse* a link (YouTube, TikTok, Instagram: yt-dlp downloads them all now) or a library video
+     (`research.analyse`): measured length, hard cuts (FFmpeg scene detection), words per second (captions or Whisper),
+     four frames and the transcript to Claude (the chat's model) → hook (said, on screen, seen), beats, edit, why it
+     works, takeaways for the page, cautions (music, haram, claims); never the words. Tested on the step-6 data with
+     real accounts: Find channels; a sweep of 3 YouTube channels, a keyword, Instagram @hormozi and TikTok @garyvee →
+     230 posts, 20 outliers, a brief with 3 patterns, topics, ideas and moments to look for (its notes kept the halal
+     rule: music, cure claims, religion stories); a YouTube Short analysed (36 cuts in 161 s, 3.7 words/s, a sharp
+     breakdown), a TikTok analysed (no speech, so no pace); the library analysis waited for Claude's usage as it
+     should; `get_research` scoped to the page; screenshots of the Research page, an analysis, Today and the watch list
+     at desktop and phone width. Found: signed out, TikTok sometimes answers "Something went wrong" instead of the
+     grid (@garyvee; @mrbeast read fine): the sweep says to sign in to TikTok; Instagram's reels grid has no captions
+     (fetched with yt-dlp instead)
    - [ ] 9 Later formats
 
 ## Video studio decisions (2026-10-14)
@@ -680,13 +705,16 @@ Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usag
   installed as the desktop app (`npm run install-app`).
 - Next: phase 0 on the platforms' sites (now including the analytics scopes), then connect real accounts; video
   studio extras (transitions, motion graphics). Phase 7 (clipping): steps 1 (playbook skill), 2 (skills in the app),
-  3 (kinds, Today, music out), 4 (signed-in windows) and 5 (campaigns) done (2026-10-15), 6 (clipping v1) and 7
-  (submissions and earnings) done (2026-10-16); next is step 8 (research and daily brief) of the *Phase 7 build
-  plan*. Waiting on the user:
+  3 (kinds, Today, music out), 4 (signed-in windows) and 5 (campaigns) done (2026-10-15), 6 (clipping v1), 7
+  (submissions and earnings) and 8 (research and daily brief) done (2026-10-16); next is step 9 (later formats) of
+  the *Phase 7 build plan*. Waiting on the user:
   - Settings → Clip tools → Install in the real app (about 2½ minutes, 1.3 GB) before the first clip; then on a
     clipping page's active campaign, get a source (or Find moments on one) and look through Review. Listen to the first
     clips from a source with background music: the music check was only tried on stand-ins;
   - listening to the built-in SFX;
+  - on each page with the Research brief: its Research page → *What it watches* (or *Find channels for me*), then
+    *Run now* once; after that it runs every morning. Signing in to TikTok under Connected sites makes TikTok profiles
+    read reliably;
   - in the desktop app (`npm run install-app` first), Settings → Connected sites: sign in to Whop (it opens
     contentrewards.com's sign-in), TikTok (its QR code works from the phone) and Instagram, and check each then shows
     "Signed in". Whop's sign-in cookie is a guess (`SITES.whop.sessionCookie` in `shared/sites.ts`): if it stays "Not

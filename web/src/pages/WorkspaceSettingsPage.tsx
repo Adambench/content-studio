@@ -6,6 +6,7 @@ import { KIND_INFO, KIND_PRESETS, MODULE_INFO, MODULES, type ModuleId, type Stag
 import { ColorPicker } from '@/components/ColorPicker';
 import { KindPicker } from '@/components/KindPicker';
 import { PageHeader } from '@/components/PageHeader';
+import { WatchListCard } from '@/components/research/WatchList';
 import { useWorkspaceContext } from '@/components/WorkspaceLayout';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
@@ -16,7 +17,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { api, errorMessage } from '@/lib/api';
-import { keys, queryClient } from '@/lib/queries';
+import { keys, queryClient, useResearch } from '@/lib/queries';
 
 export function WorkspaceSettingsPage() {
   const { workspace: ws } = useWorkspaceContext();
@@ -157,6 +158,8 @@ export function WorkspaceSettingsPage() {
             </CardContent>
           </Card>
 
+          {ws.modules.includes('research') && <ResearchWatch wid={ws.id} niche={ws.niche} />}
+
           <Card>
             <CardHeader>
               <CardTitle>Brand guide</CardTitle>
@@ -255,4 +258,11 @@ export function WorkspaceSettingsPage() {
       </div>
     </div>
   );
+}
+
+/** The Research brief's watch list (saved as it changes, apart from the rest of the settings). */
+function ResearchWatch({ wid, niche }: { wid: string; niche: string }) {
+  const research = useResearch(wid);
+  if (!research.data) return null;
+  return <WatchListCard wid={wid} settings={research.data.settings} niche={niche} />;
 }

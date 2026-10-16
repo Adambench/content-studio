@@ -24,7 +24,7 @@ Open **Content Studio** from the app menu. No terminal needed.
 ## What's in it
 
 - **Today** (the home page) — what needs you across every workspace: clips waiting for review, posts that failed or
-  missed their time, posted clips to submit on Content Rewards, today's posts, what's running (renders, transcriptions, Claude jobs), each page at a glance and
+  missed their time, posted clips to submit on Content Rewards, today's posts, the research briefs, what's running (renders, transcriptions, Claude jobs), each page at a glance and
   Claude usage. First in the phone's bottom bar.
 - **Workspaces** — one per page, fully isolated: board, footage, assets, chats, brand guide, voice. Each has a kind —
   **Personal brand**, **Business** or **Clipping page** — that presets its modules (Ideas & scripts, Filming,
@@ -52,6 +52,13 @@ Open **Content Studio** from the app menu. No terminal needed.
   views, how often the campaign approves your clips, earnings (estimated from views × the rate until it says) and per
   clip; its budget is checked daily and you're told when it runs low. Analytics can be filtered to one campaign, and
   the weekly review reads the campaigns' numbers too.
+- **Research** (pages with the Research brief) — list the YouTube channels, TikTok and Instagram accounts and
+  keywords a page watches (or let it find channels). Every morning their latest posts are checked against each
+  account's usual views; the outliers (3× or more) go into a short brief: what's working, topics, three ideas (*Add to
+  board*), hooks shaped for the page and, on a clipping page, what moments to look for (clip picking reads it too). It's
+  on Today and the page's Research page, and Claude reads it in chat. **Analyse** any Short, TikTok or Reel link (or a
+  video in the library): its hook, beats and edit, measured (cuts and words per second) and explained, with what the
+  page can borrow — never its words.
 - **Pipeline board** — drag cards through your stages (customisable per workspace; clipping pages go Making →
   Review → Ready → Scheduled → Posted).
 - **Piece editor** — hook, script, notes and per-platform copy (TikTok, Instagram, YouTube Shorts, X) with
