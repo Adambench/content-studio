@@ -2,6 +2,7 @@
 // on, with their rule checklist, halal screen and source videos. Shared by the server and the web app.
 
 import type { Moment } from './clipping';
+import type { PublishPlatform } from './publish';
 
 /** Where a campaign comes from: a Content Rewards (Whop) campaign page, or one of my businesses (no link). */
 export const CAMPAIGN_ORIGINS = ['content_rewards', 'business'] as const;
@@ -114,6 +115,8 @@ export type Campaign = {
   readAt: number | null;
   /** Why the last read didn't work, or what it couldn't see. */
   readNote: string | null;
+  /** When the budget was last read from the public page (every day while active). */
+  budgetCheckedAt: number | null;
   /** The workspaces (pages) it posts on. */
   pageIds: string[];
   createdAt: number;
@@ -122,7 +125,125 @@ export type Campaign = {
   reading?: boolean;
 };
 
-export type CampaignDetail = Campaign & { sources: CampaignSource[]; moments: Moment[] };
+export type CampaignDetail = Campaign & { sources: CampaignSource[]; moments: Moment[]; submissions: Submission[]; results: CampaignResults };
+
+/**
+ * A posted clip's submission to its Content Rewards campaign. `to_submit`: posted, waiting for me to submit it on
+ * Content Rewards (the app never submits). `submitted`: waiting for the campaign's review. Then `approved` (earning
+ * on its views), `rejected` or `paid`. `skipped`: I chose not to submit it.
+ */
+export const SUBMISSION_STATUSES = ['to_submit', 'submitted', 'approved', 'rejected', 'paid', 'skipped'] as const;
+export type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
+export const SUBMISSION_STATUS_LABELS: Record<SubmissionStatus, string> = {
+  to_submit: 'To submit',
+  submitted: 'Submitted',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  paid: 'Paid',
+  skipped: 'Not submitted',
+};
+
+export type Submission = {
+  id: string;
+  postId: string;
+  campaignId: string;
+  workspaceId: string;
+  pieceId: string;
+  platform: PublishPlatform;
+  /** The post's link, what gets submitted. */
+  url: string;
+  status: SubmissionStatus;
+  submittedAt: number | null;
+  /** Views the campaign counted, and what it says the clip earned (read from Content Rewards, or typed in). */
+  views: number | null;
+  earnings: number | null;
+  earningsFrom: 'site' | 'you' | null;
+  /** The campaign's reason for a rejection or a flag, or a note of mine. */
+  note: string;
+  /** When Content Rewards was last read for it. */
+  checkedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+  pieceTitle: string;
+  accountLabel: string;
+  publishedAt: number | null;
+  thumbMediaId: string | null;
+  /** The post's latest views from the platform (our own stats). */
+  postViews: number | null;
+  /** Views × the platform's rate within the min and max payout, while the campaign hasn't said what it earned. */
+  estimate: number | null;
+  /** Why the estimate is what it is ("under the $2 minimum"). */
+  estimateNote: string | null;
+};
+
+/** A campaign's numbers: its clips, what they did, the campaign's verdicts and what they earned. */
+export type CampaignResults = {
+  /** Moments made into clips, waiting in Review, approved by me (gone on to Ready or further), rejected by me. */
+  clips: { made: number; inReview: number; approved: number; rejected: number };
+  /** Clips posted (each counted once, however many accounts it went to) and their posts. */
+  posted: number;
+  posts: number;
+  /** Their latest views, from our own stats. */
+  views: number | null;
+  submissions: Record<SubmissionStatus, number>;
+  /** Approved (or paid) over approved, paid and rejected: how often the campaign accepts my clips. */
+  approvalRate: number | null;
+  /** What the campaign says approved clips earned (or what I typed), and how much of it is paid. */
+  earned: number;
+  paid: number;
+  /** Estimated from views for approved or pending clips without a number from the campaign. */
+  estimated: number;
+  /** (earned + estimated) per clip posted. */
+  perClip: number | null;
+  budgetLow: boolean;
+};
+
+/** Less than 15% of the budget left (or none): clips posted now may not get paid. */
+export function budgetLow(c: Pick<Campaign, 'budgetLeft' | 'budgetTotal'>) {
+  if (c.budgetLeft === null) return false;
+  return c.budgetLeft <= 0 || (!!c.budgetTotal && c.budgetLeft / c.budgetTotal < 0.15);
+}
+
+/**
+ * What a post's views should earn on a platform: views ÷ 1,000 × the rate, capped at the max payout. Under the min
+ * payout a submission earns nothing. A flat fee is paid per approved clip.
+ */
+export function estimateEarnings(views: number | null, payout: Payout | undefined): { amount: number | null; note: string | null } {
+  if (!payout) return { amount: null, note: 'The campaign doesn’t pay on this platform' };
+  if (payout.ratePer1k === null) return payout.flatFee !== null ? { amount: payout.flatFee, note: 'Flat fee' } : { amount: null, note: null };
+  if (views === null) return { amount: null, note: 'No views read yet' };
+  const raw = (views / 1000) * payout.ratePer1k + (payout.flatFee ?? 0);
+  if (payout.maxPayout !== null && raw >= payout.maxPayout) return { amount: payout.maxPayout, note: `Capped at the ${money(payout.maxPayout)} max` };
+  if (payout.minPayout !== null && raw < payout.minPayout) return { amount: 0, note: `Under the ${money(payout.minPayout)} minimum` };
+  return { amount: Math.round(raw * 100) / 100, note: null };
+}
+
+/**
+ * One key per post, however its link is spelled, to match my posts with the ones on Content Rewards: the TikTok video
+ * id, the Instagram shortcode, the YouTube video id, else the link without its query.
+ */
+export function postKey(url: string) {
+  let u: URL;
+  try {
+    u = new URL(url.trim());
+  } catch {
+    return url.trim().toLowerCase();
+  }
+  const host = u.hostname.replace(/^www\.|^m\./, '');
+  if (host.endsWith('tiktok.com')) {
+    const id = /\/(?:video|photo)\/(\d{6,})/.exec(u.pathname)?.[1];
+    if (id) return `tiktok:${id}`;
+  }
+  if (host.endsWith('instagram.com')) {
+    const code = /\/(?:p|reel|reels|tv)\/([\w-]+)/.exec(u.pathname)?.[1];
+    if (code) return `instagram:${code}`;
+  }
+  if (host === 'youtube.com' || host === 'youtu.be') {
+    const id = host === 'youtu.be' ? u.pathname.slice(1).split('/')[0] : u.pathname === '/watch' ? u.searchParams.get('v') : /^\/(?:shorts|live|embed)\/([\w-]{11})/.exec(u.pathname)?.[1];
+    if (id) return `youtube:${id}`;
+  }
+  return `${host}${u.pathname.replace(/\/+$/, '')}`.toLowerCase();
+}
 
 /** What a link points at, by its address. */
 export function sourceKindOf(url: string): SourceKind {

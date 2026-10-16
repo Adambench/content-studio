@@ -3,6 +3,7 @@ import { PUBLISH_PLATFORM_LABELS, type AccountSettings, type PostCopy, type Post
 import { db, now, schema } from '../db';
 import { notify } from '../lib/push';
 import { JobError } from '../jobs/queue';
+import { submissionsAfterPosting } from '../campaigns/submissions';
 import { accessToken, accountLabel, getAccount, markReconnect } from './accounts';
 import { PlatformError, platforms, type PublishContext } from './platforms';
 import { afterPublished, setPost } from './posts';
@@ -64,6 +65,8 @@ export async function publishPost({ postId }: { postId: string }) {
     const inbox = result.stage.startsWith('In your TikTok inbox');
     await notify(inbox ? 'Ready in your TikTok inbox' : `Posted to ${PUBLISH_PLATFORM_LABELS[post.platform]}`, `${pieceTitle(post.pieceId)} — ${result.stage}`, postLink(post));
     afterPublished(post.pieceId);
+    // A campaign's clip now waits to be submitted on Content Rewards.
+    if (result.url) submissionsAfterPosting();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (err instanceof PlatformError) {

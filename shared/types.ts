@@ -197,7 +197,7 @@ export type ClaudeUsage = {
 export type LiveEvent =
   | {
       type: 'changed';
-      entity: 'workspaces' | 'pieces' | 'media' | 'threads' | 'settings' | 'edits' | 'renders' | 'accounts' | 'posts' | 'stats' | 'reviews' | 'devices' | 'sites' | 'campaigns';
+      entity: 'workspaces' | 'pieces' | 'media' | 'threads' | 'settings' | 'edits' | 'renders' | 'accounts' | 'posts' | 'stats' | 'reviews' | 'devices' | 'sites' | 'campaigns' | 'submissions';
       workspaceId?: string;
       id?: string;
       pieceId?: string;

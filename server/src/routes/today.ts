@@ -3,6 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { REVIEW_STAGE, normalizeModules } from '../../../shared/types';
 import { busySources, listCampaigns } from '../campaigns/campaigns';
+import { campaignResults, listSubmissions } from '../campaigns/submissions';
+import { desktopAvailable } from '../lib/desktop';
 import { db, schema } from '../db';
 import { getSetting } from '../lib/settings';
 import { todayPosts } from '../publish/posts';
@@ -16,12 +18,13 @@ const JOB_LABELS: Record<string, string> = {
   'stats.sync': 'Reading the latest numbers',
   'analytics.review': 'Writing the weekly review',
   'campaign.read': 'Reading a campaign',
+  'submissions.sync': 'Checking your submissions on Content Rewards',
 };
 
 /**
- * The Today view: what needs me across every workspace (clips to review, today's posts and the ones that failed),
- * what's running, campaigns (to confirm, budget left, deadline) and Claude usage. Submissions and research briefs
- * join it in later steps.
+ * The Today view: what needs me across every workspace (clips to review, today's posts and the ones that failed,
+ * clips to submit on Content Rewards), what's running, campaigns (to confirm, budget left, deadline, earnings) and
+ * Claude usage.
  */
 export async function todayRoutes(app: FastifyInstance) {
   app.get('/api/today', async (req) => {
@@ -161,6 +164,7 @@ export async function todayRoutes(app: FastifyInstance) {
     const active = campaigns.filter((c) => c.status === 'active').sort((a, b) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity));
     const brief = (c: (typeof campaigns)[number]) => ({
       id: c.id,
+      link: c.link,
       title: c.title,
       brand: c.brand,
       origin: c.origin,
@@ -214,7 +218,16 @@ export async function todayRoutes(app: FastifyInstance) {
       posts: posts.filter((p) => p.scheduledAt >= from && p.scheduledAt < to),
       attention: posts.filter((p) => p.status === 'failed' || p.status === 'missed').sort((a, b) => b.scheduledAt - a.scheduledAt),
       work,
-      campaigns: { toConfirm: toConfirm.map(brief), active: active.map(brief) },
+      campaigns: {
+        toConfirm: toConfirm.map(brief),
+        active: active.map((c) => {
+          const r = campaignResults(c.id);
+          return { ...brief(c), earned: r.earned, estimated: r.estimated, posted: r.posted, budgetLow: r.budgetLow, accepting: c.accepting };
+        }),
+      },
+      // Posted clips to submit on Content Rewards (the campaign page opens in the signed-in window on the computer).
+      submissions: listSubmissions({ statuses: ['to_submit'] }).filter((s) => wsIds.includes(s.workspaceId)),
+      desktop: desktopAvailable(),
       usage: getSetting('claudeUsage') ?? null,
       // The most recent finished weekly reviews, newest first, so their suggestions aren't missed.
       reviews: db

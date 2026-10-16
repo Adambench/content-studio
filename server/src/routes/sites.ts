@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { SITE_IDS } from '../../../shared/sites';
-import { openSignIn, readPage, signOutSite, sitesStatus } from '../lib/desktop';
+import { desktopAvailable, openSignIn, openSitePage, readPage, signOutSite, sitesStatus } from '../lib/desktop';
 
 const siteParam = z.object({ site: z.enum(SITE_IDS) });
 
@@ -12,6 +12,15 @@ export async function siteRoutes(app: FastifyInstance) {
   app.post('/api/sites/:site/signin', async (req) => {
     await openSignIn(siteParam.parse(req.params).site);
     return sitesStatus();
+  });
+
+  // A campaign's page (say) in the signed-in window, to submit a clip there. Outside the desktop app the page opens
+  // in the browser instead (`opened: false`).
+  app.post('/api/sites/open', async (req) => {
+    const { url } = z.object({ url: z.string().trim().url().max(2000) }).parse(req.body);
+    if (!desktopAvailable()) return { opened: false };
+    await openSitePage(url);
+    return { opened: true };
   });
 
   app.post('/api/sites/:site/signout', async (req) => {

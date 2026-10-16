@@ -1,12 +1,15 @@
 import { eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { CHECK_TYPES, isCampaignLink, RULE_KINDS } from '../../../shared/campaigns';
+import { CHECK_TYPES, isCampaignLink, RULE_KINDS, SUBMISSION_STATUSES } from '../../../shared/campaigns';
 import { db, newId, schema } from '../db';
 import { badRequest } from '../lib/http';
 import { enqueue, hasPendingJob } from '../jobs/queue';
 import { deleteCampaign, emitCampaign, getCampaignDetail, getCampaignRow, getSource, listCampaigns, listSources, setPages, updateCampaign } from '../campaigns/campaigns';
 import { addSourceLink, deleteSource, saveSourceUpload, startSource, stopSource } from '../campaigns/sources';
+import { getSubmission, listSubmissions, updateSubmission } from '../campaigns/submissions';
+import { desktopAvailable } from '../lib/desktop';
+import { getSetting } from '../lib/settings';
 
 const idParam = z.object({ id: z.string().min(1) });
 
@@ -152,5 +155,39 @@ export async function campaignRoutes(app: FastifyInstance) {
     const s = getSource(idParam.parse(req.params).id);
     await deleteSource(s.id);
     return getCampaignDetail(s.campaignId);
+  });
+}
+
+/** Submissions to Content Rewards: the list, my changes, and reading their status there. */
+export async function submissionRoutes(app: FastifyInstance) {
+  const syncState = () => ({ last: getSetting('submissionsSync') ?? null, available: desktopAvailable(), running: hasPendingJob('submissions.sync') });
+
+  app.get('/api/submissions', async (req) => {
+    const q = z.object({ campaignId: z.string().optional(), workspaceId: z.string().optional(), status: z.string().optional() }).parse(req.query);
+    const statuses = q.status?.split(',').filter((s): s is (typeof SUBMISSION_STATUSES)[number] => (SUBMISSION_STATUSES as readonly string[]).includes(s));
+    return listSubmissions({ campaignId: q.campaignId, workspaceId: q.workspaceId, statuses: statuses?.length ? statuses : undefined });
+  });
+
+  app.patch('/api/submissions/:id', async (req) => {
+    const { id } = idParam.parse(req.params);
+    const body = z
+      .object({
+        status: z.enum(SUBMISSION_STATUSES).optional(),
+        views: z.number().int().min(0).max(1e12).nullable().optional(),
+        earnings: z.number().min(0).max(1e7).nullable().optional(),
+        note: z.string().max(500).optional(),
+      })
+      .parse(req.body);
+    updateSubmission(id, body);
+    return listSubmissions({ campaignId: getSubmission(id).campaignId }).find((s) => s.id === id);
+  });
+
+  app.get('/api/submissions/sync', async () => syncState());
+
+  // "Check now": read my submissions page on Content Rewards (one page read, one Haiku call).
+  app.post('/api/submissions/sync', async () => {
+    if (!desktopAvailable()) throw badRequest('Reading Content Rewards needs the desktop app: open Content Studio on the computer.');
+    if (!hasPendingJob('submissions.sync')) enqueue('submissions.sync', {}, { maxAttempts: 1 });
+    return syncState();
   });
 }

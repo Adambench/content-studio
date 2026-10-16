@@ -34,6 +34,8 @@ export async function handleSiteRequest(req: BridgeRequest) {
       return readPage(req.url, req.waitFor, req.scrolls);
     case 'signin':
       return openSignIn(siteId(req.site));
+    case 'open':
+      return openPage(req.url);
     case 'signout':
       return signOut(siteId(req.site));
     case 'status':
@@ -231,19 +233,37 @@ const EXTRACT_JS = `(() => {
 // ---------- signing in and out ----------
 
 function openSignIn(site: SiteId) {
+  return openWindow(site, SITES[site].signInUrl, `Sign in to ${SITES[site].label}`, false);
+}
+
+/** One of the sites' pages in a visible signed-in window, for me to act on (the app itself never clicks there). */
+function openPage(url: unknown) {
+  let u: URL;
+  try {
+    u = new URL(String(url));
+  } catch {
+    throw new SiteError('That isn’t a valid web address', 'bad-request');
+  }
+  const site = siteOfHost(u.hostname);
+  if (u.protocol !== 'https:' || !site) throw new SiteError('Only Content Rewards, Whop, TikTok and Instagram pages open here.', 'bad-request');
+  return openWindow(site, u.toString(), /(^|\.)contentrewards\.com$/.test(u.hostname) ? 'Content Rewards' : SITES[site].label, true);
+}
+
+/** Bring the site's window forward (going to `url` when asked), or open one. */
+function openWindow(site: SiteId, url: string, title: string, navigate: boolean) {
   const existing = signInWindows.get(site);
   if (existing && !existing.isDestroyed()) {
     if (existing.isMinimized()) existing.restore();
+    if (navigate) void existing.loadURL(url).catch(() => {});
     existing.show();
     existing.focus();
     return { ok: true };
   }
-  const info = SITES[site];
   const webPreferences = { partition: PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false, autoplayPolicy: 'user-gesture-required' as const };
   const win = new BrowserWindow({
     width: 1100,
     height: 860,
-    title: `Sign in to ${info.label} · Content Studio`,
+    title: `${title} · Content Studio`,
     icon: opts.iconPath,
     autoHideMenuBar: true,
     webPreferences,
@@ -261,7 +281,7 @@ function openSignIn(site: SiteId) {
   });
   signInWindows.set(site, win);
   sitesSession();
-  void win.loadURL(info.signInUrl).catch(() => {
+  void win.loadURL(url).catch(() => {
     /* the window shows Chromium's own error page */
   });
   changed();

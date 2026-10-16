@@ -3,6 +3,7 @@ import { api } from './api';
 import type { PairedDevice } from '@shared/devices';
 import type { CreatorInfo } from '@shared/publish';
 import type { Campaign, CampaignDetail } from '@shared/campaigns';
+import type { SubmissionsSyncState } from './types';
 import type { ReviewClip } from '@shared/clipping';
 import type { SitesStatus } from '@shared/sites';
 import type {
@@ -64,6 +65,7 @@ export const keys = {
   campaigns: ['campaigns'] as const,
   campaign: (id: string) => ['campaign', id] as const,
   review: ['review'] as const,
+  submissionsSync: ['submissions-sync'] as const,
 };
 
 export type AuthStatus = { setupRequired: boolean; authenticated: boolean; desktopManaged: boolean };
@@ -101,6 +103,10 @@ export const useFcm = () => useQuery({ queryKey: keys.fcm, queryFn: () => api<Fc
 export const useCampaigns = () => useQuery({ queryKey: keys.campaigns, queryFn: () => api<Campaign[]>('/campaigns') });
 export const useCampaign = (id: string) => useQuery({ queryKey: keys.campaign(id), queryFn: () => api<CampaignDetail>(`/campaigns/${id}`), enabled: !!id });
 
+/** When Content Rewards was last read for my submissions, and whether it can be (the desktop app). */
+export const useSubmissionsSync = () =>
+  useQuery({ queryKey: keys.submissionsSync, queryFn: () => api<SubmissionsSyncState>('/submissions/sync'), refetchInterval: (q) => (q.state.data?.running ? 5000 : false) });
+
 /** Clips waiting in Review across every page, oldest first. */
 export const useReview = () => useQuery({ queryKey: keys.review, queryFn: () => api<ReviewClip[]>('/review') });
 
@@ -133,8 +139,12 @@ export function useToday() {
 export const useUpcomingPosts = (wid: string) => useQuery({ queryKey: keys.upcoming(wid), queryFn: () => api<Post[]>(`/workspaces/${wid}/posts/upcoming`), enabled: !!wid });
 export const usePiecePosts = (pieceId: string) => useQuery({ queryKey: keys.piecePosts(pieceId), queryFn: () => api<Post[]>(`/pieces/${pieceId}/posts`) });
 
-export const useAnalytics = (wid: string, days: number) =>
-  useQuery({ queryKey: keys.analytics(wid, days), queryFn: () => api<AnalyticsOverview>(`/workspaces/${wid}/analytics?days=${days}`), placeholderData: (prev) => prev });
+export const useAnalytics = (wid: string, days: number, campaignId = '') =>
+  useQuery({
+    queryKey: [...keys.analytics(wid, days), campaignId],
+    queryFn: () => api<AnalyticsOverview>(`/workspaces/${wid}/analytics?days=${days}${campaignId ? `&campaignId=${campaignId}` : ''}`),
+    placeholderData: (prev) => prev,
+  });
 export const useReviews = (wid: string) => useQuery({ queryKey: keys.reviews(wid), queryFn: () => api<Review[]>(`/workspaces/${wid}/reviews`) });
 /** A published post's readings over time. */
 export const usePostStats = (postId: string | null) =>

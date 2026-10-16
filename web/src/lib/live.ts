@@ -95,6 +95,8 @@ function apply(event: LiveEvent) {
         inv(['post-stats']);
         inv(['piece-posts']);
         inv(['post']);
+        // Campaign pages show their clips' views.
+        inv(['campaign']);
         break;
       case 'reviews':
         if (wid) inv(keys.reviews(wid));
@@ -109,6 +111,11 @@ function apply(event: LiveEvent) {
       case 'campaigns':
         inv(keys.campaigns);
         inv(event.id ? keys.campaign(event.id) : ['campaign']);
+        break;
+      case 'submissions':
+        inv(['campaign']);
+        inv(keys.submissionsSync);
+        inv(['analytics']);
         break;
     }
   } else if (event.type === 'notify') {
@@ -125,6 +132,8 @@ function apply(event: LiveEvent) {
     if (event.status === 'error' && event.jobType === 'analytics.review') toast.error('The review didn’t finish', { description: event.message?.slice(0, 200) });
     if (event.status === 'error' && event.jobType === 'campaign.read') toast.error('Couldn’t read the campaign', { description: event.message?.slice(0, 200) });
     if (event.status === 'done' && event.jobType === 'source.pick') toast.success(event.message ?? 'Moments found');
+    if (event.status === 'done' && event.jobType === 'submissions.sync') toast.success(event.message ?? 'Submissions checked');
+    if (event.status === 'error' && event.jobType === 'submissions.sync') toast.error('Couldn’t read Content Rewards', { description: event.message?.slice(0, 200) });
     if (event.status === 'error' && event.jobType === 'clip.make') toast.error('A clip couldn’t be made', { description: event.message?.slice(0, 200) });
   }
   for (const l of listeners) l(event);

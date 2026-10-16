@@ -13,6 +13,8 @@ import { createBranch, createPiece, getBranch, getPiece, getPieceDetail, getWork
 import { digest } from '../analytics/report';
 import { clock, MOMENT_KIND_LABELS } from '../../../shared/clipping';
 import { campaignsForWorkspace, listMoments, listSources } from '../campaigns/campaigns';
+import { campaignResults, listSubmissions } from '../campaigns/submissions';
+import { SUBMISSION_STATUS_LABELS } from '../../../shared/campaigns';
 import { getMoment, queueMake } from '../clipping/moments';
 import { findMoments } from '../routes/clipping';
 import { accountLabel, listAccounts } from '../publish/accounts';
@@ -447,7 +449,8 @@ export function buildTools(workspaceId: string) {
     tool(
       'get_campaign',
       'Read one campaign in full: the brief, every rule (kind and what the app can check), creator requirements, payouts per platform, budget, the halal screen with ' +
-        'its reasons, and its source videos (title, length, whether they are downloaded and transcribed). Check its rules before suggesting anything for it. Read-only.',
+        'its reasons, its source videos (title, length, whether they are downloaded and transcribed), its results (clips made, approved, posted, views, the ' +
+        'campaign’s approval rate, earnings) and its submissions on Content Rewards. Check its rules before suggesting anything for it. Read-only.',
       { campaignId: z.string().describe('From get_campaigns') },
       safe(async ({ campaignId }) => {
         const c = campaignsForWorkspace(workspaceId).find((x) => x.id === campaignId);
@@ -493,6 +496,17 @@ export function buildTools(workspaceId: string) {
           deadline: c.deadline ? new Date(c.deadline).toDateString() : undefined,
           halal: { verdict: c.halalVerdict, reasons: c.halalReasons },
           sources,
+          // How its clips did and what they earned; submitting on Content Rewards is the creator's click.
+          results: campaignResults(c.id),
+          submissions: listSubmissions({ campaignId: c.id, workspaceId }).map((s) => ({
+            clip: s.pieceTitle,
+            platform: s.platform,
+            status: SUBMISSION_STATUS_LABELS[s.status],
+            views: s.views ?? s.postViews ?? undefined,
+            earnings: s.earnings ?? undefined,
+            estimate: s.earnings === null ? (s.estimate ?? undefined) : undefined,
+            note: s.note || s.estimateNote || undefined,
+          })),
         });
       }),
     ),

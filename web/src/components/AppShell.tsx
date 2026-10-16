@@ -39,10 +39,10 @@ function SideLink({ to, icon: Icon, children }: { to: string; icon: typeof Kanba
   );
 }
 
-/** What waits for me across every workspace: clips to review, posts that failed or missed their time, campaigns to confirm. */
+/** What waits for me across every workspace: clips to review, posts that failed or missed their time, campaigns to confirm, clips to submit. */
 function TodayBadge({ className }: { className?: string }) {
   const today = useToday();
-  const n = (today.data?.review.length ?? 0) + (today.data?.attention.length ?? 0) + (today.data?.campaigns?.toConfirm.length ?? 0);
+  const n = (today.data?.review.length ?? 0) + (today.data?.attention.length ?? 0) + (today.data?.campaigns?.toConfirm.length ?? 0) + (today.data?.submissions?.length ?? 0);
   if (!n) return null;
   return (
     <Badge className={cn('h-4 min-w-4 bg-brand px-1 text-[10px] text-white tabular-nums', className)} aria-label={`${n} thing${n === 1 ? '' : 's'} waiting for you`}>

@@ -2,6 +2,8 @@ import { and, asc, desc, eq, gte, inArray, isNotNull } from 'drizzle-orm';
 import { BENCHMARK_AGE_MS, DAY_PARTS, dayPart, engagementRate, median, valueAt, type DayPart, type PostStats } from '../../../shared/analytics';
 import { PUBLISH_PLATFORM_LABELS } from '../../../shared/publish';
 import { normalizeDraft } from '../../../shared/types';
+import { campaignsForWorkspace } from '../campaigns/campaigns';
+import { campaignPostIds, campaignResults } from '../campaigns/submissions';
 import { db, now, schema } from '../db';
 import { accountLabel, publicAccount } from '../publish/accounts';
 import { hasScope, platforms, type AccountRow, type PostRow } from '../publish/platforms';
@@ -164,14 +166,20 @@ function followerChange(series: { day: string; followers: number | null }[], fro
   return { followers: last, change: last !== null && start && start !== known.at(-1) ? last - start.followers! : null };
 }
 
-/** Everything the analytics page shows for the last `days` days. */
-export function overview(workspaceId: string, days: number) {
+/**
+ * Everything the analytics page shows for the last `days` days; with `campaignId`, only that campaign's clips (each
+ * still compared with its account's typical post) and the campaign's own numbers.
+ */
+export function overview(workspaceId: string, days: number, campaignId?: string) {
   const to = now();
   const from = to - days * DAY;
   const prevFrom = from - days * DAY;
   const { posts, result } = performance(workspaceId);
-  const inPeriod = posts.filter((p) => p.publishedAt! >= from);
-  const inPrev = posts.filter((p) => p.publishedAt! >= prevFrom && p.publishedAt! < from);
+  const campaigns = campaignsForWorkspace(workspaceId).filter((c) => c.status !== 'reading' && c.status !== 'to_confirm');
+  const campaign = campaignId ? campaigns.find((c) => c.id === campaignId) : undefined;
+  const only = campaign ? campaignPostIds(campaign.id, workspaceId) : null;
+  const inPeriod = posts.filter((p) => p.publishedAt! >= from && (!only || only.has(p.id)));
+  const inPrev = posts.filter((p) => p.publishedAt! >= prevFrom && p.publishedAt! < from && (!only || only.has(p.id)));
   const accountRows = db.select().from(schema.accounts).where(eq(schema.accounts.workspaceId, workspaceId)).orderBy(asc(schema.accounts.createdAt)).all();
   const byId = new Map(accountRows.map((a) => [a.id, a]));
   const { titles, thumbs } = lookups(inPeriod);
@@ -223,6 +231,8 @@ export function overview(workspaceId: string, days: number) {
     },
     accounts,
     posts: inPeriod.map((p) => postView(p, result.get(p.id), titles, thumbs, byId)),
+    campaigns: campaigns.map((c) => ({ id: c.id, title: c.title, origin: c.origin })),
+    campaign: campaign ? { id: campaign.id, title: campaign.title, origin: campaign.origin, ratePer1k: campaign.ratePer1k, budgetLeft: campaign.budgetLeft, budgetTotal: campaign.budgetTotal, results: campaignResults(campaign.id) } : null,
   };
 }
 
@@ -311,7 +321,10 @@ export function digest(workspaceId: string, days: number, opts: { pieceId?: stri
     const a = p.accountId ? accountIds.get(p.accountId) : undefined;
     const length = lengths.get(p.mediaIds[0]);
     const what = p.format === 'video' ? `video${length ? ` ${Math.round(length / 1000)} s` : ''}` : p.mediaIds.length > 1 ? `carousel of ${p.mediaIds.length}` : 'photo';
-    const lines = [`- [${ref(p)}] “${titles.get(p.pieceId) ?? 'Untitled'}” → ${a ? `[${a}] ` : ''}${PUBLISH_PLATFORM_LABELS[p.platform]} ${p.accountLabel.replace(/^\S+ /, '')}, ${when(p.publishedAt!)}, ${what}`];
+    const campaign = campaignOf.get(p.id);
+    const lines = [
+      `- [${ref(p)}] “${titles.get(p.pieceId) ?? 'Untitled'}” → ${a ? `[${a}] ` : ''}${PUBLISH_PLATFORM_LABELS[p.platform]} ${p.accountLabel.replace(/^\S+ /, '')}, ${when(p.publishedAt!)}, ${what}${campaign ? `, a clip for “${campaign}”` : ''}`,
+    ];
     if (detail) {
       const hook = hooks.get(p.pieceId);
       if (hook) lines.push(`  Hook: “${clip(hook, 160)}”`);
@@ -348,6 +361,30 @@ export function digest(workspaceId: string, days: number, opts: { pieceId?: stri
     );
   }
   if (!accountRows.length) out.push('No accounts connected.');
+
+  // Campaign clips: what the campaigns pay and what the clips earned, with each post marked with its campaign.
+  const campaigns = campaignsForWorkspace(workspaceId).filter((c) => c.status === 'active' || c.status === 'paused' || c.status === 'ended');
+  const campaignOf = new Map<string, string>();
+  if (campaigns.length) {
+    out.push('## Campaigns this page posts clips for');
+    for (const c of campaigns) {
+      const r = campaignResults(c.id);
+      const ids = campaignPostIds(c.id, workspaceId);
+      for (const id of ids) campaignOf.set(id, c.title);
+      const subs = r.submissions;
+      out.push(
+        [
+          `- “${c.title}” (${c.origin === 'business' ? 'my own business' : 'Content Rewards'}, ${c.status}${c.ratePer1k !== null ? `, $${c.ratePer1k} per 1,000 views` : ''}${c.budgetLeft !== null ? `, $${n(c.budgetLeft)} budget left${r.budgetLow ? ' — running low' : ''}` : ''}).`,
+          `  Clips: ${r.clips.made} made, ${r.clips.approved} approved by me, ${r.clips.rejected} rejected by me, ${r.posted} posted (${r.posts} post${r.posts === 1 ? '' : 's'}${r.views !== null ? `, ${n(r.views)} views` : ''}).`,
+          c.origin === 'content_rewards'
+            ? `  Submissions: ${subs.to_submit} to submit, ${subs.submitted} waiting on the campaign, ${subs.approved + subs.paid} approved, ${subs.rejected} rejected${r.approvalRate !== null ? ` (${Math.round(r.approvalRate * 100)}% approved)` : ''}. Earned $${r.earned.toFixed(2)}${r.estimated ? ` + about $${r.estimated.toFixed(2)} estimated from views` : ''}${r.perClip !== null ? `, $${r.perClip.toFixed(2)} per clip posted` : ''}.`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      );
+    }
+  }
 
   const focus = opts.pieceId ? posts.filter((p) => p.pieceId === opts.pieceId) : posts.filter((p) => p.publishedAt! >= from);
   out.push(opts.pieceId ? '## This piece’s posts' : `## Posts in the last ${days} days (newest first)`);

@@ -7,6 +7,7 @@ import { BudgetBar, deadlineText, HalalBadge, PageChips, PagePicker, StatusBadge
 import { RulesCard } from '@/components/campaigns/RulesCard';
 import { MomentsCard } from '@/components/campaigns/MomentsCard';
 import { SourcesCard } from '@/components/campaigns/SourcesCard';
+import { ResultsCard, SubmissionsCard } from '@/components/campaigns/Submissions';
 import { PageHeader } from '@/components/PageHeader';
 import { PlatformIcon } from '@/components/publish/common';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -155,6 +156,7 @@ function OverviewCard({ c, workspaces }: { c: CampaignDetail; workspaces: Worksp
             <div className="space-y-1.5">
               <Label>Budget</Label>
               <BudgetBar left={c.budgetLeft} total={c.budgetTotal} />
+              {c.budgetCheckedAt && <p className="text-xs text-muted-foreground">Checked {timeAgo(c.budgetCheckedAt)}</p>}
             </div>
           )}
           <div className="space-y-1.5">
@@ -387,6 +389,8 @@ export function CampaignPage() {
           {(c.readAt || c.status !== 'reading') && (
             <>
               <OverviewCard c={c} workspaces={workspaces} />
+              <ResultsCard campaign={c} />
+              <SubmissionsCard campaign={c} />
               <BriefCard c={c} />
               <RulesCard campaign={c} />
               <MomentsCard campaign={c} workspaces={workspaces} />

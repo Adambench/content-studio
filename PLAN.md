@@ -227,7 +227,31 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
      screenshots of Review, Today, the campaign page and Settings at desktop and phone width. Not tested: a source with
      real background music (the music check was verified with non-musical stand-ins), a Twitch chat replay, Drive via
      gdown, the frames check rejecting something
-   - [ ] 7 Submissions and earnings
+   - [x] 7 Submissions and earnings (2026-10-16): `submissions` (migration 0008, plus `campaigns.budget_checked_at` /
+     `budget_warned_at`); a Content Rewards campaign clip's post that's out with a link (after posting, after stats find
+     a TikTok inbox draft's link, after linking one by hand, and at start) gets a `to_submit` submission on the
+     platforms the campaign pays for, with a notification. Today lists them: Copy link, **Open campaign** (a new
+     `open` op of the desktop bridge opens the campaign page in the signed-in window; the phone and a browser open it
+     in the browser), **Done** (submitted) or "Don't submit". Content Rewards' own pages are `/c/submissions` and
+     `/c/earnings` (found in its route table; a clip is submitted with the campaign page's "Submit clip" button).
+     `submissions.sync` (daily while any wait on a campaign, and *Check now*): reads `/c/submissions` in the signed-in
+     window, one Haiku call lists post link, status (pending/approved/rejected/paid/flagged), counted views and
+     earnings, matched to my posts by `postKey` (TikTok video id, Instagram shortcode, YouTube id); a login wall says
+     to sign in to Whop; the edit dialog sets status, views, earnings and a note by hand. `campaign.budget` (daily, a
+     plain fetch, no Claude) reads budget left/used and "Accepting clips" off each active campaign's public page and
+     notifies once when under 15% or not accepting. Campaign numbers (`campaignResults`): clips made / approved / rejected
+     by me, posted, views (our stats), submissions by status, the campaign's approval rate, earned, paid, estimated
+     (views × rate within min/max payout; under the min = $0), per clip, budget low — on the campaign page (Results and
+     Submissions cards), Today's campaign tiles, Analytics (a campaign filter: only its clips, plus its numbers), the
+     weekly review's digest and `get_analytics`, and Claude's `get_campaign` (read-only). Tested with the built app on
+     the step-6 data: a scheduled clip posted to a stand-in YouTube got its submission and notification; views from
+     the stand-in's stats gave a $5.25 estimate (4,200 × $1.25/1K); Open campaign opened the real campaign page in
+     the signed-in window; Done; *Check now* against a stand-in submissions page (`CS_SUBMISSIONS_URL`) read it in the
+     window and Haiku matched the YouTube Short (approved, 4,812 views, $6.02) and reported the one it couldn't match;
+     the real `/c/submissions` signed out came back as a login wall; the budget read off the real page ($18,287 left
+     of $20,000); screenshots of Today, the campaign page, the edit dialog and Analytics at desktop and phone width.
+     Not tested: the real submissions page signed in (no Whop account to try), so its layout (and whether it gives post
+     links) is unknown
    - [ ] 8 Research and daily brief
    - [ ] 9 Later formats
 
@@ -656,8 +680,9 @@ Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usag
   installed as the desktop app (`npm run install-app`).
 - Next: phase 0 on the platforms' sites (now including the analytics scopes), then connect real accounts; video
   studio extras (transitions, motion graphics). Phase 7 (clipping): steps 1 (playbook skill), 2 (skills in the app),
-  3 (kinds, Today, music out), 4 (signed-in windows) and 5 (campaigns) done (2026-10-15), 6 (clipping v1) done
-  (2026-10-16); next is step 7 (submissions and earnings) of the *Phase 7 build plan*. Waiting on the user:
+  3 (kinds, Today, music out), 4 (signed-in windows) and 5 (campaigns) done (2026-10-15), 6 (clipping v1) and 7
+  (submissions and earnings) done (2026-10-16); next is step 8 (research and daily brief) of the *Phase 7 build
+  plan*. Waiting on the user:
   - Settings → Clip tools → Install in the real app (about 2½ minutes, 1.3 GB) before the first clip; then on a
     clipping page's active campaign, get a source (or Find moments on one) and look through Review. Listen to the first
     clips from a source with background music: the music check was only tried on stand-ins;
@@ -670,6 +695,11 @@ Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usag
     the text (signed out, they show "Join to unlock").
   - then Campaigns → Add campaign with a campaign you've joined: its rules and source files should come in, then
     confirm it on a page and get a source or two.
+  - once a clip of a joined campaign is posted and submitted: Campaigns → the campaign → Submissions → *Check now*
+    (desktop app, signed in to Whop) should match it on `/c/submissions` and bring its status, counted views and
+    earnings. If it says the submissions didn't match a post, that page doesn't show the post links: a session should
+    read it with "Try a page" (Settings → Connected sites, `https://contentrewards.com/c/submissions`) and adjust
+    `syncSubmissions` (e.g. open each submission, or match by campaign and date).
 
   The weekly review with the playbook in its prompt hasn't been run yet (no posts with numbers). The phone app needs a
   new release for Today, the nasheed change (`API_VERSION` 2: v0.1.0 asks to be updated) and Review (its UI is

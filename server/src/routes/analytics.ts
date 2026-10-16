@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { overview, postPerformance } from '../analytics/report';
 import { addIdea, applySlots, getReview, listReviews, startReview, undoVoice } from '../analytics/review';
+import { submissionsAfterPosting } from '../campaigns/submissions';
 import { db, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest } from '../lib/http';
@@ -28,9 +29,9 @@ async function tiktokVideoId(link: string) {
 }
 
 export async function analyticsRoutes(app: FastifyInstance) {
-  app.get<{ Params: { wid: string }; Querystring: { days?: string } }>('/api/workspaces/:wid/analytics', async (req) => {
-    const { days } = z.object({ days: z.coerce.number().int().min(1).max(90).default(28) }).parse(req.query);
-    return overview(getWorkspace(req.params.wid).id, days);
+  app.get<{ Params: { wid: string }; Querystring: { days?: string; campaignId?: string } }>('/api/workspaces/:wid/analytics', async (req) => {
+    const { days, campaignId } = z.object({ days: z.coerce.number().int().min(1).max(90).default(28), campaignId: z.string().optional() }).parse(req.query);
+    return overview(getWorkspace(req.params.wid).id, days, campaignId || undefined);
   });
 
   // "Refresh stats": read every recent post's numbers now, not when they're next due.
@@ -57,6 +58,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
       .run();
     emit({ type: 'changed', entity: 'posts', workspaceId: post.workspaceId, id: post.id, pieceId: post.pieceId });
     enqueue('stats.sync', { workspaceId: post.workspaceId, postIds: [post.id], force: true }, { maxAttempts: 1 });
+    submissionsAfterPosting();
     return { ok: true };
   });
 

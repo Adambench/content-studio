@@ -71,7 +71,11 @@ HyperFrames + FFmpeg) is usable and being extended.
   pages, and a rejected one can't be. `sources.ts`: long source videos in the data dir's `sources/<campaign>/` (not a
   page's library) — `source.download` (yt-dlp, run in its own process group so a stop kills the standalone build's
   second process) and `source.transcribe` (YouTube captions, else Whisper). Links go through `canonicalLink`.
-  Claude only reads them (`get_campaigns`, `get_campaign`).
+  Claude only reads them (`get_campaigns`, `get_campaign`). `submissions.ts`: a posted Content Rewards clip gets a
+  `to_submit` submission (I submit it on the site myself; Today lists it); `submissions.sync` reads my
+  `contentrewards.com/c/submissions` page daily (Haiku) for status, counted views and earnings, matched by `postKey`;
+  `campaignResults` gives a campaign's numbers (earnings estimated from views × rate until the site says).
+  `schedule.ts` also reads each active campaign's budget off its public page daily (`parseBudget`, no Claude).
 - Clipping (`server/src/clipping`, `shared/clipping.ts`, `/review`): an active campaign's transcribed source goes to
   `source.scan` (`scan.ts`, no Claude: windows on line boundaries scored on loudness, pace, chat replay, the brief's
   words) then `source.pick` (`pick.ts`: one Sonnet call per source with the playbook, rules and past rejection reasons →

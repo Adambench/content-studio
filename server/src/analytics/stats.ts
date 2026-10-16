@@ -2,6 +2,7 @@ import { and, eq, gte, inArray, isNotNull } from 'drizzle-orm';
 import { statsInterval, type AccountStats } from '../../../shared/analytics';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
+import { submissionsAfterPosting } from '../campaigns/submissions';
 import { accessToken } from '../publish/accounts';
 import { hasScope, PlatformError, platforms, type AccountRow, type PostRow, type PostStatsResult } from '../publish/platforms';
 
@@ -140,4 +141,6 @@ export async function syncStats({ workspaceId, postIds, force = false }: { works
     }
   }
   for (const id of touched) emit({ type: 'changed', entity: 'stats', workspaceId: id });
+  // A TikTok inbox draft's link turns up once it's posted: its campaign submission can be made then.
+  if (touched.size) submissionsAfterPosting();
 }

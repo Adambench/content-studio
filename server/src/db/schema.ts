@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { PostStats, ReviewBody, ReviewStatus } from '../../../shared/analytics';
 import type { FramesCheck, MomentCaptions, MomentKind, MomentStatus, MusicCheck, StandaloneScores } from '../../../shared/clipping';
-import type { CampaignOrigin, CampaignPlatform, CampaignStatus, HalalVerdict, Payout, RuleItem, SourceKind, SourceStatus } from '../../../shared/campaigns';
+import type { CampaignOrigin, CampaignPlatform, CampaignStatus, HalalVerdict, Payout, RuleItem, SourceKind, SourceStatus, SubmissionStatus } from '../../../shared/campaigns';
 import type { EditSpec, EditTemplate } from '../../../shared/edit';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
 import type { SessionKind } from '../../../shared/devices';
@@ -450,6 +450,9 @@ export const campaigns = sqliteTable('campaigns', {
   pageText: text('page_text').notNull().default(''),
   readAt: integer('read_at'),
   readNote: text('read_note'),
+  // The budget is read again from the public page every day (no Claude); I'm told once when it runs low.
+  budgetCheckedAt: integer('budget_checked_at'),
+  budgetWarnedAt: integer('budget_warned_at'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -529,4 +532,32 @@ export const moments = sqliteTable(
     updatedAt: updatedAt(),
   },
   (t) => [index('moments_source_idx').on(t.sourceId), index('moments_campaign_idx').on(t.campaignId), index('moments_piece_idx').on(t.pieceId)],
+);
+
+/**
+ * A posted clip's submission to its Content Rewards campaign: made when the post is out with a link, submitted by me
+ * on Content Rewards, then tracked there (status, counted views, earnings) by a daily read of my submissions page.
+ */
+export const submissions = sqliteTable(
+  'submissions',
+  {
+    id: id(),
+    postId: text('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),
+    campaignId: text('campaign_id').notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    pieceId: text('piece_id').notNull(),
+    platform: text('platform').$type<PublishPlatform>().notNull(),
+    url: text('url').notNull(),
+    status: text('status').$type<SubmissionStatus>().notNull().default('to_submit'),
+    submittedAt: integer('submitted_at'),
+    // As the campaign counts them, and what it says the clip earned (or what I typed in).
+    views: integer('views'),
+    earnings: real('earnings'),
+    earningsFrom: text('earnings_from').$type<'site' | 'you'>(),
+    note: text('note').notNull().default(''),
+    checkedAt: integer('checked_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('submissions_post_idx').on(t.postId), index('submissions_campaign_idx').on(t.campaignId), index('submissions_status_idx').on(t.status)],
 );

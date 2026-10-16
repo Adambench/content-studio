@@ -103,6 +103,12 @@ export type SitesStatus = {
  * with; the app answers `{ id, ok: true, result }` or `{ id, ok: false, error, code }`, and sends `{ event: 'sites' }`
  * on its own when a sign-in changes.
  */
-export type BridgeRequest = ({ op: 'read'; url: string } & ReadOptions) | { op: 'signin'; site: SiteId } | { op: 'signout'; site: SiteId } | { op: 'status' };
+export type BridgeRequest =
+  | ({ op: 'read'; url: string } & ReadOptions)
+  | { op: 'signin'; site: SiteId }
+  // A visible window on one of the sites' pages (e.g. a campaign, to submit a clip there myself).
+  | { op: 'open'; url: string }
+  | { op: 'signout'; site: SiteId }
+  | { op: 'status' };
 export type BridgeErrorCode = 'cap' | 'bad-request' | 'failed';
 export type BridgeReply = { id: number; ok: true; result: unknown } | { id: number; ok: false; error: string; code: BridgeErrorCode };

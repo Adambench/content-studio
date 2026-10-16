@@ -22,6 +22,8 @@ type SettingsShape = {
   weeklyReview: import('../../../shared/analytics').WeeklyReviewSetting;
   /** Firebase, for notifications to the Android app: the service-account key and the app's options. */
   fcm: import('./fcm').FcmSetting;
+  /** The last read of my submissions page on Content Rewards. */
+  submissionsSync: import('../campaigns/submissions').SubmissionsSync;
 };
 
 export function getSetting<K extends keyof SettingsShape>(key: K): SettingsShape[K] | undefined {

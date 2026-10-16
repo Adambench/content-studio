@@ -1,4 +1,4 @@
-import type { Campaign } from '@shared/campaigns';
+import type { Campaign, CampaignOrigin, CampaignResults, Submission } from '@shared/campaigns';
 import type { DayPart, PostStats, ReviewBody, ReviewStatus, WeeklyReviewSetting } from '@shared/analytics';
 import type { EditSpec, EditTemplate } from '@shared/edit';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostProblem, PostStatus, PublishPlatform, QueueSlot } from '@shared/publish';
@@ -288,6 +288,9 @@ export type AnalyticsOverview = {
   };
   accounts: AnalyticsAccount[];
   posts: PostPerformanceRow[];
+  /** The campaigns this page posts clips for (the filter), and the one filtered on with its numbers. */
+  campaigns: { id: string; title: string; origin: CampaignOrigin }[];
+  campaign: { id: string; title: string; origin: CampaignOrigin; ratePer1k: number | null; budgetLeft: number | null; budgetTotal: number | null; results: CampaignResults } | null;
 };
 
 export type PostReadings = {
@@ -329,7 +332,16 @@ export type TodayWork = {
   progress: number | null;
 };
 
-export type TodayCampaign = Pick<Campaign, 'id' | 'title' | 'brand' | 'origin' | 'ratePer1k' | 'budgetLeft' | 'budgetTotal' | 'deadline' | 'halalVerdict' | 'pageIds'>;
+export type TodayCampaign = Pick<Campaign, 'id' | 'link' | 'title' | 'brand' | 'origin' | 'ratePer1k' | 'budgetLeft' | 'budgetTotal' | 'deadline' | 'halalVerdict' | 'pageIds'>;
+/** A running campaign on Today, with what its clips earned so far. */
+export type TodayActiveCampaign = TodayCampaign & { earned: number; estimated: number; posted: number; budgetLow: boolean; accepting: boolean | null };
+
+export type SubmissionsSyncState = {
+  last: { at: number; ok: boolean; note: string | null; seen: number; matched: number } | null;
+  /** Content Rewards can be read (the desktop app is running the server). */
+  available: boolean;
+  running: boolean;
+};
 
 /** The Today view: what needs me across every workspace. */
 export type TodayData = {
@@ -350,7 +362,11 @@ export type TodayData = {
   posts: Post[];
   attention: Post[];
   work: TodayWork[];
-  campaigns: { toConfirm: TodayCampaign[]; active: TodayCampaign[] };
+  campaigns: { toConfirm: TodayCampaign[]; active: TodayActiveCampaign[] };
+  /** Posted campaign clips to submit on Content Rewards. */
+  submissions: Submission[];
+  /** The desktop app runs the server: Content Rewards opens in its signed-in window. */
+  desktop: boolean;
   usage: ClaudeUsage | null;
   reviews: { id: string; workspaceId: string; finishedAt: number | null }[];
 };

@@ -4,12 +4,14 @@ import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { FollowerChart, ScoreChart, TimingBars } from '@/components/analytics/charts';
 import { ReviewCard } from '@/components/analytics/ReviewCard';
+import { ResultsTiles } from '@/components/campaigns/Submissions';
 import { PageHeader } from '@/components/PageHeader';
 import { AccountAvatar, accountName, PlatformIcon, platformLabel } from '@/components/publish/common';
 import { PostSheet } from '@/components/publish/PostSheet';
 import { useWorkspaceContext } from '@/components/WorkspaceLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { api, errorMessage, mediaThumbUrl } from '@/lib/api';
@@ -26,11 +28,31 @@ export function AnalyticsPage() {
   const { workspace } = useWorkspaceContext();
   const wid = workspace.id;
   const days = useStore(period);
-  const data = useAnalytics(wid, days);
   const [params, setParams] = useSearchParams();
+  const campaignId = params.get('campaign') ?? '';
+  const data = useAnalytics(wid, days, campaignId);
   const [refreshing, setRefreshing] = useState(false);
   const d = data.data;
-  const show = (id: string | null) => setParams(id ? { post: id } : {}, { replace: !id });
+  const show = (id: string | null) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (id) next.set('post', id);
+        else next.delete('post');
+        return next;
+      },
+      { replace: !id },
+    );
+  const pickCampaign = (id: string) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (id) next.set('campaign', id);
+        else next.delete('campaign');
+        return next;
+      },
+      { replace: true },
+    );
 
   async function refresh() {
     setRefreshing(true);
@@ -51,6 +73,21 @@ export function AnalyticsPage() {
         description={d?.syncedAt ? `Numbers from ${timeAgo(d.syncedAt)}` : `How ${workspace.name}’s posts are doing`}
         actions={
           <>
+            {!!d?.campaigns?.length && (
+              <Select value={campaignId || 'all'} onValueChange={(v) => pickCampaign(v === 'all' ? '' : v)}>
+                <SelectTrigger size="sm" className="w-auto max-w-28 sm:max-w-44" aria-label="Campaign">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All posts</SelectItem>
+                  {d.campaigns.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.title || 'Untitled campaign'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <ToggleGroup type="single" variant="outline" size="sm" value={String(days)} onValueChange={(v) => v && period.set(Number(v))} aria-label="Period">
               {PERIODS.map((p) => (
                 <ToggleGroupItem key={p} value={String(p)} aria-label={`Last ${p} days`}>
@@ -100,6 +137,21 @@ function Overview({ data: d, wid, onOpen }: { data: AnalyticsOverview; wid: stri
   const unscored = d.posts.filter((p) => p.score === null).length;
   return (
     <>
+      {d.campaign && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <Link to={`/campaigns/${d.campaign.id}`} className="hover:underline">
+                {d.campaign.title}
+              </Link>
+            </CardTitle>
+            <CardDescription>All of the campaign’s clips so far, on every page it posts on. Below: this page’s clips for it in the last {d.days} days.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResultsTiles r={d.campaign.results} origin={d.campaign.origin} />
+          </CardContent>
+        </Card>
+      )}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Views" value={compact(t.views)} note={`on ${t.posts} post${t.posts === 1 ? '' : 's'} from the last ${d.days} days`} />
         <Stat

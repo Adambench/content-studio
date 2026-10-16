@@ -7,6 +7,7 @@ import { config } from '../config';
 import { db, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { notFound } from '../lib/http';
+import { campaignResults, listSubmissions } from './submissions';
 
 export type CampaignRow = typeof schema.campaigns.$inferSelect;
 export type SourceRow = typeof schema.campaignSources.$inferSelect;
@@ -28,7 +29,7 @@ export function pagesOf(campaignIds: string[]) {
 }
 
 export function toCampaign(row: CampaignRow, pageIds: string[] = []): Campaign {
-  const { pageText: _pageText, ...rest } = row;
+  const { pageText: _pageText, budgetWarnedAt: _warned, ...rest } = row;
   return { ...rest, pageIds };
 }
 
@@ -63,7 +64,13 @@ export function listMoments(campaignId: string) {
 
 export function getCampaignDetail(id: string): CampaignDetail {
   const row = getCampaignRow(id);
-  return { ...toCampaign(row, pagesOf([id]).get(id)), sources: listSources(id).map(toSource), moments: listMoments(id) };
+  return {
+    ...toCampaign(row, pagesOf([id]).get(id)),
+    sources: listSources(id).map(toSource),
+    moments: listMoments(id),
+    submissions: listSubmissions({ campaignId: id }),
+    results: campaignResults(id),
+  };
 }
 
 /** Campaigns a workspace works on: assigned to it, or its own (a business's). For Claude's read-only tools. */

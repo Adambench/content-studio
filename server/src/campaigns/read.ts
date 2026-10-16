@@ -5,8 +5,12 @@ import { CAMPAIGN_PLATFORMS, CHECK_TYPES, RULE_KINDS, sourceKindOf, type Campaig
 import type { PageRead } from '../../../shared/sites';
 import { parsePage } from '../claude/extract';
 import { playbook } from '../claude/plugin';
+import { and, eq } from 'drizzle-orm';
+import { budgetLow, money as moneyText } from '../../../shared/campaigns';
+import { db, now, schema } from '../db';
 import { desktopAvailable, readPage } from '../lib/desktop';
 import { emit } from '../lib/events';
+import { notify } from '../lib/push';
 import { getCampaignRow, updateCampaign } from './campaigns';
 import { insertSource } from './sources';
 
@@ -237,4 +241,62 @@ export function onReadFailed({ campaignId }: { campaignId: string }, message: st
     /* deleted meanwhile */
   }
   emit({ type: 'job', jobType: 'campaign.read', status: 'error', message });
+}
+
+// ---------- the budget, every day ----------
+
+const amount = (n: string, unit?: string) => {
+  const v = Number(n.replace(/,/g, ''));
+  if (!Number.isFinite(v)) return null;
+  return unit?.toUpperCase() === 'M' ? v * 1e6 : unit?.toUpperCase() === 'K' ? v * 1000 : v;
+};
+
+/**
+ * The budget and whether it takes clips, from a campaign page's text as anyone sees it ("Budget $1,711 $18,289
+ * remaining", "Accepting clips"). Mechanical, so it can run every day without Claude. Null where the page doesn't say.
+ */
+export function parseBudget(text: string) {
+  const t = text.replace(/[\u2066-\u2069\u200e\u200f]/g, '');
+  const left = /\$\s*([\d,]+(?:\.\d+)?)\s*([KM])?\s*remaining/i.exec(t);
+  const used = /Budget\s*\$\s*([\d,]+(?:\.\d+)?)\s*([KM])?/i.exec(t);
+  const budgetLeft = left ? amount(left[1], left[2]) : null;
+  const budgetUsed = used && (!left || used.index !== left.index) ? amount(used[1], used[2]) : null;
+  const accepting = /accepting clips/i.test(t) && !/not accepting|no longer accepting/i.test(t) ? true : /not accepting|no longer accepting|campaign (has )?ended|budget (is )?(spent|exhausted)/i.test(t) ? false : null;
+  return { budgetLeft, budgetTotal: budgetLeft !== null && budgetUsed !== null ? budgetLeft + budgetUsed : null, accepting };
+}
+
+/**
+ * The `campaign.budget` job: read each active Content Rewards campaign's public page (a plain fetch, no Claude, no
+ * page read used up) for its budget left and whether it takes clips, and say once when one runs low.
+ */
+export async function refreshBudgets() {
+  const active = db
+    .select()
+    .from(schema.campaigns)
+    .where(and(eq(schema.campaigns.origin, 'content_rewards'), eq(schema.campaigns.status, 'active')))
+    .all()
+    .filter((c) => c.link);
+  for (const c of active) {
+    try {
+      const b = parseBudget((await fetchPage(c.link!)).text);
+      const next = {
+        budgetCheckedAt: now(),
+        ...(b.budgetLeft !== null && { budgetLeft: b.budgetLeft }),
+        ...(b.budgetTotal !== null && { budgetTotal: b.budgetTotal }),
+        ...(b.accepting !== null && { accepting: b.accepting }),
+      };
+      const after = { ...c, ...next };
+      const low = budgetLow(after) || after.accepting === false;
+      updateCampaign(c.id, { ...next, budgetWarnedAt: low ? (c.budgetWarnedAt ?? now()) : null });
+      if (low && !c.budgetWarnedAt)
+        await notify(
+          after.accepting === false ? `${c.title} stopped taking clips` : `${c.title} is running out of budget`,
+          after.accepting === false ? 'Its page says it isn’t accepting clips. Pause it so no more clips are made for it.' : `${moneyText(after.budgetLeft)} left. Clips posted when it runs out may not be paid.`,
+          `/campaigns/${c.id}`,
+        );
+    } catch (err) {
+      console.warn(`[campaigns] budget of ${c.title}: ${(err as Error).message}`);
+      updateCampaign(c.id, { budgetCheckedAt: now() });
+    }
+  }
 }

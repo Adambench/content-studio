@@ -1,8 +1,10 @@
 import { AlertCircle, BadgeDollarSign, CalendarCheck, Clapperboard, Loader2, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { money } from '@shared/campaigns';
 import { KIND_INFO } from '@shared/types';
 import { BudgetBar, deadlineText, HalalBadge, rateText } from '@/components/campaigns/common';
+import { SubmitRow } from '@/components/campaigns/Submissions';
 import { KIND_ICONS } from '@/components/KindPicker';
 import { PageHeader } from '@/components/PageHeader';
 import { PlatformIcon, StatusIcon, formatTime, formatWhen, statusText } from '@/components/publish/common';
@@ -14,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { mediaThumbUrl } from '@/lib/api';
 import { duration, timeAgo } from '@/lib/format';
 import { useToday } from '@/lib/queries';
-import type { Post, TodayCampaign, TodayData, TodayWork } from '@/lib/types';
+import type { Post, TodayActiveCampaign, TodayData, TodayWork } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 type Ws = TodayData['workspaces'][number];
@@ -142,8 +144,9 @@ function WorkRow({ item, ws }: { item: TodayWork; ws: Ws | undefined }) {
   );
 }
 
-function CampaignTile({ c }: { c: TodayCampaign }) {
+function CampaignTile({ c }: { c: TodayActiveCampaign }) {
   const deadline = deadlineText(c.deadline);
+  const earnings = c.earned + c.estimated;
   return (
     <Link to={`/campaigns/${c.id}`} className="block space-y-2 rounded-lg border bg-card p-3 hover:border-foreground/20">
       <div className="flex items-start gap-2">
@@ -155,6 +158,23 @@ function CampaignTile({ c }: { c: TodayCampaign }) {
         {deadline && <span>{deadline}</span>}
       </p>
       {c.origin === 'content_rewards' && <BudgetBar left={c.budgetLeft} total={c.budgetTotal} />}
+      {c.posted > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {c.posted} clip{c.posted === 1 ? '' : 's'} posted
+          {c.origin === 'content_rewards' && earnings > 0 && (
+            <>
+              {' · '}
+              <span className="text-foreground">{money(earnings)}</span>
+              {c.estimated ? ' (partly estimated)' : ' earned'}
+            </>
+          )}
+        </p>
+      )}
+      {c.accepting === false ? (
+        <p className="text-xs text-amber-400">Its page says it isn’t accepting clips: pause it.</p>
+      ) : (
+        c.budgetLow && <p className="text-xs text-amber-400">Budget running low: clips posted after it runs out may not be paid.</p>
+      )}
     </Link>
   );
 }
@@ -212,7 +232,9 @@ export function TodayPage() {
   const toPost = todays.filter((p) => p.status === 'scheduled' || p.status === 'publishing').length;
   const toConfirm = data.campaigns?.toConfirm ?? [];
   const activeCampaigns = data.campaigns?.active ?? [];
-  const needsYou = data.review.length + data.attention.length + data.reviews.length + toConfirm.length;
+  const submissions = data.submissions ?? [];
+  const campaignsById = new Map([...activeCampaigns, ...toConfirm].map((c) => [c.id, c]));
+  const needsYou = data.review.length + data.attention.length + data.reviews.length + toConfirm.length + submissions.length;
 
   return (
     <div className="flex h-full flex-col">
@@ -246,6 +268,18 @@ export function TodayPage() {
                       <ReviewTile key={item.id} item={item} ws={wsById.get(item.workspaceId)} />
                     ))}
                   </div>
+                </div>
+              )}
+              {submissions.length > 0 && (
+                <div className="space-y-2">
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <BadgeDollarSign className="size-3.5 text-orange-400" />
+                    {submissions.length === 1 ? 'A clip is' : `${submissions.length} clips are`} posted: submit {submissions.length === 1 ? 'its link' : 'their links'} on Content Rewards
+                    {data.desktop ? '' : ' (the campaign opens in your browser)'}, then tap Done.
+                  </p>
+                  {submissions.map((s) => (
+                    <SubmitRow key={s.id} s={s} campaign={campaignsById.get(s.campaignId)} />
+                  ))}
                 </div>
               )}
               {toConfirm.map((c) => (

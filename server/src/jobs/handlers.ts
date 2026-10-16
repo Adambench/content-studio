@@ -6,7 +6,8 @@ import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Transcript } from '../../../shared/types';
 import { onReviewFailed, runReview } from '../analytics/review';
 import { statsJob } from '../analytics/schedule';
-import { onReadFailed, readCampaign } from '../campaigns/read';
+import { onReadFailed, readCampaign, refreshBudgets } from '../campaigns/read';
+import { onSyncFailed, syncSubmissions } from '../campaigns/submissions';
 import { downloadSource, onSourceFailed, transcribeSource } from '../campaigns/sources';
 import { makeClip, onMakeFailed } from '../clipping/make';
 import { pickMoments } from '../clipping/pick';
@@ -223,4 +224,9 @@ export function registerHandlers() {
   onJobFailed('source.pick', onSourceFailed);
   registerJob('clip.make', makeClip, 1);
   onJobFailed('clip.make', onMakeFailed);
+  // Submissions and earnings: budgets from the campaigns' public pages (no Claude), and my submissions page on
+  // Content Rewards read in the signed-in window (one Haiku call).
+  registerJob('campaign.budget', refreshBudgets, 1);
+  registerJob('submissions.sync', syncSubmissions, 1);
+  onJobFailed('submissions.sync', onSyncFailed);
 }

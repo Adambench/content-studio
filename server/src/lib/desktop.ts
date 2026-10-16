@@ -77,6 +77,11 @@ export function openSignIn(site: SiteId) {
   return call<{ ok: true }>({ op: 'signin', site }, 30_000);
 }
 
+/** Open one of the sites' pages in a visible signed-in window on the computer (I act there; the app doesn't). */
+export function openSitePage(url: string) {
+  return call<{ ok: true }>({ op: 'open', url }, 30_000);
+}
+
 /** Sign out of a site: clears everything it stored in the signed-in session. */
 export function signOutSite(site: SiteId) {
   return call<{ ok: true }>({ op: 'signout', site }, 30_000);
