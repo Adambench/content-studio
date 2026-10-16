@@ -1,4 +1,4 @@
-import { asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { isRunning, runChat, stopChat } from '../claude/agent';
@@ -6,7 +6,7 @@ import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { notFound } from '../lib/http';
 import { openSse } from '../lib/sse';
-import { getWorkspace } from '../services/pieces';
+import { getPiece, getWorkspace } from '../services/pieces';
 
 const modelSchema = z.enum(['sonnet', 'opus', 'haiku']);
 
@@ -21,7 +21,8 @@ export async function chatRoutes(app: FastifyInstance) {
     db
       .select({ id: schema.chatThreads.id, title: schema.chatThreads.title, model: schema.chatThreads.model, updatedAt: schema.chatThreads.updatedAt })
       .from(schema.chatThreads)
-      .where(eq(schema.chatThreads.workspaceId, req.params.wid))
+      // A video's own chat lives in its package, not in this list.
+      .where(and(eq(schema.chatThreads.workspaceId, req.params.wid), isNull(schema.chatThreads.pieceId)))
       .orderBy(desc(schema.chatThreads.updatedAt))
       .limit(100)
       .all()
@@ -35,6 +36,16 @@ export async function chatRoutes(app: FastifyInstance) {
     db.insert(schema.chatThreads).values({ id, workspaceId: ws.id, model: body.model ?? null }).run();
     emit({ type: 'changed', entity: 'threads', workspaceId: ws.id, id });
     return getThread(id);
+  });
+
+  /** A video's own chat: its latest, started on first use. */
+  app.get<{ Params: { id: string } }>('/api/pieces/:id/thread', async (req) => {
+    const piece = getPiece(req.params.id);
+    const found = db.select().from(schema.chatThreads).where(eq(schema.chatThreads.pieceId, piece.id)).orderBy(desc(schema.chatThreads.updatedAt)).get();
+    if (found) return { ...found, running: isRunning(found.id) };
+    const id = newId();
+    db.insert(schema.chatThreads).values({ id, workspaceId: piece.workspaceId, pieceId: piece.id, title: piece.title.slice(0, 100) }).run();
+    return { ...getThread(id), running: false };
   });
 
   app.patch<{ Params: { id: string } }>('/api/threads/:id', async (req) => {

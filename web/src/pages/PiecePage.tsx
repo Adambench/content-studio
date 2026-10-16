@@ -1,10 +1,14 @@
-import { ArrowLeft, CalendarClock, Clapperboard, GitBranchPlus, History, MoreHorizontal, Paperclip, Pencil, Save, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowLeft, CalendarClock, ChevronRight, Clapperboard, GitBranchPlus, History, Inbox, MoreHorizontal, Pencil, Save, Sparkles, ThumbsUp, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { LIMITS, PLATFORM_LABELS, type DraftContent, type Platform } from '@shared/types';
+import type { ReviewClip } from '@shared/clipping';
+import { LIMITS, PLATFORM_LABELS, REVIEW_STAGE, type DraftContent, type Platform } from '@shared/types';
 import { MediaCard } from '@/components/MediaCard';
 import { MediaDialog } from '@/components/MediaDialog';
+import { ClipReview } from '@/components/package/ClipReview';
+import { StageStepper } from '@/components/package/StageStepper';
+import { VideoPanel } from '@/components/package/VideoPanel';
 import { PiecePosts } from '@/components/publish/PiecePosts';
 import { ScheduleDialog } from '@/components/publish/ScheduleDialog';
 import { TagInput } from '@/components/TagInput';
@@ -19,7 +23,6 @@ import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -27,7 +30,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useNativePick, useUpload } from '@/hooks/useUpload';
 import { api, errorMessage } from '@/lib/api';
 import { onLiveEvent } from '@/lib/live';
-import { keys, queryClient, useMedia, usePiece, useTags } from '@/lib/queries';
+import { boardLabel } from '@/lib/nav';
+import { keys, queryClient, useMedia, usePackage, usePiece, useReview, useTags } from '@/lib/queries';
 import type { Branch, PieceDetail } from '@/lib/types';
 import { openClaude } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
@@ -62,10 +66,31 @@ export function PiecePage() {
   return <Editor key={piece.data.id} piece={piece.data} />;
 }
 
+/** The next thing this video needs, as the header's main button. */
+function useNextAction(piece: PieceDetail, summary: ReviewClip | undefined, schedule: () => void) {
+  const navigate = useNavigate();
+  const footage = piece.media.some((m) => m.source !== 'render');
+  const done = piece.stage === 'scheduled' || piece.stage === 'posted';
+  if (summary?.stage === REVIEW_STAGE && summary.render)
+    return { label: 'Approve or reject', icon: ThumbsUp, run: () => document.getElementById('review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) };
+  if (summary?.render && !done) return { label: 'Schedule', icon: CalendarClock, run: schedule };
+  if (summary?.rendering) return null;
+  if (footage) return { label: 'Edit the video', icon: Clapperboard, run: () => navigate(`/w/${piece.workspaceId}/p/${piece.id}/edit`) };
+  if (piece.stage === 'idea' || piece.stage === 'script')
+    return { label: 'Write it with Claude', icon: Sparkles, run: () => openClaude('Write the hook and script for this video, in my voice.') };
+  return { label: 'Add footage', icon: Upload, run: () => document.getElementById('footage')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) };
+}
+
+/**
+ * A video's package: the video itself, its review (clips), idea and script, captions, footage and posts on one page,
+ * with its own Claude chat beside it.
+ */
 function Editor({ piece }: { piece: PieceDetail }) {
   const { workspace } = useWorkspaceContext();
   const navigate = useNavigate();
   const tags = useTags(workspace.id);
+  const summary = usePackage(piece.id);
+  const queue = useReview();
   const branch = piece.branches.find((b) => b.id === piece.activeBranchId) ?? piece.branches[0];
 
   const [title, setTitle] = useState(piece.title);
@@ -76,6 +101,7 @@ function Editor({ piece }: { piece: PieceDetail }) {
       await api(`/pieces/${piece.id}`, { method: 'PATCH', body });
       queryClient.invalidateQueries({ queryKey: keys.piece(piece.id) });
       queryClient.invalidateQueries({ queryKey: keys.board(workspace.id) });
+      queryClient.invalidateQueries({ queryKey: keys.review });
     } catch (err) {
       toast.error(errorMessage(err));
     }
@@ -83,18 +109,30 @@ function Editor({ piece }: { piece: PieceDetail }) {
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [scheduling, setScheduling] = useState(false);
-  async function deletePiece() {
-    await api(`/pieces/${piece.id}`, { method: 'DELETE' });
+  const next = useNextAction(piece, summary.data, () => setScheduling(true));
+  const fileCount = piece.media.length;
+  // What can wait in the Inbox: footage, not what was made for this video (renders, cuts, voices).
+  const footageCount = piece.media.filter((m) => m.source === 'upload' || m.source === 'share').length;
+  async function deletePiece(files: 'delete' | 'keep') {
+    await api(`/pieces/${piece.id}?files=${files}`, { method: 'DELETE' });
     queryClient.invalidateQueries({ queryKey: keys.board(workspace.id) });
     navigate(`/w/${workspace.id}/board`);
-    toast.success('Piece deleted');
+    toast.success(files === 'keep' && footageCount ? 'Deleted; its footage is in the Inbox' : 'Deleted');
   }
+
+  // Clips waiting in Review: step through them without going back to the board.
+  const reviewing = summary.data?.stage === REVIEW_STAGE;
+  const waiting = queue.data ?? [];
+  const at = waiting.findIndex((c) => c.pieceId === piece.id);
+  const after = reviewing && at >= 0 ? (waiting[at + 1] ?? waiting[at - 1]) : waiting.find((c) => c.pieceId !== piece.id);
+  const openClip = (c: { pieceId: string; workspace: { id: string } } | undefined) => c && navigate(`/w/${c.workspace.id}/p/${c.pieceId}`);
+  const isClip = !!(summary.data?.moment || summary.data?.campaign);
 
   return (
     <div className="flex h-full flex-col">
       <header className="space-y-2 border-b px-4 py-3 md:px-6">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon-sm" asChild aria-label="Back to board">
+          <Button variant="ghost" size="icon-sm" asChild aria-label={`Back to ${boardLabel(workspace.kind).toLowerCase()}`}>
             <Link to={`/w/${workspace.id}/board`}>
               <ArrowLeft />
             </Link>
@@ -107,26 +145,16 @@ function Editor({ piece }: { piece: PieceDetail }) {
             className="min-w-0 flex-1 truncate rounded-md bg-transparent px-1 text-base font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             aria-label="Title"
           />
-          <Button variant="outline" size="sm" asChild>
-            <Link to={`/w/${workspace.id}/p/${piece.id}/edit`}>
-              <Clapperboard /> <span className="hidden sm:inline">Edit video</span>
-            </Link>
-          </Button>
-          <Button size="sm" onClick={() => setScheduling(true)}>
-            <CalendarClock /> <span className="hidden sm:inline">Schedule</span>
-          </Button>
-          <Select value={piece.stage} onValueChange={(stage) => patchPiece({ stage })}>
-            <SelectTrigger size="sm" className="w-auto" aria-label="Stage">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {workspace.stages.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {next && (
+            <Button size="sm" onClick={next.run}>
+              <next.icon /> <span className="hidden sm:inline">{next.label}</span>
+            </Button>
+          )}
+          {summary.data?.render && next?.label !== 'Schedule' && !reviewing && (
+            <Button size="sm" variant="outline" onClick={() => setScheduling(true)}>
+              <CalendarClock /> <span className="hidden sm:inline">Schedule</span>
+            </Button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm" aria-label="More">
@@ -134,23 +162,48 @@ function Editor({ piece }: { piece: PieceDetail }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => openClaude('Review this piece and suggest what to improve before filming.')}>
+              <DropdownMenuItem onSelect={() => openClaude(isClip ? 'Watch this clip and tell me what would make it stronger before I approve it.' : 'Review this video and suggest what to improve.')}>
                 <Sparkles /> Ask Claude to review
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setScheduling(true)}>
+                <CalendarClock /> Schedule
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
-                <Trash2 /> Delete piece
+                <Trash2 /> Delete video
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <TagInput value={piece.tags} onChange={(t) => patchPiece({ tags: t })} suggestions={tags.data} className="pl-9" />
+        <div className="flex items-center gap-2 pl-9">
+          <StageStepper stages={workspace.stages} current={piece.stage} onChange={(stage) => patchPiece({ stage })} className="flex-1" />
+          {after && (
+            <Button size="sm" variant="ghost" className="h-7 shrink-0 text-xs" onClick={() => openClip(after)}>
+              Next to review <ChevronRight />
+            </Button>
+          )}
+        </div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {branch && <BranchEditor key={branch.id} piece={piece} branch={branch} />}
-        <PiecePosts wid={workspace.id} pieceId={piece.id} onSchedule={() => setScheduling(true)} />
-        <AttachedMedia piece={piece} />
+        <div className="mx-auto grid max-w-6xl gap-6 p-4 md:p-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-8">
+          <div className="lg:sticky lg:top-0 lg:self-start">
+            <VideoPanel piece={piece} summary={summary.data} />
+          </div>
+          <div className="min-w-0 space-y-8">
+            {reviewing && summary.data && (
+              <section id="review" className="scroll-mt-4 rounded-xl border bg-card p-4" aria-label="Review">
+                <ClipReview clip={summary.data} onDone={() => (after ? openClip(after) : navigate(`/w/${workspace.id}/board`))} />
+              </section>
+            )}
+            <section className="space-y-3" aria-label="Idea and script">
+              <TagInput value={piece.tags} onChange={(t) => patchPiece({ tags: t })} suggestions={tags.data} />
+              {branch && <BranchEditor key={branch.id} piece={piece} branch={branch} />}
+            </section>
+            <AttachedMedia piece={piece} />
+            <PiecePosts wid={workspace.id} pieceId={piece.id} onSchedule={() => setScheduling(true)} />
+          </div>
+        </div>
       </div>
       <ScheduleDialog open={scheduling} onOpenChange={setScheduling} wid={workspace.id} pieceId={piece.id} />
 
@@ -158,11 +211,18 @@ function Editor({ piece }: { piece: PieceDetail }) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{piece.title}”?</AlertDialogTitle>
-            <AlertDialogDescription>All alternatives and versions are deleted. Attached footage stays in the library.</AlertDialogDescription>
+            <AlertDialogDescription>
+              Its alternatives, versions{fileCount ? `, edit and ${fileCount} file${fileCount === 1 ? '' : 's'}` : ' and edit'} go with it.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={deletePiece}>
+            {footageCount > 0 && (
+              <Button variant="outline" onClick={() => deletePiece('keep')}>
+                Keep the footage
+              </Button>
+            )}
+            <AlertDialogAction variant="destructive" onClick={() => deletePiece('delete')}>
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -305,7 +365,7 @@ function BranchEditor({ piece, branch }: { piece: PieceDetail; branch: Branch })
     });
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-4 py-5 md:px-6">
+    <div className="space-y-6">
       {/* Alternatives + save controls */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" role="tablist" aria-label="Alternatives">
@@ -413,8 +473,8 @@ function BranchEditor({ piece, branch }: { piece: PieceDetail; branch: Branch })
         <Textarea value={draft.notes} onChange={(e) => update((d) => ({ ...d, notes: e.target.value }))} placeholder="Shots, locations, b-roll, props" className="min-h-20" />
       </Field>
 
-      <section className="space-y-2" aria-label="Platform copy">
-        <h2 className="text-sm font-medium">Platform copy</h2>
+      <section id="platform-copy" className="scroll-mt-4 space-y-2" aria-label="Captions">
+        <h2 className="text-sm font-medium">Captions</h2>
         <Tabs defaultValue="tiktok">
           <TabsList className="w-full justify-start overflow-x-auto [scrollbar-width:none]">
             {(['tiktok', 'instagram', 'youtube', 'x'] as const).map((p) => (
@@ -567,9 +627,9 @@ function AttachedMedia({ piece }: { piece: PieceDetail }) {
   const videos = piece.media.filter((m) => m.source === 'render').reverse();
 
   return (
-    <UploadZone onFiles={upload} accept="video/*,image/*,audio/*" className="mx-auto max-w-3xl px-4 pb-10 md:px-6">
+    <UploadZone onFiles={upload} accept="video/*,image/*,audio/*" className="space-y-8 pb-10">
       {videos.length > 0 && (
-        <section className="space-y-3 border-t pt-6" aria-label="Finished videos">
+        <section className="space-y-3" aria-label="Finished videos">
           <div className="flex items-center gap-2">
             <h2 className="mr-auto text-sm font-medium">
               Finished videos <span className="text-muted-foreground tabular-nums">{videos.length}</span>
@@ -587,13 +647,13 @@ function AttachedMedia({ piece }: { piece: PieceDetail }) {
           </div>
         </section>
       )}
-      <section className="space-y-3 border-t pt-6" aria-label="Footage">
+      <section id="footage" className="scroll-mt-4 space-y-3" aria-label="Footage">
         <div className="flex items-center gap-2">
           <h2 className="mr-auto text-sm font-medium">
             Footage <span className="text-muted-foreground tabular-nums">{footage.length || ''}</span>
           </h2>
           <Button size="sm" variant="ghost" onClick={() => setPicking(true)}>
-            <Paperclip /> From library
+            <Inbox /> From Inbox
           </Button>
           <UploadButton onFiles={upload} onPick={pick} accept="video/*,image/*,audio/*" variant="outline" />
         </div>
@@ -604,19 +664,19 @@ function AttachedMedia({ piece }: { piece: PieceDetail }) {
             ))}
           </div>
         ) : (
-          <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">Drop clips here once you’ve filmed. Claude can watch them and help with hooks and captions, then cut them together in the video editor.</p>
+          <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">Drop what you filmed for this video here. Claude can watch it and help with hooks and captions, then cut it together in the video editor.</p>
         )}
       </section>
       <MediaDialog wid={workspace.id} mediaId={openId} onClose={() => setOpenId(null)} />
-      <LibraryPicker open={picking} onOpenChange={setPicking} wid={workspace.id} pieceId={piece.id} />
+      <InboxPicker open={picking} onOpenChange={setPicking} wid={workspace.id} pieceId={piece.id} />
     </UploadZone>
   );
 }
 
-function LibraryPicker({ open, onOpenChange, wid, pieceId }: { open: boolean; onOpenChange: (o: boolean) => void; wid: string; pieceId: string }) {
-  const media = useMedia(wid, { scope: 'footage' });
+function InboxPicker({ open, onOpenChange, wid, pieceId }: { open: boolean; onOpenChange: (o: boolean) => void; wid: string; pieceId: string }) {
+  const media = useMedia(wid, { scope: 'inbox' });
   const [selected, setSelected] = useState<string[]>([]);
-  const available = (media.data ?? []).filter((m) => m.pieceId !== pieceId);
+  const available = media.data ?? [];
 
   async function attach() {
     await Promise.all(selected.map((id) => api(`/media/${id}`, { method: 'PATCH', body: { pieceId } })));
@@ -630,8 +690,8 @@ function LibraryPicker({ open, onOpenChange, wid, pieceId }: { open: boolean; on
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Attach from library</DialogTitle>
-          <DialogDescription>Files attached elsewhere move to this piece.</DialogDescription>
+          <DialogTitle>Add from the Inbox</DialogTitle>
+          <DialogDescription>Files that aren’t in a video yet. To use one from another video, search for it (Ctrl K).</DialogDescription>
         </DialogHeader>
         <div className="max-h-[55dvh] overflow-y-auto">
           {available.length ? (
@@ -641,12 +701,12 @@ function LibraryPicker({ open, onOpenChange, wid, pieceId }: { open: boolean; on
               ))}
             </div>
           ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">Nothing else in the library yet.</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">The Inbox is empty.</p>
           )}
         </div>
         <DialogFooter>
           <Button onClick={attach} disabled={!selected.length}>
-            Attach {selected.length || ''}
+            Add {selected.length || ''}
           </Button>
         </DialogFooter>
       </DialogContent>

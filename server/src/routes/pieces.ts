@@ -6,6 +6,8 @@ import { pieceViews } from '../analytics/report';
 import { db, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, notFound } from '../lib/http';
+import { isLoose, queueInboxSort } from '../services/inbox';
+import { deleteMedia } from '../services/media';
 import { createBranch, createPiece, getBranch, getPiece, getPieceDetail, getWorkspace, restoreVersion, saveVersion, updateWorking } from '../services/pieces';
 
 const draftSchema = z.object({
@@ -48,7 +50,7 @@ export async function pieceRoutes(app: FastifyInstance) {
       .where(inArray(schema.versions.id, branches.map((b) => b.head).filter((h): h is string => !!h)))
       .all();
     const media = db
-      .select({ id: schema.media.id, pieceId: schema.media.pieceId, hasThumb: schema.media.hasThumb, kind: schema.media.kind })
+      .select({ id: schema.media.id, pieceId: schema.media.pieceId, hasThumb: schema.media.hasThumb, kind: schema.media.kind, source: schema.media.source })
       .from(schema.media)
       .where(and(inArray(schema.media.pieceId, ids), isNull(schema.media.assetType)))
       .orderBy(asc(schema.media.createdAt))
@@ -74,7 +76,9 @@ export async function pieceRoutes(app: FastifyInstance) {
         hook: active ? normalizeDraft(active.working).hook : '',
         alternatives: own.length,
         mediaCount: ownMedia.length,
-        thumbMediaId: ownMedia.find((m) => m.hasThumb)?.id ?? null,
+        // The newest finished video, else the first footage.
+        thumbMediaId: (ownMedia.findLast((m) => m.hasThumb && m.source === 'render') ?? ownMedia.find((m) => m.hasThumb))?.id ?? null,
+        rendered: ownMedia.some((m) => m.source === 'render'),
         lastAuthor: active?.head ? (authorOf.get(active.head) ?? null) : null,
         ...postSummary(posts.filter((x) => x.pieceId === p.id)),
         // Latest views across its posts, once any are in.
@@ -111,7 +115,14 @@ export async function pieceRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>('/api/pieces/:id', async (req) => {
     const piece = getPiece(req.params.id);
+    // A video is a package: by default its files go with it; `files=keep` sends them to the Inbox instead.
+    const { files } = z.object({ files: z.enum(['delete', 'keep']).default('delete') }).parse(req.query);
+    const own = db.select().from(schema.media).where(and(eq(schema.media.pieceId, piece.id), isNull(schema.media.assetType))).all();
+    // Kept files go to the Inbox; what was made for this video (renders, cuts, voices) can't live anywhere else.
+    const kept = files === 'keep' ? own.filter((m) => isLoose({ ...m, pieceId: null })) : [];
+    for (const m of own) if (!kept.includes(m)) await deleteMedia(m.id);
     db.delete(schema.pieces).where(eq(schema.pieces.id, piece.id)).run();
+    if (kept.length) queueInboxSort(piece.workspaceId);
     emit({ type: 'changed', entity: 'pieces', workspaceId: piece.workspaceId, id: piece.id });
     emit({ type: 'changed', entity: 'media', workspaceId: piece.workspaceId });
     return { ok: true };

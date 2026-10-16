@@ -118,7 +118,7 @@ versionCode from the tag (`v1.2.3` → 10203).
    needs Play services, real FCM). The phone needs a new release for everything since phase 7 (`API_VERSION` 2).
 7. **Clipping, campaigns, research, formats** — built.
 8. **Streamlined video pipeline** — in progress, see *Phase 8 build plan*
-   - [ ] Step 1 — Every video is a package; nav per kind; Inbox + search instead of the Library
+   - [x] Step 1 — Every video is a package; nav per kind; Inbox + search instead of the Library (2026-10-16)
    - [ ] Step 2 — Feedback loop in the package (timestamped notes → Claude edits → re-render → before/after)
    - [ ] Step 3 — Compute workers on the home PCs
    - [ ] Step 4 — Skills and the creative arsenal

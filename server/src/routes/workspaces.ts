@@ -12,6 +12,7 @@ import { badRequest } from '../lib/http';
 import { getSetting, setSetting } from '../lib/settings';
 import { enqueue } from '../jobs/queue';
 import { getWorkspace } from '../services/pieces';
+import { inboxWhere } from '../services/inbox';
 
 const stageSchema = z.object({ id: z.string().min(1).max(40), name: z.string().trim().min(1).max(40) });
 const patchSchema = z.object({
@@ -47,7 +48,8 @@ export async function workspaceRoutes(app: FastifyInstance) {
       .groupBy(schema.pieces.workspaceId)
       .all();
     const byWs = new Map(counts.map((c) => [c.workspaceId, c.n]));
-    return rows.map((w) => ({ ...w, pieceCount: byWs.get(w.id) ?? 0 }));
+    const inbox = (id: string) => db.select({ n: sql<number>`count(*)` }).from(schema.media).where(inboxWhere(id)).get()?.n ?? 0;
+    return rows.map((w) => ({ ...w, pieceCount: byWs.get(w.id) ?? 0, inboxCount: inbox(w.id) }));
   });
 
   app.post('/api/workspaces', async (req) => {

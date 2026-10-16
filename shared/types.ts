@@ -154,6 +154,9 @@ export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
   other: 'Other',
 };
 
+/** Claude's guess at the video a loose (Inbox) file belongs to: a piece, or a new idea named `title`. */
+export type InboxSuggestion = { pieceId: string | null; title: string; why: string; at: number };
+
 export type TranscriptStatus = 'none' | 'queued' | 'running' | 'done' | 'error' | 'unavailable';
 /**
  * `clip`: cut from a campaign's source video by clipping. `tts`: speech made on this computer for a format video.

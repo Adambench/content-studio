@@ -106,7 +106,7 @@ function StudioHeader({ pieceId, title, children }: { pieceId: string; title?: s
   const { workspace } = useWorkspaceContext();
   return (
     <header className="flex flex-wrap items-center gap-2 border-b px-3 py-2.5 md:px-4">
-      <Button variant="ghost" size="icon-sm" asChild aria-label="Back to the piece">
+      <Button variant="ghost" size="icon-sm" asChild aria-label="Back to the video">
         <Link to={`/w/${workspace.id}/p/${pieceId}`}>
           <ArrowLeft />
         </Link>

@@ -7,7 +7,7 @@ import type { EditSpec, EditTemplate } from '../../../shared/edit';
 import type { AnalysisStatus, ItemPlatform, ResearchAnalysis, ResearchBriefBody, ResearchSettings, ResearchSource } from '../../../shared/research';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
 import type { SessionKind } from '../../../shared/devices';
-import type { AssetType, ChatPart, DraftContent, MediaKind, MediaSource, ModuleId, ProxyStatus, RenderStatus, Stage, TranscriptStatus, WorkspaceKind } from '../../../shared/types';
+import type { AssetType, ChatPart, DraftContent, InboxSuggestion, MediaKind, MediaSource, ModuleId, ProxyStatus, RenderStatus, Stage, TranscriptStatus, WorkspaceKind } from '../../../shared/types';
 
 const id = () => text('id').primaryKey();
 const createdAt = () => integer('created_at').notNull().default(sql`(unixepoch() * 1000)`);
@@ -129,6 +129,8 @@ export const media = sqliteTable(
     transcriptLang: text('transcript_lang'),
     notes: text('notes').notNull().default(''),
     proxyStatus: text('proxy_status').$type<ProxyStatus>().notNull().default('none'),
+    // A loose file's (Inbox) best guess at the video it belongs to, from Claude.
+    suggestion: text('suggestion', { mode: 'json' }).$type<InboxSuggestion>(),
     createdAt: createdAt(),
   },
   (t) => [index('media_workspace_idx').on(t.workspaceId), index('media_piece_idx').on(t.pieceId)],
@@ -210,12 +212,14 @@ export const chatThreads = sqliteTable(
     id: id(),
     workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
     title: text('title').notNull().default('New chat'),
+    // A video's own chat, beside its package; null for the workspace's general chats.
+    pieceId: text('piece_id').references(() => pieces.id, { onDelete: 'cascade' }),
     sdkSessionId: text('sdk_session_id'),
     model: text('model'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index('threads_workspace_idx').on(t.workspaceId)],
+  (t) => [index('threads_workspace_idx').on(t.workspaceId), index('threads_piece_idx').on(t.pieceId)],
 );
 
 export const chatMessages = sqliteTable(

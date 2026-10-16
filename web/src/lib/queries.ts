@@ -22,6 +22,7 @@ import type {
   PublishingSetup,
   RenderRow,
   Review,
+  SearchResults,
   SystemStatus,
   Thread,
   TodayData,
@@ -46,6 +47,8 @@ export const keys = {
   media: (wid: string, params: Record<string, string | undefined> = {}) => ['media', wid, params] as const,
   mediaItem: (id: string) => ['media-item', id] as const,
   threads: (wid: string) => ['threads', wid] as const,
+  pieceThread: (pieceId: string) => ['piece-thread', pieceId] as const,
+  search: (q: string) => ['search', q] as const,
   messages: (id: string) => ['messages', id] as const,
   settings: ['settings'] as const,
   status: ['status'] as const,
@@ -82,7 +85,7 @@ export const usePiece = (id: string) => useQuery({ queryKey: keys.piece(id), que
 export const useEdit = (pieceId: string) => useQuery({ queryKey: keys.edit(pieceId), queryFn: () => api<EditDetail | null>(`/pieces/${pieceId}/edit`) });
 export const useRenders = (pieceId: string) => useQuery({ queryKey: keys.renders(pieceId), queryFn: () => api<RenderRow[]>(`/pieces/${pieceId}/renders`) });
 
-export function useMedia(wid: string, params: { scope?: 'footage' | 'assets'; kind?: string; q?: string; pieceId?: string } = {}) {
+export function useMedia(wid: string, params: { scope?: 'footage' | 'assets' | 'inbox'; kind?: string; q?: string; pieceId?: string } = {}) {
   const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v)) as Record<string, string>;
   return useQuery({
     queryKey: keys.media(wid, clean),
@@ -93,6 +96,10 @@ export function useMedia(wid: string, params: { scope?: 'footage' | 'assets'; ki
 
 export const useMediaItem = (id: string | null) =>
   useQuery({ queryKey: keys.mediaItem(id ?? ''), queryFn: () => api<MediaDetail>(`/media/${id}`), enabled: !!id });
+/** A video's own chat (started on first use). */
+export const usePieceThread = (pieceId: string) => useQuery({ queryKey: keys.pieceThread(pieceId), queryFn: () => api<Thread>(`/pieces/${pieceId}/thread`), enabled: !!pieceId });
+export const useSearch = (q: string) =>
+  useQuery({ queryKey: keys.search(q), queryFn: () => api<SearchResults>(`/search?q=${encodeURIComponent(q)}`), enabled: q.length >= 2, placeholderData: (prev) => prev });
 export const useThreads = (wid: string) => useQuery({ queryKey: keys.threads(wid), queryFn: () => api<Thread[]>(`/workspaces/${wid}/threads`) });
 export const useMessages = (id: string | null) =>
   useQuery({ queryKey: keys.messages(id ?? ''), queryFn: () => api<{ thread: Thread; messages: ChatMessage[] }>(`/threads/${id}/messages`), enabled: !!id });
@@ -117,6 +124,9 @@ export const useResearch = (wid: string) =>
     enabled: !!wid,
     refetchInterval: (q) => (q.state.data?.running || q.state.data?.analyses.some((a) => a.analysisStatus === 'queued' || a.analysisStatus === 'running') ? 8000 : false),
   });
+
+/** A video's summary (latest render or how it's going, its moment, campaign, rules, where it goes); any stage. */
+export const usePackage = (pieceId: string) => useQuery({ queryKey: [...keys.review, pieceId], queryFn: () => api<ReviewClip>(`/review/${pieceId}`), enabled: !!pieceId });
 
 /** Clips waiting in Review across every page, oldest first. */
 export const useReview = () => useQuery({ queryKey: keys.review, queryFn: () => api<ReviewClip[]>('/review') });

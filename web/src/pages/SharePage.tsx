@@ -65,9 +65,9 @@ export function SharePage() {
       leaving.current = true;
       pendingShare.set(null);
       const ws = workspaces.find((w) => w.id === wid)?.name ?? 'the workspace';
-      if (footage.length) toast.success(`Sending to ${ws}`, { description: 'It uploads in the background and shows up in the library.' });
+      if (footage.length) toast.success(`Sending to ${ws}`, { description: target.pieceId ? 'It uploads in the background into that video.' : 'It uploads in the background into the Inbox; Claude suggests which video it belongs to.' });
       else toast.success('Idea captured', { description: 'Claude will turn it into a card on the board.' });
-      navigate(footage.length ? `/w/${wid}/library` : `/w/${wid}/board`, { replace: true });
+      navigate(footage.length ? (target.pieceId ? `/w/${wid}/p/${target.pieceId}` : `/w/${wid}/inbox`) : `/w/${wid}/board`, { replace: true });
     } catch (err) {
       toast.error(errorMessage(err));
       setSending(false);
@@ -88,7 +88,7 @@ export function SharePage() {
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-6">
         <section className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            {footage.length ? 'Goes to the library' : 'Becomes an idea card'}
+            {footage.length ? 'Goes into a video, or the Inbox' : 'Becomes an idea card'}
             {voice.length > 0 && footage.length > 0 && ' (voice notes become idea cards)'}
           </p>
           <ul className="divide-y rounded-lg border">
@@ -132,7 +132,7 @@ export function SharePage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Just the library</SelectItem>
+                <SelectItem value="none">The Inbox (Claude suggests where)</SelectItem>
                 {(board.data ?? []).map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.title}

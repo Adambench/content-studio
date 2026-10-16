@@ -48,7 +48,7 @@ function MomentRow({ m, link, page, active }: { m: Moment; link: string | null; 
   const [busy, setBusy] = useState(false);
   const at = `${clock(m.start)}–${clock(m.end)}`;
   const href = link && /youtube\.com\/watch/.test(link) ? `${link}&t=${Math.floor(m.start)}s` : link;
-  const clipHref = m.pieceId ? (m.pieceStage === REVIEW_STAGE ? `/review?piece=${m.pieceId}` : `/w/${m.workspaceId}/p/${m.pieceId}`) : null;
+  const clipHref = m.pieceId ? `/w/${m.workspaceId}/p/${m.pieceId}` : null;
   const canMake = active && (m.status === 'candidate' || m.status === 'failed' || m.status === 'dropped' || m.status === 'rejected' || (m.status === 'made' && !m.pieceId));
 
   async function act(path: string) {

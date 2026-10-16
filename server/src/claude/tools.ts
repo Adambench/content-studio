@@ -64,7 +64,7 @@ export function toolLabel(fullName: string, input: Record<string, any>): string 
     case 'search':
       return `Searched “${input.query ?? ''}”`;
     case 'list_media':
-      return 'Browsed the library';
+      return 'Looked through the footage';
     case 'get_piece':
       return 'Opened a piece';
     case 'create_piece':
@@ -194,8 +194,8 @@ export function buildTools(workspaceId: string) {
 
     tool(
       'list_media',
-      'List footage in the library, newest first.',
-      { unattachedOnly: z.boolean().optional().describe('Only files not attached to any piece'), limit: z.number().int().min(1).max(100).optional() },
+      'List footage, newest first: each file with the piece (video) it belongs to, or none when it waits in the Inbox.',
+      { unattachedOnly: z.boolean().optional().describe('Only the Inbox: files not in any piece yet'), limit: z.number().int().min(1).max(100).optional() },
       safe(async ({ unattachedOnly, limit }) => {
         const rows = db
           .select()

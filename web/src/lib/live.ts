@@ -55,6 +55,8 @@ function apply(event: LiveEvent) {
       case 'media':
         if (wid) inv(['media', wid]);
         if (event.id) inv(keys.mediaItem(event.id));
+        // The Inbox count in the nav.
+        refreshSoon(keys.workspaces);
         // Edits list their files (and whether preview copies are ready).
         inv(['edit']);
         break;
@@ -66,6 +68,7 @@ function apply(event: LiveEvent) {
         break;
       case 'threads':
         if (wid) inv(keys.threads(wid));
+        inv(['piece-thread']);
         if (event.id) inv(keys.messages(event.id));
         break;
       case 'settings':

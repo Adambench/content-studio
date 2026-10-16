@@ -158,7 +158,7 @@ export function SourcesCard({ campaign }: { campaign: CampaignDetail }) {
       <CardHeader>
         <CardTitle>Source videos</CardTitle>
         <CardDescription>
-          The long videos clips are cut from. They download to this computer (not into a page’s library) and get a transcript: YouTube’s captions when it has them, Whisper otherwise.
+          The long videos clips are cut from. They download to this computer (not into a page) and get a transcript: YouTube’s captions when it has them, Whisper otherwise.
           {found > 0 && ` ${found} listed and not downloaded yet: get the ones you want.`}
         </CardDescription>
       </CardHeader>

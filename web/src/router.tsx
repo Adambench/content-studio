@@ -12,13 +12,13 @@ import { CampaignPage } from '@/pages/CampaignPage';
 import { CampaignsPage } from '@/pages/CampaignsPage';
 import { CapturePage } from '@/pages/CapturePage';
 import { HomeRedirect } from '@/pages/HomeRedirect';
-import { LibraryPage } from '@/pages/LibraryPage';
+import { InboxPage } from '@/pages/InboxPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NewWorkspacePage } from '@/pages/NewWorkspacePage';
 import { PairPage } from '@/pages/PairPage';
 import { PiecePage } from '@/pages/PiecePage';
 import { ResearchPage } from '@/pages/ResearchPage';
-import { ReviewPage } from '@/pages/ReviewPage';
+import { ReviewRedirect } from '@/pages/ReviewRedirect';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { SharePage } from '@/pages/SharePage';
 import { StudioPage } from '@/pages/StudioPage';
@@ -39,7 +39,7 @@ export const router = createBrowserRouter([
           { path: 'today', element: <TodayPage /> },
           { path: 'campaigns', element: <CampaignsPage /> },
           { path: 'campaigns/:id', element: <CampaignPage /> },
-          { path: 'review', element: <ReviewPage /> },
+          { path: 'review', element: <ReviewRedirect /> },
           { path: 'settings', element: <SettingsPage /> },
           { path: 'capture', element: <CapturePage /> },
           { path: 'share', element: <SharePage /> },
@@ -52,7 +52,8 @@ export const router = createBrowserRouter([
               { path: 'board', element: <BoardPage /> },
               { path: 'p/:pid', element: <PiecePage /> },
               { path: 'p/:pid/edit', element: <StudioPage /> },
-              { path: 'library', element: <LibraryPage /> },
+              { path: 'inbox', element: <InboxPage /> },
+              { path: 'library', element: <Navigate to="../inbox" replace /> },
               { path: 'assets', element: <AssetsPage /> },
               { path: 'calendar', element: <CalendarPage /> },
               { path: 'accounts', element: <AccountsPage /> },

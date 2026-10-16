@@ -57,17 +57,17 @@ export function MediaPicker({
         <div className="max-h-[55dvh] space-y-4 overflow-y-auto">
           {first.length > 0 && (
             <section className="space-y-2">
-              <h3 className="text-xs font-medium text-muted-foreground">This piece</h3>
+              <h3 className="text-xs font-medium text-muted-foreground">This video</h3>
               {grid(first)}
             </section>
           )}
           {others.length > 0 && (
             <section className="space-y-2">
-              {first.length > 0 && <h3 className="text-xs font-medium text-muted-foreground">Library</h3>}
+              {first.length > 0 && <h3 className="text-xs font-medium text-muted-foreground">Inbox and other videos</h3>}
               {grid(others)}
             </section>
           )}
-          {!first.length && !others.length && <p className="py-8 text-center text-sm text-muted-foreground">Nothing suitable in the library yet.</p>}
+          {!first.length && !others.length && <p className="py-8 text-center text-sm text-muted-foreground">Nothing suitable yet: add files under Footage.</p>}
         </div>
         {multiple && (
           <DialogFooter>

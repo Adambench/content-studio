@@ -1,29 +1,21 @@
-import { BadgeDollarSign, CalendarDays, ChartColumn, FolderOpen, KanbanSquare, ListChecks, Mic, Palette, Settings, Sparkles, Sun, Telescope } from 'lucide-react';
+import { CalendarDays, Clapperboard, MoreHorizontal, Mic, Search, Settings, Sparkles, Sun } from 'lucide-react';
 import { NavLink, Outlet, useMatch } from 'react-router';
-import { REVIEW_STAGE, type ModuleId } from '@shared/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Kbd } from '@/components/ui/kbd';
 import { isApp } from '@/lib/native';
+import { boardLabel, navHref, workspaceNav, type NavItem } from '@/lib/nav';
 import { useSettings, useToday, useUpcomingPosts, useWorkspaces } from '@/lib/queries';
+import type { Workspace } from '@/lib/types';
 import { claudeDesktopOpen, claudeMobileOpen, openClaude, useStore } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
 import { AppBanners, UploadsButton } from './AppChrome';
+import { SearchDialog, searchOpen } from './SearchDialog';
 import { UsageMeter } from './UsageMeter';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 
-/** A workspace's pages. Those with a module show only when it's on (Campaigns and Review sit with Today, outside
- * workspaces). */
-const navItems: { to: string; label: string; icon: typeof KanbanSquare; module?: ModuleId }[] = [
-  { to: 'board', label: 'Board', icon: KanbanSquare },
-  { to: 'calendar', label: 'Calendar', icon: CalendarDays },
-  { to: 'analytics', label: 'Analytics', icon: ChartColumn },
-  { to: 'research', label: 'Research', icon: Telescope, module: 'research' },
-  { to: 'library', label: 'Library', icon: FolderOpen },
-  { to: 'assets', label: 'Brand assets', icon: Palette },
-];
-
-function SideLink({ to, icon: Icon, children }: { to: string; icon: typeof KanbanSquare; children: React.ReactNode }) {
+function SideLink({ to, icon: Icon, children }: { to: string; icon: NavItem['icon']; children: React.ReactNode }) {
   return (
     <NavLink
       to={to}
@@ -52,18 +44,6 @@ function TodayBadge({ className }: { className?: string }) {
   );
 }
 
-/** Clips waiting in Review across every page. */
-function ReviewBadge({ className }: { className?: string }) {
-  const today = useToday();
-  const n = today.data?.review.length ?? 0;
-  if (!n) return null;
-  return (
-    <Badge variant="secondary" className={cn('h-4 min-w-4 px-1 text-[10px] tabular-nums', className)} aria-label={`${n} clip${n === 1 ? '' : 's'} to review`}>
-      {n}
-    </Badge>
-  );
-}
-
 /** How many posts failed or missed their time: they need a decision. */
 function AttentionBadge({ wid, className }: { wid: string; className?: string }) {
   const posts = useUpcomingPosts(wid);
@@ -74,6 +54,23 @@ function AttentionBadge({ wid, className }: { wid: string; className?: string })
       {n}
     </Badge>
   );
+}
+
+/** Files waiting to be put in a video. */
+function InboxBadge({ ws, className }: { ws: Workspace; className?: string }) {
+  const n = ws.inboxCount ?? 0;
+  if (!n) return null;
+  return (
+    <Badge variant="secondary" className={cn('h-4 min-w-4 px-1 text-[10px] tabular-nums', className)} aria-label={`${n} file${n === 1 ? '' : 's'} in the Inbox`}>
+      {n}
+    </Badge>
+  );
+}
+
+function NavBadge({ item, ws, className }: { item: NavItem; ws: Workspace; className?: string }) {
+  if (item.badge === 'attention') return <AttentionBadge wid={ws.id} className={className} />;
+  if (item.badge === 'inbox') return <InboxBadge ws={ws} className={className} />;
+  return null;
 }
 
 export function AppShell() {
@@ -87,45 +84,41 @@ export function AppShell() {
   const isCapture = onCapture || onShare;
   const desktopOpen = useStore(claudeDesktopOpen);
   const { data: workspaces = [] } = useWorkspaces();
-  const modules = workspaces.find((w) => w.id === wid)?.modules ?? [];
-  // Campaigns live outside workspaces: shown when any page uses them; Review when any page has the column.
-  const campaigns = workspaces.some((w) => w.modules.includes('campaigns'));
-  const reviewing = workspaces.some((w) => w.stages.some((s) => s.id === REVIEW_STAGE));
+  const ws = workspaces.find((w) => w.id === wid);
+  const nav = ws ? workspaceNav(ws) : [];
+  // On phones the board and calendar sit in the bottom bar; the rest go in the top bar, the first ones as icons.
+  const topItems = nav.filter((i) => i.to !== 'board' && i.to !== 'calendar');
 
   return (
     <div className="flex h-full">
       {/* Desktop sidebar */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
-        <nav className="px-2 pt-2" aria-label="Home">
+        <nav className="flex flex-col gap-0.5 px-2 pt-2" aria-label="Home">
           <SideLink to="/today" icon={Sun}>
             Today
             <TodayBadge className="ml-auto" />
           </SideLink>
-          {reviewing && (
-            <SideLink to="/review" icon={ListChecks}>
-              Review
-              <ReviewBadge className="ml-auto" />
-            </SideLink>
-          )}
-          {campaigns && (
-            <SideLink to="/campaigns" icon={BadgeDollarSign}>
-              Campaigns
-            </SideLink>
-          )}
+          <button
+            type="button"
+            onClick={() => searchOpen.set(true)}
+            className="flex h-8 items-center gap-2.5 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <Search className="size-4" />
+            Search
+            <Kbd className="ml-auto">Ctrl K</Kbd>
+          </button>
         </nav>
         <div className="p-2">
           <WorkspaceSwitcher currentId={wid} />
         </div>
         <nav className="flex flex-col gap-0.5 px-2 py-1" aria-label="Workspace">
-          {wid &&
-            navItems
-              .filter((item) => !item.module || modules.includes(item.module))
-              .map((item) => (
-                <SideLink key={item.to} to={`/w/${wid}/${item.to}`} icon={item.icon}>
-                  {item.label}
-                  {item.to === 'calendar' && <AttentionBadge wid={wid} className="ml-auto" />}
-                </SideLink>
-              ))}
+          {ws &&
+            nav.map((item) => (
+              <SideLink key={item.to} to={navHref(ws.id, item)} icon={item.icon}>
+                {item.label}
+                <NavBadge item={item} ws={ws} className="ml-auto" />
+              </SideLink>
+            ))}
         </nav>
         <div className="mt-auto flex flex-col gap-1 p-2">
           {match && wid && (
@@ -148,51 +141,45 @@ export function AppShell() {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobile top bar */}
         <header className={cn('pt-safe flex items-center justify-between border-b px-2 md:hidden', isCapture && 'hidden')}>
-          <div className="flex h-12 items-center">
+          <div className="flex h-12 min-w-0 items-center">
             <WorkspaceSwitcher currentId={wid} compact />
           </div>
           <div className="flex items-center">
             {isApp && <UploadsButton />}
-            {campaigns && (
-              <Button variant="ghost" size="icon" asChild aria-label="Campaigns">
-                <NavLink to="/campaigns">
-                  <BadgeDollarSign />
-                </NavLink>
-              </Button>
-            )}
-            {wid && (
-              <Button variant="ghost" size="icon" asChild aria-label="Library">
-                <NavLink to={`/w/${wid}/library`}>
-                  <FolderOpen />
-                </NavLink>
-              </Button>
-            )}
-            {wid && (
-              <Button variant="ghost" size="icon" asChild aria-label="Analytics">
-                <NavLink to={`/w/${wid}/analytics`}>
-                  <ChartColumn />
-                </NavLink>
-              </Button>
-            )}
-            {wid && modules.includes('research') && (
-              <Button variant="ghost" size="icon" asChild aria-label="Research">
-                <NavLink to={`/w/${wid}/research`}>
-                  <Telescope />
-                </NavLink>
-              </Button>
-            )}
-            {wid && (
-              <Button variant="ghost" size="icon" asChild aria-label="Brand assets">
-                <NavLink to={`/w/${wid}/assets`}>
-                  <Palette />
-                </NavLink>
-              </Button>
-            )}
-            <Button variant="ghost" size="icon" asChild aria-label="Settings">
-              <NavLink to={wid ? `/w/${wid}/settings` : '/settings'}>
-                <Settings />
-              </NavLink>
+            <Button variant="ghost" size="icon" aria-label="Search" onClick={() => searchOpen.set(true)}>
+              <Search />
             </Button>
+            {ws &&
+              topItems.slice(0, 2).map((item) => (
+                <Button key={item.to} variant="ghost" size="icon" asChild aria-label={item.label} className="relative">
+                  <NavLink to={navHref(ws.id, item)}>
+                    <item.icon />
+                    <NavBadge item={item} ws={ws} className="absolute top-1 right-0.5" />
+                  </NavLink>
+                </Button>
+              ))}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="More">
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {ws &&
+                  topItems.slice(2).map((item) => (
+                    <DropdownMenuItem key={item.to} asChild>
+                      <NavLink to={navHref(ws.id, item)}>
+                        <item.icon /> {item.label}
+                      </NavLink>
+                    </DropdownMenuItem>
+                  ))}
+                <DropdownMenuItem asChild>
+                  <NavLink to={wid ? `/w/${wid}/settings` : '/settings'}>
+                    <Settings /> Settings
+                  </NavLink>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
 
@@ -204,13 +191,14 @@ export function AppShell() {
         </main>
 
         {/* Mobile bottom navigation */}
-        {wid && !isCapture && <MobileNav wid={wid} />}
+        {wid && !isCapture && <MobileNav wid={wid} kind={ws?.kind ?? 'personal'} />}
       </div>
+      <SearchDialog />
     </div>
   );
 }
 
-function MobileNav({ wid }: { wid: string }) {
+function MobileNav({ wid, kind }: { wid: string; kind: Workspace['kind'] }) {
   const item = 'flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] text-muted-foreground';
   const active = 'text-foreground';
   return (
@@ -220,7 +208,7 @@ function MobileNav({ wid }: { wid: string }) {
         <TodayBadge className="absolute top-2 left-1/2 ml-1.5" />
       </NavLink>
       <NavLink to={`/w/${wid}/board`} className={({ isActive }) => cn(item, 'h-14', isActive && active)}>
-        <KanbanSquare className="size-5" /> Board
+        <Clapperboard className="size-5" /> {boardLabel(kind)}
       </NavLink>
       <NavLink to="/capture" className={cn(item, 'h-14')} aria-label="Capture an idea">
         <span className="grid size-10 place-items-center rounded-full bg-brand text-white shadow-lg shadow-brand/20">

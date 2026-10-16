@@ -10,7 +10,8 @@ import { getSetting, setSetting } from '../lib/settings';
 import { enqueue } from '../jobs/queue';
 import { isAuthenticated } from './auth';
 import { deleteMedia, getMedia, mediaPath, readTranscript, saveUpload, thumbPath, whisperInstalled, type UploadedFile } from '../services/media';
-import { getPiece, getWorkspace } from '../services/pieces';
+import { inboxWhere, queueInboxSort } from '../services/inbox';
+import { createPiece, getPiece, getWorkspace } from '../services/pieces';
 
 const uploadQuery = z.object({
   pieceId: z.string().optional(),
@@ -42,7 +43,7 @@ export async function mediaRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { wid: string } }>('/api/workspaces/:wid/media', async (req) => {
     const q = z
-      .object({ scope: z.enum(['footage', 'assets']).default('footage'), kind: z.enum(['video', 'image', 'audio', 'other']).optional(), q: z.string().optional(), pieceId: z.string().optional() })
+      .object({ scope: z.enum(['footage', 'assets', 'inbox']).default('footage'), kind: z.enum(['video', 'image', 'audio', 'other']).optional(), q: z.string().optional(), pieceId: z.string().optional() })
       .parse(req.query);
     const term = q.q?.trim() ? `%${q.q.trim()}%` : undefined;
     return db
@@ -51,7 +52,7 @@ export async function mediaRoutes(app: FastifyInstance) {
       .where(
         and(
           eq(schema.media.workspaceId, req.params.wid),
-          q.scope === 'assets' ? isNotNull(schema.media.assetType) : isNull(schema.media.assetType),
+          q.scope === 'inbox' ? inboxWhere(req.params.wid) : q.scope === 'assets' ? isNotNull(schema.media.assetType) : isNull(schema.media.assetType),
           q.kind ? eq(schema.media.kind, q.kind) : undefined,
           q.pieceId ? eq(schema.media.pieceId, q.pieceId) : undefined,
           term ? or(like(schema.media.originalName, term), like(schema.media.notes, term), like(schema.media.transcriptText, term)) : undefined,
@@ -95,10 +96,34 @@ export async function mediaRoutes(app: FastifyInstance) {
       .parse(req.body);
     if (body.pieceId && getPiece(body.pieceId).workspaceId !== row.workspaceId) throw badRequest('That piece belongs to another workspace.');
     if (body.assetType && !row.assetType) throw badRequest('Footage can’t become a brand asset.');
-    db.update(schema.media).set(body).where(eq(schema.media.id, row.id)).run();
+    // Filed into a video (or back out of one): Claude's Inbox guess no longer applies.
+    db.update(schema.media).set(body.pieceId !== undefined ? { ...body, suggestion: null } : body).where(eq(schema.media.id, row.id)).run();
     emit({ type: 'changed', entity: 'media', workspaceId: row.workspaceId, id: row.id });
     for (const id of new Set([row.pieceId, body.pieceId])) if (id) emit({ type: 'changed', entity: 'pieces', workspaceId: row.workspaceId, id });
+    if (body.pieceId === null && !row.assetType) queueInboxSort(row.workspaceId);
     return getMedia(row.id);
+  });
+
+  /** Start a new video (an idea card) from a loose file, the file in it. */
+  app.post<{ Params: { id: string } }>('/api/media/:id/new-piece', async (req) => {
+    const row = getMedia(req.params.id);
+    if (row.assetType) throw badRequest('Brand assets don’t start videos.');
+    const body = z.object({ title: z.string().trim().min(1).max(200) }).parse(req.body);
+    // Footage that's already filmed starts at Edit where the board has it.
+    const { pieceId } = createPiece(row.workspaceId, { title: body.title, stage: row.kind === 'video' ? 'edit' : undefined, content: { notes: row.transcriptText ? `What's said in ${row.originalName}:\n${row.transcriptText}` : '' } });
+    db.update(schema.media).set({ pieceId, suggestion: null }).where(eq(schema.media.id, row.id)).run();
+    emit({ type: 'changed', entity: 'media', workspaceId: row.workspaceId, id: row.id });
+    emit({ type: 'changed', entity: 'pieces', workspaceId: row.workspaceId, id: pieceId });
+    return { pieceId };
+  });
+
+  /** Ask Claude again where the Inbox's files go (all of them, or only those without a guess). */
+  app.post<{ Params: { wid: string } }>('/api/workspaces/:wid/inbox/sort', async (req) => {
+    const ws = getWorkspace(req.params.wid);
+    const { again } = z.object({ again: z.boolean().default(false) }).parse(req.body ?? {});
+    if (again) db.update(schema.media).set({ suggestion: null }).where(inboxWhere(ws.id)).run();
+    queueInboxSort(ws.id, 0);
+    return { ok: true };
   });
 
   app.delete<{ Params: { id: string } }>('/api/media/:id', async (req) => {
@@ -155,6 +180,6 @@ export async function mediaRoutes(app: FastifyInstance) {
       enqueue('capture.structure', { workspaceId: ws.id, text });
       ideas++;
     }
-    return reply.redirect(library ? `/w/${ws.id}/library?shared=${library}` : `/w/${ws.id}/board?captured=${ideas}`, 303);
+    return reply.redirect(library ? `/w/${ws.id}/inbox?shared=${library}` : `/w/${ws.id}/board?captured=${ideas}`, 303);
   });
 }

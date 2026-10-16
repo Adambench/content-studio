@@ -2,7 +2,7 @@ import type { Campaign, CampaignOrigin, CampaignResults, Submission } from '@sha
 import type { DayPart, PostStats, ReviewBody, ReviewStatus, WeeklyReviewSetting } from '@shared/analytics';
 import type { EditSpec, EditTemplate } from '@shared/edit';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostProblem, PostStatus, PublishPlatform, QueueSlot } from '@shared/publish';
-import type { AssetType, ChatPart, ClaudeUsage, DraftContent, MediaKind, MediaSource, ModuleId, ProxyStatus, RenderStatus, Stage, Transcript, TranscriptStatus, WorkspaceColor, WorkspaceKind } from '@shared/types';
+import type { AssetType, ChatPart, ClaudeUsage, DraftContent, InboxSuggestion, MediaKind, MediaSource, ModuleId, ProxyStatus, RenderStatus, Stage, Transcript, TranscriptStatus, WorkspaceColor, WorkspaceKind } from '@shared/types';
 
 export type Workspace = {
   id: string;
@@ -20,6 +20,8 @@ export type Workspace = {
   createdAt: number;
   updatedAt: number;
   pieceCount?: number;
+  /** Footage waiting in the Inbox (not in a video yet). */
+  inboxCount?: number;
   pendingEdits?: number;
 };
 
@@ -34,6 +36,8 @@ export type BoardCard = {
   alternatives: number;
   mediaCount: number;
   thumbMediaId: string | null;
+  /** It has a finished video. */
+  rendered: boolean;
   lastAuthor: 'you' | 'claude' | null;
   nextPostAt: number | null;
   postedCount: number;
@@ -75,6 +79,8 @@ export type Media = {
   transcriptLang: string | null;
   notes: string;
   proxyStatus: ProxyStatus;
+  /** Inbox: Claude's guess at the video it belongs to. */
+  suggestion: InboxSuggestion | null;
   createdAt: number;
 };
 
@@ -96,7 +102,12 @@ export type PieceDetail = {
 
 export type Version = VersionMeta & { branchId: string; pieceId: string; parentId: string | null; content: DraftContent };
 
-export type Thread = { id: string; title: string; model: string | null; updatedAt: number; running: boolean };
+export type Thread = { id: string; title: string; model: string | null; updatedAt: number; running: boolean; pieceId?: string | null };
+
+export type SearchResults = {
+  pieces: { id: string; workspaceId: string; title: string; stage: string; thumbMediaId: string | null; snippet: string }[];
+  media: { id: string; workspaceId: string; pieceId: string | null; originalName: string; kind: MediaKind; hasThumb: boolean; durationMs: number | null; snippet: string }[];
+};
 export type ChatMessage = { id: string; threadId: string; role: 'user' | 'assistant'; parts: ChatPart[]; contextPieceId: string | null; model: string | null; createdAt: number };
 
 export type AppSettings = {

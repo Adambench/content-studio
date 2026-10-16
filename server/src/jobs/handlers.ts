@@ -23,6 +23,7 @@ import { emit } from '../lib/events';
 import { extractAudio, makeThumb, probe } from '../lib/ffmpeg';
 import { notify } from '../lib/push';
 import { getSetting } from '../lib/settings';
+import { isLoose, queueInboxSort, suggestInbox } from '../services/inbox';
 import { getMedia, mediaPath, thumbPath, transcriptPath, whisperInstalled } from '../services/media';
 import { createPiece, getWorkspace } from '../services/pieces';
 import { makeProxy, onProxyFailed } from '../studio/proxy';
@@ -67,6 +68,7 @@ async function probeMedia({ mediaId }: { mediaId: string }) {
   });
   if (wantsTranscript && whisperInstalled()) enqueue('media.transcribe', { mediaId }, { maxAttempts: 2 });
   else if (row.source === 'capture') enqueue('capture.structure', { workspaceId: row.workspaceId, mediaId });
+  else if (isLoose(row)) queueInboxSort(row.workspaceId);
 }
 
 async function transcribeMedia({ mediaId }: { mediaId: string }) {
@@ -85,10 +87,12 @@ async function transcribeMedia({ mediaId }: { mediaId: string }) {
   setMedia(mediaId, { transcriptStatus: 'done', transcriptText: transcript.text, transcriptLang: transcript.language });
   emit({ type: 'job', jobType: 'media.transcribe', status: 'done', workspaceId: row.workspaceId, message: `Transcribed ${row.originalName}` });
   if (row.source === 'capture') enqueue('capture.structure', { workspaceId: row.workspaceId, mediaId });
+  else if (isLoose(getMedia(mediaId))) queueInboxSort(row.workspaceId);
 }
 
 onJobFailed('media.transcribe', ({ mediaId }: { mediaId: string }, message) => {
   const row = setMedia(mediaId, { transcriptStatus: 'error' });
+  if (isLoose(row)) queueInboxSort(row.workspaceId);
   emit({ type: 'job', jobType: 'media.transcribe', status: 'error', workspaceId: row.workspaceId, message });
   // A voice memo should never be lost: still turn it into a card, even without words.
   if (row.source === 'capture') enqueue('capture.structure', { workspaceId: row.workspaceId, mediaId });
@@ -202,6 +206,7 @@ export function registerHandlers() {
   registerJob('media.transcribe', transcribeMedia, 1);
   registerJob('capture.structure', structureCapture, 1);
   registerJob('voice.learn', learnVoice, 1);
+  registerJob('inbox.suggest', suggestInbox, 1);
   // Video studio: preview copies of footage, and renders (each render runs its own Chrome workers).
   registerJob('media.proxy', makeProxy, 1);
   onJobFailed('media.proxy', onProxyFailed);

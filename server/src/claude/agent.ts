@@ -36,7 +36,9 @@ export async function runChat(input: {
   if (running.has(thread.id)) throw new HttpError(409, 'Claude is still answering in this chat.');
 
   const ws = getWorkspace(thread.workspaceId);
-  const piece = input.contextPieceId ? db.select().from(schema.pieces).where(eq(schema.pieces.id, input.contextPieceId)).get() : undefined;
+  // A video's own chat is always about that video.
+  const pieceId = thread.pieceId ?? input.contextPieceId;
+  const piece = pieceId ? db.select().from(schema.pieces).where(eq(schema.pieces.id, pieceId)).get() : undefined;
   const contextPiece = piece && piece.workspaceId === ws.id ? piece : undefined;
   const branch = contextPiece?.activeBranchId ? db.select().from(schema.branches).where(eq(schema.branches.id, contextPiece.activeBranchId)).get() : undefined;
   const model = resolveModel(input.model ?? thread.model);
@@ -48,7 +50,7 @@ export async function runChat(input: {
   const parts: ChatPart[] = [];
   db.insert(schema.chatMessages).values({ id: assistantId, threadId: thread.id, role: 'assistant', parts, model }).run();
   db.update(schema.chatThreads)
-    .set({ title: thread.title === 'New chat' ? input.text.replace(/\s+/g, ' ').slice(0, 60) : thread.title, model, updatedAt: now() })
+    .set({ title: thread.title === 'New chat' && !thread.pieceId ? input.text.replace(/\s+/g, ' ').slice(0, 60) : thread.title, model, updatedAt: now() })
     .where(eq(schema.chatThreads.id, thread.id))
     .run();
   emit({ type: 'changed', entity: 'threads', workspaceId: ws.id, id: thread.id });
@@ -60,7 +62,9 @@ export async function runChat(input: {
 
   const { server, toolNames } = buildTools(ws.id);
   const { tools: skillTools, ...skills } = skillOptions();
-  const systemPrompt = chatSystemPrompt(ws, { piece: contextPiece && { id: contextPiece.id, title: contextPiece.title, branchName: branch?.name, view: input.contextView ?? undefined } });
+  const systemPrompt = chatSystemPrompt(ws, {
+    piece: contextPiece && { id: contextPiece.id, title: contextPiece.title, branchName: branch?.name, view: input.contextView ?? undefined, own: thread.pieceId === contextPiece.id },
+  });
 
   const attempt = (resume: string | undefined) =>
     query({

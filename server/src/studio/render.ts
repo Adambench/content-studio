@@ -250,8 +250,8 @@ export async function renderJob({ renderId }: { renderId: string }) {
     if (fresh.stage === 'making' && stages.includes(REVIEW_STAGE)) {
       db.update(schema.pieces).set({ stage: REVIEW_STAGE, updatedAt: now() }).where(eq(schema.pieces.id, r.pieceId)).run();
       emit({ type: 'changed', entity: 'pieces', workspaceId: r.workspaceId, id: r.pieceId });
-      await notify('Clip ready for review', `“${piece.title}”`, `/review?piece=${r.pieceId}`);
-    } else await notify('Video ready', `“${piece.title}” finished rendering.`, `/w/${r.workspaceId}/p/${r.pieceId}/edit`);
+      await notify('Clip ready for review', `“${piece.title}”`, `/w/${r.workspaceId}/p/${r.pieceId}`);
+    } else await notify('Video ready', `“${piece.title}” finished rendering.`, `/w/${r.workspaceId}/p/${r.pieceId}`);
   } catch (err) {
     const cancelled = abort.signal.aborted;
     const message = err instanceof Error ? err.message : String(err);

@@ -241,7 +241,7 @@ function AnalyseCard({ wid, items, onOpen }: { wid: string; items: ResearchItem[
     <Card>
       <CardHeader>
         <CardTitle>Analyse a video</CardTitle>
-        <CardDescription>A Short, TikTok or Reel that did well: its hook, structure and edit, explained, and what this page can borrow. Library videos have Analyse too.</CardDescription>
+        <CardDescription>A Short, TikTok or Reel that did well: its hook, structure and edit, explained, and what this page can borrow. Your own videos have Analyse too.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <form
@@ -441,8 +441,8 @@ export function ResearchPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="Research"
-        description={workspace.niche ? `What’s working in ${workspace.niche.replace(/\.$/, '')}` : 'What’s working in the niche'}
+        title={workspace.kind === 'clipping' ? 'Find' : 'Ideas'}
+        description={`What’s working in ${workspace.niche ? workspace.niche.replace(/\.$/, '') : 'the niche'}${workspace.kind === 'clipping' ? '' : ', and ideas from it'}`}
         actions={
           d &&
           watching > 0 && (

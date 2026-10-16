@@ -81,7 +81,7 @@ function PostRow({ post, ws, onOpen, showDay }: { post: Post; ws: Ws | undefined
 
 function ReviewTile({ item, ws }: { item: TodayData['review'][number]; ws: Ws | undefined }) {
   return (
-    <Link to={`/review?piece=${item.id}`} className="group flex min-w-0 flex-col gap-1.5">
+    <Link to={`/w/${item.workspaceId}/p/${item.id}`} className="group flex min-w-0 flex-col gap-1.5">
       <div className="relative aspect-[9/16] overflow-hidden rounded-lg border bg-muted group-hover:border-foreground/30">
         {item.thumbMediaId ? (
           <img src={mediaThumbUrl(item.thumbMediaId)} alt="" loading="lazy" className="size-full object-cover" />
@@ -129,9 +129,11 @@ function WorkRow({ item, ws }: { item: TodayWork; ws: Ws | undefined }) {
   );
   const to =
     item.type === 'render' && item.workspaceId && item.pieceId
-      ? `/w/${item.workspaceId}/p/${item.pieceId}/edit`
+      ? `/w/${item.workspaceId}/p/${item.pieceId}`
       : item.type === 'transcribe' && item.workspaceId
-        ? `/w/${item.workspaceId}/library`
+        ? item.pieceId
+          ? `/w/${item.workspaceId}/p/${item.pieceId}`
+          : `/w/${item.workspaceId}/inbox`
         : (item.type === 'source' || item.type === 'clip') && item.campaignId
           ? `/campaigns/${item.campaignId}`
           : null;
@@ -259,7 +261,7 @@ export function TodayPage() {
                 <div className="space-y-2">
                   <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                     {data.review.length === 1 ? 'A clip is' : `${data.review.length} clips are`} ready for your yes or no.
-                    <Link to="/review" className="text-foreground underline-offset-2 hover:underline">
+                    <Link to={`/w/${data.review[0].workspaceId}/p/${data.review[0].id}`} className="text-foreground underline-offset-2 hover:underline">
                       Review {data.review.length === 1 ? 'it' : 'them'}
                     </Link>
                   </p>

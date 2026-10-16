@@ -14,7 +14,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertCircle, CalendarClock, CheckCircle2, Eye, Film, GitBranch, Plus, Search, Sparkles } from 'lucide-react';
+import { AlertCircle, CalendarClock, CheckCircle2, Eye, Film, GitBranch, Play, Plus, Search, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api, errorMessage, mediaThumbUrl } from '@/lib/api';
 import { compact, shortAgo, shortWhen } from '@/lib/format';
+import { boardLabel } from '@/lib/nav';
 import { keys, queryClient, useBoard } from '@/lib/queries';
 import type { BoardCard } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -127,12 +128,12 @@ export function BoardPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="Board"
-        description={`${cards.length} piece${cards.length === 1 ? '' : 's'}`}
+        title={boardLabel(workspace.kind)}
+        description={`${cards.length} ${workspace.kind === 'clipping' ? 'clip' : 'video'}${cards.length === 1 ? '' : 's'} — each one holds its footage, edit, captions and posts`}
         actions={
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter" className="h-8 w-40 pl-8 md:w-56" aria-label="Filter pieces" />
+            <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter" className="h-8 w-40 pl-8 md:w-56" aria-label="Filter" />
           </div>
         }
       />
@@ -247,7 +248,16 @@ function CardView({ card, overlay }: { card: BoardCard; overlay?: boolean }) {
           <h3 className="text-sm leading-snug font-medium">{card.title}</h3>
           {card.hook && <p className="line-clamp-2 text-xs text-muted-foreground">{card.hook}</p>}
         </div>
-        {card.thumbMediaId && <img src={mediaThumbUrl(card.thumbMediaId)} alt="" loading="lazy" className="h-14 w-10 shrink-0 rounded object-cover" />}
+        {card.thumbMediaId && (
+          <span className="relative h-16 w-9 shrink-0 overflow-hidden rounded">
+            <img src={mediaThumbUrl(card.thumbMediaId)} alt="" loading="lazy" className="size-full object-cover" />
+            {card.rendered && (
+              <span className="absolute inset-0 grid place-items-center bg-black/25" title="Has a finished video">
+                <Play className="size-3.5 fill-white text-white" />
+              </span>
+            )}
+          </span>
+        )}
       </div>
       <div className="mt-2.5 flex items-center gap-2 text-[11px] text-muted-foreground">
         {card.tags.slice(0, 2).map((t) => (

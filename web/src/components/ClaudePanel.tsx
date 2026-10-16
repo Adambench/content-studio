@@ -1,4 +1,4 @@
-import { ArrowUp, ChevronDown, FileText, MessageSquarePlus, Square, Trash2, X } from 'lucide-react';
+import { ArrowUp, ChevronDown, Clapperboard, FileText, MessageSquarePlus, Square, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CLAUDE_MODELS, type ChatPart, type ChatStreamEvent } from '@shared/types';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { api, apiFetch, errorMessage } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
-import { keys, queryClient, useMessages, useSettings, useThreads } from '@/lib/queries';
+import { keys, queryClient, useMessages, usePieceThread, useSettings, useThreads } from '@/lib/queries';
 import type { Thread } from '@/lib/types';
 import { activeThread, composerPrefill, useStore } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
@@ -18,7 +18,7 @@ import { UsageMeter } from './UsageMeter';
 type Pending = { text: string; parts: ChatPart[]; threadId: string };
 
 const SUGGESTIONS = {
-  piece: ['Write 3 hook options as alternatives', 'Draft captions for every platform', 'Watch the footage and tell me what works', 'Tighten the script to 30 seconds'],
+  piece: ['Watch it and tell me what to fix before posting', 'Write 3 hook options as alternatives', 'Draft captions for every platform', 'Tighten the script to 30 seconds'],
   video: ['Pick the best takes from the transcript', 'Cut the pauses and add the hook as on-screen text', 'Reframe the shots on the speaker', 'Suggest b-roll and where it goes'],
   general: ['What should I post this week?', 'Research what’s trending in my niche', 'Turn my newest ideas into scripts', 'Review my board and suggest priorities'],
 };
@@ -28,8 +28,14 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
   const settings = useSettings();
   const activeMap = useStore(activeThread);
   const list = threads.data ?? [];
-  const threadId = activeMap[wid] && list.some((t) => t.id === activeMap[wid]) ? activeMap[wid] : list[0]?.id ?? null;
-  const thread = list.find((t) => t.id === threadId);
+  // Inside a video the panel holds that video's own chat; the workspace's general chats are one click away.
+  const [general, setGeneral] = useState(false);
+  useEffect(() => setGeneral(false), [piece?.id]);
+  const videoChat = !!piece && !general;
+  const own = usePieceThread(videoChat ? piece.id : '');
+  const generalId = activeMap[wid] && list.some((t) => t.id === activeMap[wid]) ? activeMap[wid] : list[0]?.id ?? null;
+  const threadId = videoChat ? (own.data?.id ?? null) : generalId;
+  const thread = videoChat ? own.data : list.find((t) => t.id === threadId);
   const messages = useMessages(threadId);
 
   const [model, setModel] = useState<string>('');
@@ -59,7 +65,10 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
     if (el) el.scrollTop = el.scrollHeight;
   }, [shown.length, pending?.parts, pending?.text]);
 
-  const selectThread = (id: string | null) => activeThread.set((m) => ({ ...m, [wid]: id ?? '' }));
+  const selectThread = (id: string | null) => {
+    setGeneral(true);
+    activeThread.set((m) => ({ ...m, [wid]: id ?? '' }));
+  };
 
   async function newChat() {
     selectThread(null);
@@ -82,6 +91,7 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
     setInput('');
     let id = threadId;
     try {
+      if (!id && videoChat) throw new Error('This video’s chat is still loading — try again in a moment.');
       if (!id) {
         const t = await api<Thread>(`/workspaces/${wid}/threads`, { body: { model: effectiveModel } });
         id = t.id;
@@ -114,6 +124,7 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
     } finally {
       if (id) await queryClient.invalidateQueries({ queryKey: keys.messages(id) });
       queryClient.invalidateQueries({ queryKey: keys.threads(wid) });
+      if (piece) queryClient.invalidateQueries({ queryKey: keys.pieceThread(piece.id) });
       setPending(null);
     }
   }
@@ -160,18 +171,24 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="min-w-0 shrink justify-start gap-1 font-medium">
-              <span className="truncate">{thread?.title ?? 'New chat'}</span>
+              {videoChat && <Clapperboard className="text-brand" />}
+              <span className="truncate">{videoChat ? 'This video' : (thread?.title ?? 'New chat')}</span>
               <ChevronDown className="text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-72">
+            {piece && !videoChat && (
+              <DropdownMenuItem onSelect={() => setGeneral(false)}>
+                <Clapperboard /> <span className="truncate">Chat about “{piece.title}”</span>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onSelect={newChat}>
-              <MessageSquarePlus /> New chat
+              <MessageSquarePlus /> New {piece ? 'general ' : ''}chat
             </DropdownMenuItem>
             {list.length > 0 && <DropdownMenuSeparator />}
             {list.length > 0 && <DropdownMenuLabel className="text-xs text-muted-foreground">Recent</DropdownMenuLabel>}
             {list.slice(0, 20).map((t) => (
-              <DropdownMenuItem key={t.id} onSelect={() => selectThread(t.id)} className={cn('group', t.id === threadId && 'bg-accent')}>
+              <DropdownMenuItem key={t.id} onSelect={() => selectThread(t.id)} className={cn('group', !videoChat && t.id === threadId && 'bg-accent')}>
                 <span className="min-w-0 flex-1 truncate">{t.title}</span>
                 <span className="text-xs text-muted-foreground group-hover:hidden">{timeAgo(t.updatedAt)}</span>
                 <button
@@ -191,9 +208,11 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" onClick={newChat} aria-label="New chat" title="New chat">
-            <MessageSquarePlus />
-          </Button>
+          {!videoChat && (
+            <Button variant="ghost" size="icon-sm" onClick={newChat} aria-label="New chat" title="New chat">
+              <MessageSquarePlus />
+            </Button>
+          )}
           {onClose && (
             <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close Claude">
               <X />
@@ -207,7 +226,11 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
           <div className="flex h-full flex-col justify-end gap-4 pb-2">
             <div className="space-y-1">
               <p className="text-sm font-medium">{piece ? `Working on “${piece.title}”` : 'How can I help?'}</p>
-              <p className="text-sm text-muted-foreground">I can read your board, footage and transcripts, write drafts as new versions, and research online.</p>
+              <p className="text-sm text-muted-foreground">
+                {videoChat
+                  ? 'This chat stays with this video. Tell me what to change — the hook, a cut, the captions, the look — and I’ll change the edit and drafts as new versions.'
+                  : 'I can read your board, footage and transcripts, write drafts as new versions, and research online.'}
+              </p>
             </div>
             <div className="flex flex-col gap-1.5">
               {suggestions.map((s) => (
@@ -249,7 +272,7 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
             send(input);
           }}
         >
-          {piece && (
+          {piece && !videoChat && (
             <div className="flex items-center gap-1.5 px-3 pt-2 text-xs text-muted-foreground">
               <FileText className="size-3" />
               <span className="truncate">{piece.title}</span>
@@ -265,7 +288,7 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
                 send(input);
               }
             }}
-            placeholder={piece ? 'Ask about this piece…' : 'Ask Claude…'}
+            placeholder={videoChat ? 'What should change in this video?' : piece ? 'Ask about this video…' : 'Ask Claude…'}
             rows={2}
             className="max-h-48 min-h-0 resize-none border-0 bg-transparent px-3 py-2 shadow-none focus-visible:ring-0 dark:bg-transparent"
           />
