@@ -24,129 +24,19 @@ Open **Content Studio** from the app menu. No terminal needed.
 
 ## What's in it
 
-- **Today** (the home page) — what needs you across every workspace: clips waiting for review, posts that failed or
-  missed their time, posted clips to submit on Content Rewards, today's posts, the research briefs, what's running (renders, transcriptions, Claude jobs), each page at a glance and
-  Claude usage. First in the phone's bottom bar.
-- **Workspaces** — one per page, fully isolated: board, footage, assets, chats, brand guide, voice. Each has a kind —
-  **Personal brand**, **Business** or **Clipping page** — that presets its modules (Ideas & scripts, Filming,
-  Grading, Campaigns, Clipping, Research brief), its stages and Claude's instructions, and a one-line **niche**.
-  Modules can be switched on or off in workspace settings.
-- **Campaigns** — paste a Content Rewards campaign link (or write a brief for one of your businesses): the app reads
-  the page (in your signed-in Whop window when you've joined), makes a rule checklist, screens it against the halal
-  rules and waits for your OK and the pages it goes on. Source videos (YouTube, Twitch, Kick, Drive, uploads) download
-  to the computer and get a transcript. Signed-in windows for Whop, TikTok and Instagram are under Settings →
-  Connected sites.
-- **Source videos** of an ended campaign are deleted a week later by default (Settings → Clip tools), keeping their
-  transcripts, moments and clips; *Download again* brings one back.
-- **Clipping** — an active campaign's source video is scanned for its liveliest stretches (loudness, speech pace,
-  the chat replay, the brief's words), then Claude picks 3–8 moments that stand alone, by the playbook and the
-  campaign's rules, with a hook card, a title and captions. Each moment is cut, keeps only the voice (Demucs removes
-  background music, or the clip is dropped), has three frames checked against the halal rules, is framed on the
-  speaker (in podcasts with several people and shots, the frame follows whoever is talking) and edited in the page's
-  look (tightened, captions, hook card, a sparing pop and whoosh), then rendered into **Review**.
-- **Filmed videos (UGC)** — for a campaign that wants you on camera with the product (or your own business's): on the
-  campaign's page, **Write a video** and Claude writes the hook, what to say with shot cues, a shot list, every
-  requirement as a checklist and the captions with the campaign's mentions and tags, as a card on the page. Film it,
-  edit it like any piece; its posts get submissions like clips.
-- **Review** — every clip waiting for your yes or no, with its render, where it came from and the campaign's rules
-  checked against it (length, captions' mentions and hashtags, platforms; the rest as tick boxes). **Approve &
-  queue** sends it to the next free queue time of the page's accounts; **Reject** asks why, and the next picks read
-  your reasons.
-- **Submissions and earnings** — once a campaign clip is posted, Today lists it to submit: copy its link, **Open
-  campaign** (the Content Rewards page opens in the signed-in window on the computer, in the browser on the phone),
-  submit it there yourself, then tap **Done**. Once a day the desktop app reads your submissions page on Content
-  Rewards for each one's status, counted views and earnings (or set them by hand). Each campaign shows clips posted,
-  views, how often the campaign approves your clips, earnings (estimated from views × the rate until it says) and per
-  clip; its budget is checked daily and you're told when it runs low. Analytics can be filtered to one campaign, and
-  the weekly review reads the campaigns' numbers too.
-- **Research** (pages with the Research brief) — list the YouTube channels, TikTok and Instagram accounts and
-  keywords a page watches (or let it find channels). Every morning their latest posts are checked against each
-  account's usual views; the outliers (3× or more) go into a short brief: what's working, topics, three ideas (*Add to
-  board*), hooks shaped for the page and, on a clipping page, what moments to look for (clip picking reads it too). It's
-  on Today and the page's Research page, and Claude reads it in chat. **Analyse** any Short, TikTok or Reel link (or a
-  video in the library): its hook, beats and edit, measured (cuts and words per second) and explained, with what the
-  page can borrow — never its words.
-- **Pipeline board** — drag cards through your stages (customisable per workspace; clipping pages go Making →
-  Review → Ready → Scheduled → Posted).
-- **Piece editor** — hook, script, notes and per-platform copy (TikTok, Instagram, YouTube Shorts, X) with
-  character counters. Autosaves; **Save version** (Ctrl+S) snapshots it. **Alternatives** are parallel takes,
-  each with its own history; compare any version with the current draft, restore it, or branch from it.
-- **Library** — footage, photos and voice memos, transcribed locally with Whisper (word timestamps for captions
-  later). Search finds words *spoken* in your videos.
-- **Brand assets** — logos, fonts, LUTs, vocal-only nasheeds, SFX and templates for the video studio, plus ~30
-  built-in sound effects (whooshes, risers, impacts, pops, clicks, dings, glitches) to listen to. No music, ever.
-- **Claude panel** (Ctrl+J) — reads your board, pieces, transcripts, video frames and how your posts did, researches
-  the web, writes drafts straight into pieces as new versions, creates alternatives, moves cards. It never publishes.
-- **Voice learning** — when you rewrite Claude's text and save, it learns from the difference.
-- **Idea capture** — talk or type an idea (big mic on the phone); it becomes a tidy idea card.
-- **Notifications** — native on the desktop, push on the phone.
-- **Video editor** (piece → **Edit video**) — your footage laid end to end in the brand's look, with a live preview
-  that matches the render:
-  - **Clips**: reorder, trim, split at the playhead, reframe (click where the subject is), zoom, clip volume.
-    **Tighten** cuts the pauses (and “um”s) using the transcript's word timings. **Follow the speaker** splits the
-    footage into shots and keeps whoever is talking in frame. Each clip can come in with a **transition** (crossfade,
-    dip to black, flash, zoom through, whip pan, push up, blur, glitch), with a matching sound if you like — the
-    timing doesn't move.
-  - **Captions** from what's said, in four styles (Bold, Karaoke, Clean, Subtitle), your fonts and colours. Fix
-    misheard words there — it corrects the transcript too.
-  - **Text & images**: titles, labels, logos and b-roll cutaways (full screen, top half, picture in picture);
-    one click puts the draft's hook on screen. **Motion graphic** adds an animated template in your accent colour and
-    fonts: name tag, big number that counts up, list, quote, arrow callout, section card, follow prompt, progress bar,
-    word slam. Claude can also design a **scene** of its own (it looks at it before you do); you can fix its words.
-  - **Script** (format videos): make a video from words, no filming — **Story + gameplay** (a story read over your
-    background footage, its title on a post card), **Fake texts** (a conversation that plays out, each message read
-    aloud) or **Talking characters** (two drawn characters — Sam, Max, Lina in a hijab, Bolt the robot — whose mouths
-    move with their voices). Pick voices (listen first), the speed and background footage, then **Make the voice**:
-    it's spoken on this laptop and the video is timed around it. Start one from an empty edit (*Or make it from
-    words*) or ask Claude.
-  - **Sound**: built-in and brand sound effects, voice clean-up, loudness levelled to −14 LUFS (what TikTok, Reels
-    and Shorts play at), and optionally a vocal-only nasheed that dips under your voice — only you can add one.
-  - **Look**: 9:16 / 4:5 / 1:1, a LUT colour grade (applied in the render), a watermark. **Save this look** makes it
-    the brand's default for new edits.
-  - **Render** makes an MP4 on this laptop (about a minute for a short video) that lands in the piece's
-    *Finished videos*. Every change is versioned — **History** restores any earlier edit.
-  - Claude can do all of it from the chat: pick the best takes, tighten, caption, reframe or follow the speaker, add
-    transitions, motion graphics, its own scenes and sound effects, write format videos, and render. It never adds
-    music or touches the nasheed.
-
-- **Calendar** — every post in week, month or list view. Drag a post to another day (or onto a free queue time) to
-  move it; drag a piece from *Ready to schedule* onto the calendar to schedule it. Failed or missed posts show at the
-  top and as a badge on Calendar.
-- **Accounts** (Calendar → Accounts) — connect TikTok, Instagram and YouTube accounts to the workspace (you sign in on
-  the platform's own page), and set each account's **queue**: the weekly times “Next queue time” fills.
-- **Schedule** (on a piece) — pick what (the finished video, other footage, or photos for a carousel), where (any
-  connected accounts — cross-posting), and when (each account's next queue time, a time you pick with posts spaced
-  out, or now). The captions are copied from the draft and can be tweaked per post; problems (too long, too many
-  hashtags, YouTube can't take photos…) are flagged before you save. Then it goes out by itself:
-  - **TikTok** goes to your TikTok inbox as a draft by default (that works before TikTok audits your developer app):
-    you get a notification, open TikTok, paste the caption (the post has a *Copy caption* button) and post. After the
-    audit, switch the account to *Post directly*.
-  - **Instagram** posts Reels, photos and carousels. It downloads the media from your public address, so the Funnel
-    must be on.
-  - **YouTube** uploads the video (a Short if it's vertical and up to 3 minutes). Until Google audits your API
-    project, uploads are private — publish them in YouTube Studio.
-  - Failures retry by themselves (five tries over about 40 minutes) without ever posting twice; then you're notified.
-    Each post shows what happened and has *Try again*, *Post now*, reschedule and edit.
-  - If the computer was asleep or off at post time, the post goes out when it's back if it's no more than 3 hours
-    late (Settings → Publishing changes that); otherwise it waits for you as *Missed*.
-  - Cards move to *Scheduled* and then *Posted* on the board by themselves. Claude can read the schedule and
-    suggest times, but only you schedule or post.
-
-- **Analytics** — how each workspace's posts are doing, from the platforms' own numbers (read every few hours while a
-  post is new, then daily, then weekly, for 90 days; *Refresh* reads them now):
-  - Views, a **typical post** (median views after 24 hours) and engagement for the last 7, 28 or 90 days, against the
-    period before, and followers across your accounts.
-  - **How each post did**: every post's views after 24 hours against its account's typical post — above the line
-    beat it, below didn't. Comparing at the same age keeps new and old posts fair. Click a bar for the post.
-  - Per account: followers over time, and **when posts do best** (time of day and weekday, once there are a few posts).
-  - A sortable table of every post (views, likes, comments, shares, saves, watch time). Each post's sheet (here or on
-    the Calendar) shows its numbers and views over time; board cards show a posted piece's views.
-  - TikTok drafts you finish in the TikTok app are picked up once posted (if public); otherwise paste the video's
-    link into the post to see its stats.
-  - **Weekly review**: once a week Claude reads the results and writes what worked and why, lessons for next week,
-    ideas that build on the hits (*Add to board*), and better queue times when the numbers clearly support them
-    (*Use these times* — nothing changes until you click). It also folds what works into the voice memory, marked
-    “(from results)”, with *Undo*. *Review now* runs one any time; you get a notification when the weekly one is ready.
+- **Today** — what needs you across every page: clips to review, posts that failed, clips to submit, the research
+  briefs, what's running.
+- **Workspaces** — one per page (personal brand, business, clipping page): board of videos, chats, brand, voice,
+  accounts, analytics.
+- **Claude** — writes and edits ideas, scripts, captions and video edits, picks clip moments, reviews results; it
+  never schedules or posts on its own.
+- **Video studio** — captions, cuts, reframing that follows the speaker, transitions, motion graphics, sound effects
+  (never music), LUT grades, format videos from words; renders on this computer.
+- **Clipping** — campaigns from Content Rewards or your businesses: sources downloaded and transcribed, moments
+  picked, clips made, music removed, rules checked; you approve each one.
+- **Research** — a daily brief of what over-performs in each page's niche.
+- **Publishing and analytics** — TikTok, Instagram and YouTube through their official APIs: queues, calendar, stats,
+  a weekly review.
 
 ## Publishing setup (one time)
 
