@@ -132,7 +132,10 @@ export type Campaign = {
   reading?: boolean;
 };
 
-export type CampaignDetail = Campaign & { sources: CampaignSource[]; moments: Moment[]; submissions: Submission[]; results: CampaignResults };
+/** A video filmed for a campaign (UGC): a card on one of its pages. */
+export type UgcPiece = { id: string; title: string; stage: string; workspaceId: string; createdAt: number };
+
+export type CampaignDetail = Campaign & { sources: CampaignSource[]; moments: Moment[]; ugc: UgcPiece[]; submissions: Submission[]; results: CampaignResults };
 
 /**
  * A posted clip's submission to its Content Rewards campaign. `to_submit`: posted, waiting for me to submit it on
@@ -187,6 +190,8 @@ export type Submission = {
 export type CampaignResults = {
   /** Moments made into clips, waiting in Review, approved by me (gone on to Ready or further), rejected by me. */
   clips: { made: number; inReview: number; approved: number; rejected: number };
+  /** Videos filmed for it (UGC). */
+  filmed: number;
   /** Clips posted (each counted once, however many accounts it went to) and their posts. */
   posted: number;
   posts: number;

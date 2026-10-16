@@ -78,6 +78,13 @@
       "when": 1792155779470,
       "tag": "0010_campaign_ended",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1792171585915,
+      "tag": "0011_ugc_pieces",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,7 @@ import { BudgetBar, deadlineText, HalalBadge, PageChips, PagePicker, StatusBadge
 import { RulesCard } from '@/components/campaigns/RulesCard';
 import { MomentsCard } from '@/components/campaigns/MomentsCard';
 import { SourcesCard } from '@/components/campaigns/SourcesCard';
+import { UgcCard } from '@/components/campaigns/UgcCard';
 import { ResultsCard, SubmissionsCard } from '@/components/campaigns/Submissions';
 import { PageHeader } from '@/components/PageHeader';
 import { PlatformIcon } from '@/components/publish/common';
@@ -393,6 +394,7 @@ export function CampaignPage() {
               <SubmissionsCard campaign={c} />
               <BriefCard c={c} />
               <RulesCard campaign={c} />
+              <UgcCard campaign={c} workspaces={workspaces} />
               <MomentsCard campaign={c} workspaces={workspaces} />
               <SourcesCard campaign={c} />
             </>

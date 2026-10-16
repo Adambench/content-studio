@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { and, desc, eq, inArray, isNull, like, or } from 'drizzle-orm';
 import { z } from 'zod';
+import { ugcPieces } from '../campaigns/ugc';
+import { enqueue } from '../jobs/queue';
 import { REVIEW_STAGE, normalizeDraft, type DraftContent } from '../../../shared/types';
 import { config } from '../config';
 import { db, newId, now, schema } from '../db';
@@ -95,6 +97,8 @@ export function toolLabel(fullName: string, input: Record<string, any>): string 
       return 'Started finding moments';
     case 'make_clip':
       return 'Started making a clip';
+    case 'write_ugc_video':
+      return 'Started a UGC video';
     case 'get_research':
       return 'Read the research brief';
     case 'WebSearch':
@@ -499,6 +503,10 @@ export function buildTools(workspaceId: string) {
           deadline: c.deadline ? new Date(c.deadline).toDateString() : undefined,
           halal: { verdict: c.halalVerdict, reasons: c.halalReasons },
           sources,
+          // Videos filmed for it (UGC) on this page.
+          filmed: ugcPieces(c.id)
+            .filter((p) => p.workspaceId === workspaceId)
+            .map((p) => ({ pieceId: p.id, title: p.title, stage: p.stage })),
           // How its clips did and what they earned; submitting on Content Rewards is the creator's click.
           results: campaignResults(c.id),
           submissions: listSubmissions({ campaignId: c.id, workspaceId }).map((s) => ({
@@ -543,6 +551,21 @@ export function buildTools(workspaceId: string) {
         if (campaignsForWorkspace(workspaceId).find((c) => c.id === m.campaignId)?.status !== 'active') throw new ToolError('The campaign isn’t active.');
         queueMake(m.id);
         return ok('Queued: the clip lands in Review once it’s rendered.');
+      }),
+    ),
+
+    tool(
+      'write_ugc_video',
+      'Start a video the creator films for a campaign themselves (UGC: them on camera with the product): one background Claude request writes the hook, what to ' +
+        'say with shot cues, a shot list, the requirements checklist and the captions from the brief and rules, as a new card on this page linked to the campaign ' +
+        '(so its posts get submissions). For campaigns that want the creator on camera, or a business’s own product videos.',
+      { campaignId: z.string().describe('From get_campaigns'), angle: z.string().max(500).optional().describe('An angle to take, if the creator gave one') },
+      safe(async ({ campaignId, angle }) => {
+        const c = campaignsForWorkspace(workspaceId).find((x) => x.id === campaignId);
+        if (!c) throw new ToolError('That campaign isn’t one this page works on.');
+        if (c.status !== 'active') throw new ToolError('The campaign isn’t active.');
+        enqueue('ugc.script', { campaignId, workspaceId, angle }, { maxAttempts: 3 });
+        return ok('Started: the card appears on the board in a minute, with the script, shot list and captions.');
       }),
     ),
 

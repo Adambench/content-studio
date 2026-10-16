@@ -5,7 +5,7 @@ import { CHECK_TYPES, isCampaignLink, RULE_KINDS, SUBMISSION_STATUSES } from '..
 import { db, newId, schema } from '../db';
 import { badRequest } from '../lib/http';
 import { enqueue, hasPendingJob } from '../jobs/queue';
-import { deleteCampaign, emitCampaign, getCampaignDetail, getCampaignRow, getSource, listCampaigns, listSources, setPages, updateCampaign } from '../campaigns/campaigns';
+import { deleteCampaign, emitCampaign, getCampaignDetail, getCampaignRow, getSource, listCampaigns, listSources, pagesOf, setPages, updateCampaign } from '../campaigns/campaigns';
 import { addSourceLink, deleteSource, freeSourceVideos, saveSourceUpload, startSource, stopSource } from '../campaigns/sources';
 import { getSubmission, listSubmissions, updateSubmission } from '../campaigns/submissions';
 import { desktopAvailable } from '../lib/desktop';
@@ -109,6 +109,17 @@ export async function campaignRoutes(app: FastifyInstance) {
     setPages(id, pageIds);
     updateCampaign(id, { status: 'active' });
     return withReading(getCampaignDetail(id));
+  });
+
+  // A UGC video for one of its pages: Claude writes the script, shot list and captions from the brief (a card on that page).
+  app.post('/api/campaigns/:id/ugc', async (req) => {
+    const { id } = idParam.parse(req.params);
+    const body = z.object({ workspaceId: z.string().min(1), angle: z.string().max(500).optional() }).parse(req.body);
+    const c = getCampaignRow(id);
+    if (c.status !== 'active') throw badRequest('Confirm the campaign on its pages first.');
+    if (!(pagesOf([id]).get(id) ?? []).includes(body.workspaceId)) throw badRequest('That page isn’t one this campaign posts on.');
+    enqueue('ugc.script', { campaignId: id, workspaceId: body.workspaceId, angle: body.angle?.trim() || undefined }, { maxAttempts: 3 });
+    return { ok: true };
   });
 
   app.post('/api/campaigns/:id/read', async (req) => {

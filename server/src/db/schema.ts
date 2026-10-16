@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { PostStats, ReviewBody, ReviewStatus } from '../../../shared/analytics';
 import type { FramesCheck, MomentCaptions, MomentKind, MomentStatus, MusicCheck, StandaloneScores } from '../../../shared/clipping';
 import type { CampaignOrigin, CampaignPlatform, CampaignStatus, HalalVerdict, Payout, RuleItem, SourceKind, SourceStatus, SubmissionStatus } from '../../../shared/campaigns';
@@ -67,10 +67,12 @@ export const pieces = sqliteTable(
     position: real('position').notNull().default(0),
     tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
     activeBranchId: text('active_branch_id'),
+    /** A campaign the piece is filmed for (a UGC video); clips made from moments are linked through `moments`. */
+    campaignId: text('campaign_id').references((): AnySQLiteColumn => campaigns.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index('pieces_workspace_idx').on(t.workspaceId)],
+  (t) => [index('pieces_workspace_idx').on(t.workspaceId), index('pieces_campaign_idx').on(t.campaignId)],
 );
 
 /** An alternative take on a piece. `working` is the live draft; versions snapshot it. */

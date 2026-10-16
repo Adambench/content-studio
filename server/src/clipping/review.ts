@@ -35,7 +35,9 @@ function buildClip(piece: typeof schema.pieces.$inferSelect): ReviewClip {
     .get();
   const lastRender = db.select().from(schema.renders).where(eq(schema.renders.pieceId, piece.id)).orderBy(desc(schema.renders.createdAt)).get();
   const momentRow = db.select().from(schema.moments).where(eq(schema.moments.pieceId, piece.id)).get();
-  const campaign = momentRow ? getCampaignRow(momentRow.campaignId) : null;
+  // A clip's campaign through its moment; a filmed (UGC) video's through its own link.
+  const campaignId = momentRow?.campaignId ?? piece.campaignId;
+  const campaign = campaignId ? getCampaignRow(campaignId) : null;
   const source = momentRow ? getSource(momentRow.sourceId) : null;
 
   // Where it can go: the campaign's platforms (its "only on" rules first), else anywhere the page posts.

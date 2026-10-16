@@ -30,6 +30,7 @@ import { onPublishFailed, publishPost } from '../publish/publisher';
 import { renderJob } from '../studio/render';
 import { onReframeFailed, reframeEdit } from '../studio/reframe';
 import { buildFormat, onFormatBuildFailed } from '../studio/formats';
+import { onUgcScriptFailed, writeUgcScript } from '../campaigns/ugc';
 import { enqueue, onJobFailed, registerJob } from './queue';
 
 const execFile = promisify(execFileCb);
@@ -211,6 +212,9 @@ export function registerHandlers() {
   // A format video's voice (Kokoro, then Whisper for the captions): a minute or so of CPU.
   registerJob('format.build', buildFormat, 1);
   onJobFailed('format.build', onFormatBuildFailed);
+  // A UGC script from a campaign's brief: one Sonnet call (waits while the 5-hour usage is high).
+  registerJob('ugc.script', writeUgcScript, 1);
+  onJobFailed('ugc.script', onUgcScriptFailed);
   // Publishing is network-bound, so it doesn't wait behind renders; two at once keeps cross-posts close together.
   registerJob('post.publish', publishPost, 2);
   onJobFailed('post.publish', onPublishFailed);

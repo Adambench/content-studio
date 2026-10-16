@@ -359,7 +359,11 @@ export function ResultsTiles({ r, origin }: { r: CampaignResults; origin: Campai
   const decided = s.approved + s.paid + s.rejected;
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <Tile label="Clips posted" value={String(r.posted)} note={`${r.clips.made} made · ${r.clips.approved} approved by you${r.clips.rejected ? ` · ${r.clips.rejected} rejected` : ''}`} />
+      <Tile
+        label="Posted"
+        value={String(r.posted)}
+        note={`${r.clips.made} clip${r.clips.made === 1 ? '' : 's'} made · ${r.clips.approved} approved by you${r.clips.rejected ? ` · ${r.clips.rejected} rejected` : ''}${r.filmed ? ` · ${r.filmed} filmed` : ''}`}
+      />
       <Tile label="Views" value={compact(r.views)} note={r.posts ? `on ${r.posts} post${r.posts === 1 ? '' : 's'}` : 'nothing posted yet'} />
       {origin === 'content_rewards' ? (
         <>
@@ -379,7 +383,7 @@ export function ResultsTiles({ r, origin }: { r: CampaignResults; origin: Campai
 
 export function ResultsCard({ campaign }: { campaign: CampaignDetail }) {
   const r = campaign.results;
-  if (!r.clips.made && !r.posted && !campaign.submissions.length) return null;
+  if (!r.clips.made && !r.filmed && !r.posted && !campaign.submissions.length) return null;
   return (
     <Card>
       <CardHeader>

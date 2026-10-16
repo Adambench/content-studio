@@ -33,14 +33,16 @@ export function emitSubmissions(campaignIds: Iterable<string>) {
   for (const id of new Set(campaignIds)) emitCampaign(id);
 }
 
-/** The pieces made from a campaign's moments (its clips). */
+/** The pieces made for a campaign: clips from its moments, and videos filmed for it (UGC). */
 function campaignPieceIds(campaignId: string) {
-  return db
+  const clips = db
     .select({ pieceId: schema.moments.pieceId })
     .from(schema.moments)
     .where(and(eq(schema.moments.campaignId, campaignId), isNotNull(schema.moments.pieceId)))
     .all()
     .map((r) => r.pieceId!);
+  const filmed = db.select({ id: schema.pieces.id }).from(schema.pieces).where(eq(schema.pieces.campaignId, campaignId)).all().map((r) => r.id);
+  return [...new Set([...clips, ...filmed])];
 }
 
 /**
@@ -49,14 +51,27 @@ function campaignPieceIds(campaignId: string) {
  * inbox drafts), after I link a post by hand, and at start.
  */
 export async function createDueSubmissions() {
-  const rows = db
+  const due = and(eq(schema.posts.status, 'published'), isNotNull(schema.posts.url), eq(schema.campaigns.origin, 'content_rewards'), isNull(schema.submissions.id));
+  // Clips (through their moment) and filmed videos (linked to the campaign themselves).
+  const clips = db
     .select({ post: schema.posts, campaign: schema.campaigns })
     .from(schema.posts)
     .innerJoin(schema.moments, eq(schema.moments.pieceId, schema.posts.pieceId))
     .innerJoin(schema.campaigns, eq(schema.campaigns.id, schema.moments.campaignId))
     .leftJoin(schema.submissions, eq(schema.submissions.postId, schema.posts.id))
-    .where(and(eq(schema.posts.status, 'published'), isNotNull(schema.posts.url), eq(schema.campaigns.origin, 'content_rewards'), isNull(schema.submissions.id)))
-    .all()
+    .where(due)
+    .all();
+  const filmed = db
+    .select({ post: schema.posts, campaign: schema.campaigns })
+    .from(schema.posts)
+    .innerJoin(schema.pieces, eq(schema.pieces.id, schema.posts.pieceId))
+    .innerJoin(schema.campaigns, eq(schema.campaigns.id, schema.pieces.campaignId))
+    .leftJoin(schema.submissions, eq(schema.submissions.postId, schema.posts.id))
+    .where(due)
+    .all();
+  const seen = new Set<string>();
+  const rows = [...clips, ...filmed]
+    .filter(({ post }) => !seen.has(post.id) && !!seen.add(post.id))
     .filter(({ post, campaign }) => !campaign.platforms.length || (campaign.platforms as string[]).includes(post.platform));
   if (!rows.length) return 0;
   db.transaction((tx) => {
@@ -172,6 +187,7 @@ export function campaignResults(campaignId: string): CampaignResults {
     else if (m.stage !== 'making') clips.approved++;
   }
   const pieceIds = campaignPieceIds(campaignId);
+  const filmed = db.select({ id: schema.pieces.id }).from(schema.pieces).where(eq(schema.pieces.campaignId, campaignId)).all().length;
   const posts = pieceIds.length
     ? db
         .select({ pieceId: schema.posts.pieceId, stats: schema.posts.stats, platform: schema.posts.platform })
@@ -191,6 +207,7 @@ export function campaignResults(campaignId: string): CampaignResults {
   const posted = new Set(posts.map((p) => p.pieceId)).size;
   return {
     clips,
+    filmed,
     posted,
     posts: posts.length,
     views: withViews.length ? withViews.reduce((t, p) => t + (p.stats!.views ?? 0), 0) : null,
