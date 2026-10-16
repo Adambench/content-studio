@@ -186,7 +186,7 @@ export async function makeClip({ momentId }: { momentId: string }) {
     return;
   }
   const file = sourceFile(s);
-  if (!file) throw new JobError('The source video isn’t downloaded any more.', { retry: false });
+  if (!file) throw new JobError('The source video was deleted to save space: download it again (Source videos → Download again), then make the clip.', { retry: false });
   const info = await probe(file);
   if (!info.hasVideo || !info.hasAudio) throw new JobError('The source needs both picture and sound to make a clip.', { retry: false });
   const sourceSeconds = (info.durationMs ?? s.durationMs ?? 0) / 1000;

@@ -34,8 +34,8 @@ export function toCampaign(row: CampaignRow, pageIds: string[] = []): Campaign {
 }
 
 export function toSource(row: SourceRow): CampaignSource {
-  const { fileName: _f, updatedAt: _u, ...rest } = row;
-  return rest;
+  const { fileName, updatedAt: _u, ...rest } = row;
+  return { ...rest, downloaded: !!fileName };
 }
 
 export function listCampaigns(): Campaign[] {

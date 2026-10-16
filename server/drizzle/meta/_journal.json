@@ -71,6 +71,13 @@
       "when": 1792154152762,
       "tag": "0009_research",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1792155779470,
+      "tag": "0010_campaign_ended",
+      "breakpoints": true
     }
   ]
 }

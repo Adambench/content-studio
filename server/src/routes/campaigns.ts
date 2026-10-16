@@ -6,7 +6,7 @@ import { db, newId, schema } from '../db';
 import { badRequest } from '../lib/http';
 import { enqueue, hasPendingJob } from '../jobs/queue';
 import { deleteCampaign, emitCampaign, getCampaignDetail, getCampaignRow, getSource, listCampaigns, listSources, setPages, updateCampaign } from '../campaigns/campaigns';
-import { addSourceLink, deleteSource, saveSourceUpload, startSource, stopSource } from '../campaigns/sources';
+import { addSourceLink, deleteSource, freeSourceVideos, saveSourceUpload, startSource, stopSource } from '../campaigns/sources';
 import { getSubmission, listSubmissions, updateSubmission } from '../campaigns/submissions';
 import { desktopAvailable } from '../lib/desktop';
 import { getSetting } from '../lib/settings';
@@ -88,6 +88,7 @@ export async function campaignRoutes(app: FastifyInstance) {
     updateCampaign(id, {
       title: body.title,
       status: body.status,
+      ...(body.status && { endedAt: body.status === 'ended' ? (c.endedAt ?? Date.now()) : null }),
       deadline: body.deadline,
       checklist: body.checklist,
       ...(body.brief ? { pageText: body.brief, description: body.brief } : {}),
@@ -124,6 +125,15 @@ export async function campaignRoutes(app: FastifyInstance) {
     for (const s of listSources(id)) stopSource(s.id);
     await deleteCampaign(id);
     return { ok: true };
+  });
+
+  // Delete the downloaded source videos of a campaign that's paused or ended (transcripts, moments and clips stay).
+  app.post('/api/campaigns/:id/free-sources', async (req) => {
+    const { id } = idParam.parse(req.params);
+    const c = getCampaignRow(id);
+    if (c.status === 'active') throw badRequest('Pause or end the campaign first: its sources are still in use.');
+    await freeSourceVideos(id, 'Video deleted to free space (the transcript stays): download it again to make more clips.');
+    return withReading(getCampaignDetail(id));
   });
 
   // ---------- sources ----------

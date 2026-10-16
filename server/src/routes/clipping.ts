@@ -18,6 +18,7 @@ export async function findMoments(sourceId: string) {
   if (s.status !== 'ready' && s.status !== 'error') throw new HttpError(409, s.status === 'scanning' ? 'It’s already looking for moments.' : 'Wait until it’s downloaded and transcribed.');
   if (hasPendingJob('source.scan', 'sourceId', sourceId) || hasPendingJob('source.pick', 'sourceId', sourceId)) throw new HttpError(409, 'It’s already looking for moments.');
   if (!(await readSourceTranscript(s))) throw badRequest('It has no transcript yet.');
+  if (!s.fileName) throw badRequest('Its video was deleted to save space: download it again first.');
   queueScan(sourceId);
 }
 

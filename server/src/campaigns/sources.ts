@@ -19,7 +19,7 @@ import { getSetting } from '../lib/settings';
 import { enqueue, JobError } from '../jobs/queue';
 import { clipToolsInstalled, toolsEnv } from '../services/cliptools';
 import { whisperInstalled, type UploadedFile } from '../services/media';
-import { campaignDir, emitCampaign, getCampaignRow, getSource, pagesOf, updateSource, type SourceRow } from './campaigns';
+import { campaignDir, emitCampaign, getCampaignRow, getSource, listSources, pagesOf, updateSource, type SourceRow } from './campaigns';
 
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const VIDEO_PLATFORMS: SourceKind[] = ['youtube', 'twitch', 'kick'];
@@ -170,6 +170,11 @@ function queueDownload(s: SourceRow, values: Partial<SourceRow> = {}) {
  */
 export async function startSource(sourceId: string) {
   const s = getSource(sourceId);
+  // Its video was deleted (the campaign ended a while ago): download it again; the transcript is kept.
+  if (s.status === 'ready' && !s.fileName && s.link) {
+    queueDownload(s);
+    return [getSource(s.id)];
+  }
   if (s.status !== 'found' && s.status !== 'error') return [s];
   // Downloaded already: what failed after (the transcript, or finding moments) is tried again.
   if (s.status === 'error' && s.fileName) {
@@ -279,6 +284,23 @@ export async function deleteSource(id: string) {
   emitCampaign(s.campaignId);
 }
 
+/**
+ * Delete a campaign's downloaded source videos (and their audio scans), keeping transcripts, scans, moments and clips:
+ * a source can be downloaded again to make more clips. Returns the bytes freed.
+ */
+export async function freeSourceVideos(campaignId: string, detail: string) {
+  let freed = 0;
+  for (const s of listSources(campaignId)) {
+    const file = sourceFile(s);
+    if (!file || ['queued', 'downloading', 'transcribing', 'scanning'].includes(s.status)) continue;
+    stopSource(s.id);
+    freed += (await stat(file).catch(() => null))?.size ?? 0;
+    await rm(file, { force: true });
+    updateSource(s.id, { fileName: null, detail });
+  }
+  return freed;
+}
+
 // ---------- downloading ----------
 
 /** The `source.download` job. */
@@ -287,8 +309,8 @@ export async function downloadSource({ sourceId }: { sourceId: string }) {
   const s = updateSource(sourceId, { status: 'downloading', progress: 0, detail: 'Starting' });
   const dir = campaignDir(s.campaignId);
   await mkdir(dir, { recursive: true });
-  // Leftovers of an earlier attempt.
-  for (const f of await readdir(dir)) if (f.startsWith(s.id)) await rm(join(dir, f), { recursive: true, force: true });
+  // Leftovers of an earlier attempt (a transcript and scan of the same video stay: a deleted video comes back to them).
+  for (const f of await readdir(dir)) if (f.startsWith(s.id) && !/\.(transcript|scan)\.json$/.test(f)) await rm(join(dir, f), { recursive: true, force: true });
 
   let file: string;
   if (VIDEO_PLATFORMS.includes(s.kind)) file = await ytdlpDownload(s, dir);
@@ -313,15 +335,17 @@ async function finishDownload(s: SourceRow, file: string) {
     throw new JobError('That isn’t a video or audio file.', { retry: false });
   }
   const { size } = await stat(file);
+  // Downloaded again after the video was deleted: its transcript is still here.
+  const transcribed = info.hasAudio && !!(await readSourceTranscript(s));
   updateSource(s.id, {
     fileName: basename(file),
     size,
     durationMs: info.durationMs ?? s.durationMs,
-    status: info.hasAudio ? 'transcribing' : 'ready',
+    status: info.hasAudio && !transcribed ? 'transcribing' : 'ready',
     progress: null,
-    detail: info.hasAudio ? 'Waiting its turn' : 'No sound to transcribe',
+    detail: transcribed ? '' : info.hasAudio ? 'Waiting its turn' : 'No sound to transcribe',
   });
-  if (info.hasAudio) enqueue('source.transcribe', { sourceId: s.id }, { maxAttempts: 2 });
+  if (info.hasAudio && !transcribed) enqueue('source.transcribe', { sourceId: s.id }, { maxAttempts: 2 });
 }
 
 const gb = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`);

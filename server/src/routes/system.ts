@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { and, eq, ne } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { SOURCE_RETENTION_DAYS } from '../../../shared/campaigns';
 import { DEFAULT_WEEKLY_REVIEW } from '../../../shared/analytics';
 import { API_VERSION, type Health } from '../../../shared/devices';
 import { config } from '../config';
@@ -45,6 +46,7 @@ export async function systemRoutes(app: FastifyInstance) {
     claudeUsage: getSetting('claudeUsage') ?? null,
     vapidPublicKey: vapidKeys().publicKey,
     weeklyReview: { ...DEFAULT_WEEKLY_REVIEW, ...getSetting('weeklyReview') },
+    sourceRetentionDays: getSetting('sourceRetentionDays') ?? SOURCE_RETENTION_DAYS,
   }));
 
   app.patch('/api/settings', async (req) => {
@@ -53,6 +55,7 @@ export async function systemRoutes(app: FastifyInstance) {
         defaultModel: z.enum(['sonnet', 'opus', 'haiku']).optional(),
         whisperModel: z.enum(['base', 'small', 'medium']).optional(),
         lastWorkspaceId: z.string().optional(),
+        sourceRetentionDays: z.number().int().min(0).max(365).optional(),
         weeklyReview: z
           .object({ enabled: z.boolean(), day: z.number().int().min(0).max(6), time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/) })
           .partial()
@@ -62,6 +65,7 @@ export async function systemRoutes(app: FastifyInstance) {
     if (body.defaultModel) setSetting('defaultModel', body.defaultModel);
     if (body.whisperModel) setSetting('whisperModel', body.whisperModel);
     if (body.lastWorkspaceId) setSetting('lastWorkspaceId', body.lastWorkspaceId);
+    if (body.sourceRetentionDays !== undefined) setSetting('sourceRetentionDays', body.sourceRetentionDays);
     if (body.weeklyReview) setSetting('weeklyReview', { ...DEFAULT_WEEKLY_REVIEW, ...getSetting('weeklyReview'), ...body.weeklyReview });
     emit({ type: 'changed', entity: 'settings' });
     return { ok: true };

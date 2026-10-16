@@ -106,6 +106,8 @@ export type AppSettings = {
   claudeUsage: ClaudeUsage | null;
   vapidPublicKey: string;
   weeklyReview: WeeklyReviewSetting;
+  /** Days after a campaign ends that its source videos are deleted; 0 keeps them. */
+  sourceRetentionDays: number;
 };
 
 export type SystemStatus = {

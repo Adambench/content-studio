@@ -34,7 +34,7 @@ function SourceRow({ s, moments, canFind }: { s: CampaignSource; moments: number
   const facts = [
     SOURCE_KIND_LABELS[s.kind],
     s.durationMs ? duration(s.durationMs) : null,
-    s.size ? bytes(s.size) : null,
+    s.size && s.downloaded ? bytes(s.size) : null,
     s.status === 'ready' && s.transcriptFrom ? (s.transcriptFrom === 'captions' ? 'YouTube captions' : 'Whisper transcript') : null,
     moments ? `${moments} moment${moments === 1 ? '' : 's'}` : null,
   ]
@@ -67,6 +67,14 @@ function SourceRow({ s, moments, canFind }: { s: CampaignSource; moments: number
             <Button size="sm" variant="outline" disabled={busy} onClick={() => act('POST', `/sources/${s.id}/start`)}>
               {busy ? <Spinner /> : <Download />} Get
             </Button>
+          ) : s.status === 'ready' && !s.downloaded ? (
+            s.link ? (
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => act('POST', `/sources/${s.id}/start`)} title="Download the video again (its transcript is kept)">
+                {busy ? <Spinner /> : <Download />} Download again
+              </Button>
+            ) : (
+              <Badge variant="secondary">Video deleted</Badge>
+            )
           ) : s.status === 'error' ? (
             <Button size="sm" variant="outline" disabled={busy} onClick={() => act('POST', `/sources/${s.id}/start`)}>
               {busy ? <Spinner /> : <RotateCcw />} Retry
@@ -96,6 +104,7 @@ function SourceRow({ s, moments, canFind }: { s: CampaignSource; moments: number
 
 /** The long videos the campaign's clips are cut from: from its page, a link I paste, or an upload. */
 export function SourcesCard({ campaign }: { campaign: CampaignDetail }) {
+  const [freeing, setFreeing] = useState(false);
   const [link, setLink] = useState('');
   const [adding, setAdding] = useState(false);
   const [upload, setUpload] = useState<number | null>(null);
@@ -103,6 +112,20 @@ export function SourcesCard({ campaign }: { campaign: CampaignDetail }) {
   // Downloaded and downloading ones first; the listed-only ones (a channel's 30 latest) after, in their order.
   const sources = [...campaign.sources.filter((s) => s.status !== 'found'), ...campaign.sources.filter((s) => s.status === 'found')];
   const found = sources.filter((s) => s.status === 'found').length;
+  const onDisk = sources.filter((s) => s.downloaded && s.status === 'ready');
+  const diskBytes = onDisk.reduce((n, s) => n + (s.size ?? 0), 0);
+
+  async function free() {
+    setFreeing(true);
+    try {
+      save(await api<CampaignDetail>(`/campaigns/${campaign.id}/free-sources`, { body: {} }));
+      toast.success(`Freed ${bytes(diskBytes)}`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setFreeing(false);
+    }
+  }
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -170,6 +193,17 @@ export function SourcesCard({ campaign }: { campaign: CampaignDetail }) {
           <input ref={fileInput} type="file" accept="video/*,audio/*" multiple hidden onChange={(e) => onFiles(e.target.files)} />
         </form>
         <p className="text-xs text-muted-foreground">A channel or playlist lists its latest videos to pick from; a Drive folder must be shared with anyone who has the link.</p>
+        {campaign.status !== 'active' && onDisk.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-2.5 text-sm">
+            <span className="min-w-0 flex-1 text-muted-foreground">
+              {onDisk.length} video{onDisk.length === 1 ? '' : 's'} ({bytes(diskBytes)}) on this computer.{' '}
+              {campaign.status === 'ended' ? 'They’re deleted some days after the campaign ends (Settings → Clip tools); transcripts and clips stay.' : 'Transcripts and clips stay if you delete them.'}
+            </span>
+            <Button size="sm" variant="outline" disabled={freeing} onClick={free}>
+              {freeing && <Spinner />} Delete the videos now
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -35,6 +35,8 @@ Open **Content Studio** from the app menu. No terminal needed.
   rules and waits for your OK and the pages it goes on. Source videos (YouTube, Twitch, Kick, Drive, uploads) download
   to the computer and get a transcript. Signed-in windows for Whop, TikTok and Instagram are under Settings →
   Connected sites.
+- **Source videos** of an ended campaign are deleted a week later by default (Settings → Clip tools), keeping their
+  transcripts, moments and clips; *Download again* brings one back.
 - **Clipping** — an active campaign's source video is scanned for its liveliest stretches (loudness, speech pace,
   the chat replay, the brief's words), then Claude picks 3–8 moments that stand alone, by the playbook and the
   campaign's rules, with a hook card, a title and captions. Each moment is cut, keeps only the voice (Demucs removes

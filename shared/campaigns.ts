@@ -83,8 +83,13 @@ export type CampaignSource = {
   detail: string;
   /** How the transcript was made: the platform's captions or Whisper. */
   transcriptFrom: 'captions' | 'whisper' | null;
+  /** The video file is on this computer (it goes some days after the campaign ends; the transcript stays). */
+  downloaded: boolean;
   createdAt: number;
 };
+
+/** Days after a campaign ends that its downloaded source videos are deleted, by default. */
+export const SOURCE_RETENTION_DAYS = 7;
 
 export type Campaign = {
   id: string;
@@ -117,6 +122,8 @@ export type Campaign = {
   readNote: string | null;
   /** When the budget was last read from the public page (every day while active). */
   budgetCheckedAt: number | null;
+  /** When it was ended (its source videos are deleted some days after). */
+  endedAt: number | null;
   /** The workspaces (pages) it posts on. */
   pageIds: string[];
   createdAt: number;

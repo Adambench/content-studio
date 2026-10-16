@@ -456,6 +456,8 @@ export const campaigns = sqliteTable('campaigns', {
   // The budget is read again from the public page every day (no Claude); I'm told once when it runs low.
   budgetCheckedAt: integer('budget_checked_at'),
   budgetWarnedAt: integer('budget_warned_at'),
+  // When it was ended: its downloaded source videos are deleted some days later (transcripts and clips stay).
+  endedAt: integer('ended_at'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

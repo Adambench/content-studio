@@ -278,7 +278,13 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
      at desktop and phone width. Found: signed out, TikTok sometimes answers "Something went wrong" instead of the
      grid (@garyvee; @mrbeast read fine): the sweep says to sign in to TikTok; Instagram's reels grid has no captions
      (fetched with yt-dlp instead)
-   - [ ] 9 Later formats
+   - 9 Later (2026-10-16), in parts:
+     - [x] Source videos of ended campaigns deleted after a set time (Settings → Clip tools: a day, a week (default), a
+       month, or keep; `campaigns.ended_at`, migration 0010); their transcripts, scans, moments and clips stay. A
+       paused or ended campaign's Source videos card can delete them now; a deleted one shows *Download again* (the
+       transcript is kept, so it's ready as soon as it's down). Tested: free refused while active; ended two days ago
+       with a one-day setting → both episodes' videos deleted at the next upkeep tick (transcripts and scans left);
+       made active, *Download again* brought the 17-min episode back straight to Ready
 
 ## Video studio decisions (2026-10-14)
 

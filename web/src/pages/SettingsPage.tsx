@@ -308,6 +308,8 @@ function RenderingCard() {
 /** Demucs and YuNet for clipping: removing background music (the halal rule) and finding the speaker to reframe on. */
 function ClipToolsCard() {
   const { data: st } = useSystemStatus();
+  const settings = useSettings();
+  const retention = settings.data?.sourceRetentionDays;
   const installing = st?.clipToolsInstall.state === 'installing';
 
   async function install() {
@@ -343,6 +345,35 @@ function ClipToolsCard() {
               )}
             </div>
           ))}
+        {retention !== undefined && (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <Label>Source videos of ended campaigns</Label>
+              <p className="text-xs text-muted-foreground">Long downloads add up. Their transcripts, moments and clips stay, and a video can be downloaded again.</p>
+            </div>
+            <Select
+              value={String(retention)}
+              onValueChange={async (v) => {
+                try {
+                  await api('/settings', { method: 'PATCH', body: { sourceRetentionDays: Number(v) } });
+                  queryClient.invalidateQueries({ queryKey: keys.settings });
+                } catch (err) {
+                  toast.error(errorMessage(err));
+                }
+              }}
+            >
+              <SelectTrigger size="sm" className="w-auto" aria-label="When to delete them">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">Delete after a day</SelectItem>
+                <SelectItem value="7">Delete after a week</SelectItem>
+                <SelectItem value="30">Delete after a month</SelectItem>
+                <SelectItem value="0">Keep them</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

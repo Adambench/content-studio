@@ -22,6 +22,8 @@ type SettingsShape = {
   weeklyReview: import('../../../shared/analytics').WeeklyReviewSetting;
   /** Firebase, for notifications to the Android app: the service-account key and the app's options. */
   fcm: import('./fcm').FcmSetting;
+  /** Days after a campaign ends that its downloaded source videos are deleted; 0 keeps them. */
+  sourceRetentionDays: number;
   /** The last read of my submissions page on Content Rewards. */
   submissionsSync: import('../campaigns/submissions').SubmissionsSync;
 };
