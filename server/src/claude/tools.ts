@@ -11,6 +11,7 @@ import { extractFrames } from '../lib/ffmpeg';
 import { formatTime, getMedia, mediaPath, readTranscript } from '../services/media';
 import { createBranch, createPiece, getBranch, getPiece, getPieceDetail, getWorkspace, mergeDraft, saveVersion } from '../services/pieces';
 import { digest } from '../analytics/report';
+import { campaignsForWorkspace, listSources } from '../campaigns/campaigns';
 import { accountLabel, listAccounts } from '../publish/accounts';
 import { piecePosts, upcomingPosts } from '../publish/posts';
 import { studioTools, studioToolLabel } from './studio-tools';
@@ -80,6 +81,10 @@ export function toolLabel(fullName: string, input: Record<string, any>): string 
       return 'Read the posting schedule';
     case 'get_analytics':
       return input.pieceId ? 'Read how this piece did' : 'Read the analytics';
+    case 'get_campaigns':
+      return 'Read the campaigns';
+    case 'get_campaign':
+      return 'Read a campaign’s rules';
     case 'WebSearch':
       return `Searched the web: ${input.query ?? ''}`;
     case 'WebFetch':
@@ -400,6 +405,68 @@ export function buildTools(workspaceId: string) {
           ? `\n\n## Latest weekly review (${new Date(review.createdAt).toDateString()})\n${review.body.headline}\n${review.body.summary}\nLessons:${review.body.lessons.map((l) => `\n- ${l}`).join('')}`
           : '';
         return ok(text.replace(/\[(A|P)\d+\] /g, '') + last);
+      }),
+    ),
+
+    tool(
+      'get_campaigns',
+      'List the campaigns this page works on (Content Rewards campaigns assigned to it, or this business’s own): status, payout per 1,000 views, budget left, deadline, ' +
+        'platforms and the halal screen. Read-only: adding, confirming and assigning campaigns is the creator’s click.',
+      {},
+      safe(async () => {
+        const day = (ms: number | null) => (ms ? new Date(ms).toDateString() : undefined);
+        return ok(
+          campaignsForWorkspace(workspaceId).map((c) => ({
+            id: c.id,
+            title: c.title,
+            brand: c.brand || undefined,
+            origin: c.origin,
+            status: c.status,
+            ratePer1k: c.ratePer1k ?? undefined,
+            budgetLeft: c.budgetLeft ?? undefined,
+            budgetTotal: c.budgetTotal ?? undefined,
+            deadline: day(c.deadline),
+            platforms: c.platforms,
+            halal: c.halalVerdict ?? undefined,
+            rules: c.checklist.length,
+          })),
+        );
+      }),
+    ),
+
+    tool(
+      'get_campaign',
+      'Read one campaign in full: the brief, every rule (kind and what the app can check), creator requirements, payouts per platform, budget, the halal screen with ' +
+        'its reasons, and its source videos (title, length, whether they are downloaded and transcribed). Check its rules before suggesting anything for it. Read-only.',
+      { campaignId: z.string().describe('From get_campaigns') },
+      safe(async ({ campaignId }) => {
+        const c = campaignsForWorkspace(workspaceId).find((x) => x.id === campaignId);
+        if (!c) throw new ToolError('That campaign isn’t one this page works on.');
+        const sources = listSources(c.id).map((s) => ({
+          title: s.title || s.link || 'Upload',
+          kind: s.kind,
+          minutes: s.durationMs ? Math.round(s.durationMs / 60000) : undefined,
+          status: s.status,
+          transcript: s.transcriptFrom ?? undefined,
+        }));
+        return ok({
+          title: c.title,
+          brand: c.brand,
+          type: c.type,
+          category: c.category,
+          status: c.status,
+          link: c.link ?? undefined,
+          brief: c.description,
+          rules: c.checklist.map((r) => ({ rule: r.text, kind: r.kind, check: r.check ?? undefined, addedBy: r.by === 'you' ? 'creator' : undefined })),
+          rulesAsWritten: c.rulesText || undefined,
+          rulesLocked: c.rulesLocked || undefined,
+          requirements: c.requirements || undefined,
+          payouts: c.payouts,
+          budget: { left: c.budgetLeft, total: c.budgetTotal },
+          deadline: c.deadline ? new Date(c.deadline).toDateString() : undefined,
+          halal: { verdict: c.halalVerdict, reasons: c.halalReasons },
+          sources,
+        });
       }),
     ),
 

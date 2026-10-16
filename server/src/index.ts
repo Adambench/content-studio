@@ -5,6 +5,7 @@ import fastifyStatic from '@fastify/static';
 import Fastify, { LogController } from 'fastify';
 import { ZodError } from 'zod';
 import { startAnalytics, stopAnalytics } from './analytics/schedule';
+import { stopAllSources } from './campaigns/sources';
 import { preparePlugin } from './claude/plugin';
 import { config } from './config';
 import { runMigrations } from './db';
@@ -15,6 +16,7 @@ import { initPush } from './lib/push';
 import { startScheduler, stopScheduler } from './publish/scheduler';
 import { analyticsRoutes } from './routes/analytics';
 import { authRoutes, cookieSecret, isAuthenticated } from './routes/auth';
+import { campaignRoutes } from './routes/campaigns';
 import { chatRoutes } from './routes/chat';
 import { deviceRoutes } from './routes/devices';
 import { mediaRoutes } from './routes/media';
@@ -109,6 +111,7 @@ await app.register(publishingRoutes);
 await app.register(analyticsRoutes);
 await app.register(todayRoutes);
 await app.register(siteRoutes);
+await app.register(campaignRoutes);
 
 registerHandlers();
 startWorker();
@@ -125,6 +128,7 @@ async function shutdown() {
   stopWorker();
   stopScheduler();
   stopAnalytics();
+  stopAllSources();
   await app.close();
   process.exit(0);
 }

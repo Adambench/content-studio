@@ -1,7 +1,8 @@
-import { AlertCircle, CalendarCheck, Clapperboard, Loader2, Sparkles } from 'lucide-react';
+import { AlertCircle, BadgeDollarSign, CalendarCheck, Clapperboard, Loader2, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { KIND_INFO } from '@shared/types';
+import { BudgetBar, deadlineText, HalalBadge, rateText } from '@/components/campaigns/common';
 import { KIND_ICONS } from '@/components/KindPicker';
 import { PageHeader } from '@/components/PageHeader';
 import { PlatformIcon, StatusIcon, formatTime, formatWhen, statusText } from '@/components/publish/common';
@@ -13,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { mediaThumbUrl } from '@/lib/api';
 import { duration, timeAgo } from '@/lib/format';
 import { useToday } from '@/lib/queries';
-import type { Post, TodayData, TodayWork } from '@/lib/types';
+import type { Post, TodayCampaign, TodayData, TodayWork } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 type Ws = TodayData['workspaces'][number];
@@ -124,13 +125,37 @@ function WorkRow({ item, ws }: { item: TodayWork; ws: Ws | undefined }) {
       )}
     </div>
   );
-  const to = item.type === 'render' && item.workspaceId && item.pieceId ? `/w/${item.workspaceId}/p/${item.pieceId}/edit` : item.type === 'transcribe' && item.workspaceId ? `/w/${item.workspaceId}/library` : null;
+  const to =
+    item.type === 'render' && item.workspaceId && item.pieceId
+      ? `/w/${item.workspaceId}/p/${item.pieceId}/edit`
+      : item.type === 'transcribe' && item.workspaceId
+        ? `/w/${item.workspaceId}/library`
+        : item.type === 'source' && item.campaignId
+          ? `/campaigns/${item.campaignId}`
+          : null;
   return to ? (
     <Link to={to} className="block hover:opacity-90">
       {body}
     </Link>
   ) : (
     body
+  );
+}
+
+function CampaignTile({ c }: { c: TodayCampaign }) {
+  const deadline = deadlineText(c.deadline);
+  return (
+    <Link to={`/campaigns/${c.id}`} className="block space-y-2 rounded-lg border bg-card p-3 hover:border-foreground/20">
+      <div className="flex items-start gap-2">
+        <BadgeDollarSign className="mt-0.5 size-4 shrink-0 text-orange-400" />
+        <span className="min-w-0 flex-1 text-sm font-medium">{c.title}</span>
+      </div>
+      <p className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+        {rateText(c.ratePer1k) && <span className="text-foreground">{rateText(c.ratePer1k)}</span>}
+        {deadline && <span>{deadline}</span>}
+      </p>
+      {c.origin === 'content_rewards' && <BudgetBar left={c.budgetLeft} total={c.budgetTotal} />}
+    </Link>
   );
 }
 
@@ -185,7 +210,9 @@ export function TodayPage() {
   // Failed and missed posts are under "Waiting for you" instead.
   const todays = data.posts.filter((p) => p.status !== 'failed' && p.status !== 'missed');
   const toPost = todays.filter((p) => p.status === 'scheduled' || p.status === 'publishing').length;
-  const needsYou = data.review.length + data.attention.length + data.reviews.length;
+  const toConfirm = data.campaigns?.toConfirm ?? [];
+  const activeCampaigns = data.campaigns?.active ?? [];
+  const needsYou = data.review.length + data.attention.length + data.reviews.length + toConfirm.length;
 
   return (
     <div className="flex h-full flex-col">
@@ -218,6 +245,15 @@ export function TodayPage() {
                   </div>
                 </div>
               )}
+              {toConfirm.map((c) => (
+                <Link key={c.id} to={`/campaigns/${c.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border bg-card p-2.5 hover:border-foreground/20">
+                  <BadgeDollarSign className="size-4 shrink-0 text-orange-400" />
+                  <span className="min-w-0 flex-1 text-sm">
+                    Confirm the campaign <span className="font-medium">{c.title || 'you added'}</span>
+                  </span>
+                  <HalalBadge verdict={c.halalVerdict} />
+                </Link>
+              ))}
               {data.reviews.map((r) => (
                 <Link key={r.id} to={`/w/${r.workspaceId}/analytics`} className="flex items-center gap-3 rounded-lg border bg-card p-2.5 hover:border-foreground/20">
                   <Sparkles className="size-4 shrink-0 text-brand" />
@@ -267,6 +303,15 @@ export function TodayPage() {
                 ))}
               </div>
             </Section>
+            {activeCampaigns.length > 0 && (
+              <Section title="Campaigns" count={activeCampaigns.length}>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                  {activeCampaigns.map((c) => (
+                    <CampaignTile key={c.id} c={c} />
+                  ))}
+                </div>
+              </Section>
+            )}
             {data.usage && (
               <Section title="Claude">
                 <UsageMeter usage={data.usage} className="rounded-lg border bg-card px-3 py-2.5" />

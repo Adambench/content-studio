@@ -1,3 +1,4 @@
+import type { Campaign } from '@shared/campaigns';
 import type { DayPart, PostStats, ReviewBody, ReviewStatus, WeeklyReviewSetting } from '@shared/analytics';
 import type { EditSpec, EditTemplate } from '@shared/edit';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostProblem, PostStatus, PublishPlatform, QueueSlot } from '@shared/publish';
@@ -315,14 +316,18 @@ export type Review = {
 /** Something running in the background, for Today. */
 export type TodayWork = {
   id: string;
-  type: 'render' | 'transcribe' | 'job';
+  type: 'render' | 'transcribe' | 'job' | 'source';
   workspaceId: string | null;
   pieceId: string | null;
+  /** A campaign's source video being fetched or transcribed. */
+  campaignId?: string;
   title: string;
   detail: string;
   status: 'queued' | 'running';
   progress: number | null;
 };
+
+export type TodayCampaign = Pick<Campaign, 'id' | 'title' | 'brand' | 'origin' | 'ratePer1k' | 'budgetLeft' | 'budgetTotal' | 'deadline' | 'halalVerdict' | 'pageIds'>;
 
 /** The Today view: what needs me across every workspace. */
 export type TodayData = {
@@ -343,6 +348,7 @@ export type TodayData = {
   posts: Post[];
   attention: Post[];
   work: TodayWork[];
+  campaigns: { toConfirm: TodayCampaign[]; active: TodayCampaign[] };
   usage: ClaudeUsage | null;
   reviews: { id: string; workspaceId: string; finishedAt: number | null }[];
 };

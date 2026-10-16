@@ -2,6 +2,7 @@ import { QueryClient, useQuery } from '@tanstack/react-query';
 import { api } from './api';
 import type { PairedDevice } from '@shared/devices';
 import type { CreatorInfo } from '@shared/publish';
+import type { Campaign, CampaignDetail } from '@shared/campaigns';
 import type { SitesStatus } from '@shared/sites';
 import type {
   Account,
@@ -59,6 +60,8 @@ export const keys = {
   fcm: ['fcm'] as const,
   today: ['today'] as const,
   sites: ['sites'] as const,
+  campaigns: ['campaigns'] as const,
+  campaign: (id: string) => ['campaign', id] as const,
 };
 
 export type AuthStatus = { setupRequired: boolean; authenticated: boolean; desktopManaged: boolean };
@@ -92,6 +95,9 @@ export const useSystemStatus = () => useQuery({ queryKey: keys.status, queryFn: 
 export const useDevices = () => useQuery({ queryKey: keys.devices, queryFn: () => api<PairedDevice[]>('/devices') });
 export type FcmStatus = { projectId: string | null; clientEmail: string | null; serviceAccount: boolean; app: boolean };
 export const useFcm = () => useQuery({ queryKey: keys.fcm, queryFn: () => api<FcmStatus>('/push/fcm') });
+
+export const useCampaigns = () => useQuery({ queryKey: keys.campaigns, queryFn: () => api<Campaign[]>('/campaigns') });
+export const useCampaign = (id: string) => useQuery({ queryKey: keys.campaign(id), queryFn: () => api<CampaignDetail>(`/campaigns/${id}`), enabled: !!id });
 
 /** Settings → Connected sites: the desktop app's signed-in windows. */
 export const useSites = () => useQuery({ queryKey: keys.sites, queryFn: () => api<SitesStatus>('/sites') });

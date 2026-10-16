@@ -1,0 +1,156 @@
+import { eq, inArray } from 'drizzle-orm';
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { CHECK_TYPES, isCampaignLink, RULE_KINDS } from '../../../shared/campaigns';
+import { db, newId, schema } from '../db';
+import { badRequest } from '../lib/http';
+import { enqueue, hasPendingJob } from '../jobs/queue';
+import { deleteCampaign, emitCampaign, getCampaignDetail, getCampaignRow, getSource, listCampaigns, listSources, setPages, updateCampaign } from '../campaigns/campaigns';
+import { addSourceLink, deleteSource, saveSourceUpload, startSource, stopSource } from '../campaigns/sources';
+
+const idParam = z.object({ id: z.string().min(1) });
+
+const ruleSchema = z.object({
+  text: z.string().trim().min(1).max(300),
+  kind: z.enum(RULE_KINDS),
+  check: z.object({ type: z.enum(CHECK_TYPES), value: z.union([z.string().max(200), z.number()]) }).nullable(),
+  by: z.literal('you').optional(),
+});
+
+function checkPages(ids: string[]) {
+  const found = ids.length ? db.select({ id: schema.workspaces.id }).from(schema.workspaces).where(inArray(schema.workspaces.id, ids)).all() : [];
+  if (found.length !== new Set(ids).size) throw badRequest('One of those pages doesn’t exist.');
+}
+
+const reading = (id: string) => hasPendingJob('campaign.read', 'campaignId', id);
+const withReading = <T extends { id: string }>(c: T) => ({ ...c, reading: reading(c.id) });
+
+function startRead(id: string) {
+  if (!reading(id)) enqueue('campaign.read', { campaignId: id }, { maxAttempts: 2 });
+  emitCampaign(id);
+}
+
+/** Campaigns (outside workspaces): add from a link or a brief, confirm and assign, sources. See campaigns/. */
+export async function campaignRoutes(app: FastifyInstance) {
+  app.get('/api/campaigns', async () => listCampaigns().map(withReading));
+
+  app.post('/api/campaigns', async (req) => {
+    const body = z
+      .discriminatedUnion('origin', [
+        z.object({ origin: z.literal('content_rewards'), link: z.string().trim().url().max(500) }),
+        z.object({ origin: z.literal('business'), businessWorkspaceId: z.string().min(1), title: z.string().trim().min(1).max(120), brief: z.string().trim().min(1).max(20_000) }),
+      ])
+      .parse(req.body);
+    if (body.origin === 'content_rewards') {
+      if (!isCampaignLink(body.link)) throw badRequest('Give the campaign’s Content Rewards link (contentrewards.com/c/campaigns/…).');
+      const link = body.link.replace(/[?#].*$/, '');
+      const existing = db.select({ id: schema.campaigns.id }).from(schema.campaigns).where(eq(schema.campaigns.link, link)).get();
+      if (existing) return withReading(getCampaignDetail(existing.id));
+      const id = newId();
+      db.insert(schema.campaigns).values({ id, origin: 'content_rewards', link, status: 'reading' }).run();
+      startRead(id);
+      return withReading(getCampaignDetail(id));
+    }
+    checkPages([body.businessWorkspaceId]);
+    const id = newId();
+    db.insert(schema.campaigns)
+      .values({ id, origin: 'business', businessWorkspaceId: body.businessWorkspaceId, title: body.title, description: body.brief, pageText: body.brief, status: 'reading' })
+      .run();
+    startRead(id);
+    return withReading(getCampaignDetail(id));
+  });
+
+  app.get('/api/campaigns/:id', async (req) => withReading(getCampaignDetail(idParam.parse(req.params).id)));
+
+  app.patch('/api/campaigns/:id', async (req) => {
+    const { id } = idParam.parse(req.params);
+    const c = getCampaignRow(id);
+    const body = z
+      .object({
+        title: z.string().trim().min(1).max(120).optional(),
+        status: z.enum(['active', 'paused', 'ended']).optional(),
+        deadline: z.number().int().nullable().optional(),
+        pageIds: z.array(z.string().min(1)).max(50).optional(),
+        checklist: z.array(ruleSchema).max(60).optional(),
+        // A business campaign's brief; read again after changing it.
+        brief: z.string().trim().min(1).max(20_000).optional(),
+      })
+      .parse(req.body);
+    if (body.status && (c.status === 'reading' || c.status === 'to_confirm')) throw badRequest('Confirm the campaign first.');
+    if (body.brief && c.origin !== 'business') throw badRequest('Only a business campaign has a brief to edit.');
+    if (body.pageIds) {
+      checkPages(body.pageIds);
+      setPages(id, body.pageIds);
+    }
+    updateCampaign(id, {
+      title: body.title,
+      status: body.status,
+      deadline: body.deadline,
+      checklist: body.checklist,
+      ...(body.brief ? { pageText: body.brief, description: body.brief } : {}),
+    });
+    if (body.brief) startRead(id);
+    return withReading(getCampaignDetail(id));
+  });
+
+  // My OK after reading the screen: it goes live on the pages I picked. A rejected campaign can't be confirmed.
+  app.post('/api/campaigns/:id/confirm', async (req) => {
+    const { id } = idParam.parse(req.params);
+    const { pageIds } = z.object({ pageIds: z.array(z.string().min(1)).min(1, 'Pick at least one page.').max(50) }).parse(req.body);
+    const c = getCampaignRow(id);
+    if (c.status !== 'to_confirm') throw badRequest('This campaign isn’t waiting for confirmation.');
+    if (c.halalVerdict === 'reject') throw badRequest('The halal screen rejected this campaign, so it can’t be used.');
+    if (!c.readAt) throw badRequest('Read the campaign successfully first.');
+    checkPages(pageIds);
+    setPages(id, pageIds);
+    updateCampaign(id, { status: 'active' });
+    return withReading(getCampaignDetail(id));
+  });
+
+  app.post('/api/campaigns/:id/read', async (req) => {
+    const { id } = idParam.parse(req.params);
+    const c = getCampaignRow(id);
+    if (c.origin === 'content_rewards' && !c.link) throw badRequest('This campaign has no link to read.');
+    startRead(id);
+    return withReading(getCampaignDetail(id));
+  });
+
+  app.delete('/api/campaigns/:id', async (req) => {
+    const { id } = idParam.parse(req.params);
+    // Downloads still writing into its folder stop first.
+    for (const s of listSources(id)) stopSource(s.id);
+    await deleteCampaign(id);
+    return { ok: true };
+  });
+
+  // ---------- sources ----------
+
+  app.post('/api/campaigns/:id/sources', async (req) => {
+    const { id } = idParam.parse(req.params);
+    const { link } = z.object({ link: z.string().trim().url().max(2000) }).parse(req.body);
+    await addSourceLink(id, link);
+    return getCampaignDetail(id);
+  });
+
+  app.post('/api/campaigns/:id/sources/upload', async (req) => {
+    const { id } = idParam.parse(req.params);
+    getCampaignRow(id);
+    for await (const part of req.parts()) {
+      if (part.type === 'file') await saveSourceUpload(id, { stream: part.file, filename: part.filename, mimetype: part.mimetype });
+    }
+    return getCampaignDetail(id);
+  });
+
+  // Download a source that's only listed (or try again after a failure); a channel or folder lists its videos.
+  app.post('/api/sources/:id/start', async (req) => {
+    const s = getSource(idParam.parse(req.params).id);
+    await startSource(s.id);
+    return getCampaignDetail(s.campaignId);
+  });
+
+  app.delete('/api/sources/:id', async (req) => {
+    const s = getSource(idParam.parse(req.params).id);
+    await deleteSource(s.id);
+    return getCampaignDetail(s.campaignId);
+  });
+}

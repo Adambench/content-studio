@@ -1,4 +1,4 @@
-import { CalendarDays, ChartColumn, FolderOpen, KanbanSquare, Mic, Palette, Settings, Sparkles, Sun } from 'lucide-react';
+import { BadgeDollarSign, CalendarDays, ChartColumn, FolderOpen, KanbanSquare, Mic, Palette, Settings, Sparkles, Sun } from 'lucide-react';
 import { NavLink, Outlet, useMatch } from 'react-router';
 import type { ModuleId } from '@shared/types';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,8 @@ import { AppBanners, UploadsButton } from './AppChrome';
 import { UsageMeter } from './UsageMeter';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 
-/** A workspace's pages. Those with a module show only when it's on (Campaigns, Clipping and Research join later). */
+/** A workspace's pages. Those with a module show only when it's on (Clipping and Research join later; Campaigns sit
+ * with Today, outside workspaces). */
 const navItems: { to: string; label: string; icon: typeof KanbanSquare; module?: ModuleId }[] = [
   { to: 'board', label: 'Board', icon: KanbanSquare },
   { to: 'calendar', label: 'Calendar', icon: CalendarDays },
@@ -38,10 +39,10 @@ function SideLink({ to, icon: Icon, children }: { to: string; icon: typeof Kanba
   );
 }
 
-/** What waits for me across every workspace: clips to review and posts that failed or missed their time. */
+/** What waits for me across every workspace: clips to review, posts that failed or missed their time, campaigns to confirm. */
 function TodayBadge({ className }: { className?: string }) {
   const today = useToday();
-  const n = (today.data?.review.length ?? 0) + (today.data?.attention.length ?? 0);
+  const n = (today.data?.review.length ?? 0) + (today.data?.attention.length ?? 0) + (today.data?.campaigns?.toConfirm.length ?? 0);
   if (!n) return null;
   return (
     <Badge className={cn('h-4 min-w-4 bg-brand px-1 text-[10px] text-white tabular-nums', className)} aria-label={`${n} thing${n === 1 ? '' : 's'} waiting for you`}>
@@ -74,6 +75,8 @@ export function AppShell() {
   const desktopOpen = useStore(claudeDesktopOpen);
   const { data: workspaces = [] } = useWorkspaces();
   const modules = workspaces.find((w) => w.id === wid)?.modules ?? [];
+  // Campaigns live outside workspaces: shown when any page uses them.
+  const campaigns = workspaces.some((w) => w.modules.includes('campaigns'));
 
   return (
     <div className="flex h-full">
@@ -84,6 +87,11 @@ export function AppShell() {
             Today
             <TodayBadge className="ml-auto" />
           </SideLink>
+          {campaigns && (
+            <SideLink to="/campaigns" icon={BadgeDollarSign}>
+              Campaigns
+            </SideLink>
+          )}
         </nav>
         <div className="p-2">
           <WorkspaceSwitcher currentId={wid} />
@@ -125,6 +133,13 @@ export function AppShell() {
           </div>
           <div className="flex items-center">
             {isApp && <UploadsButton />}
+            {campaigns && (
+              <Button variant="ghost" size="icon" asChild aria-label="Campaigns">
+                <NavLink to="/campaigns">
+                  <BadgeDollarSign />
+                </NavLink>
+              </Button>
+            )}
             {wid && (
               <Button variant="ghost" size="icon" asChild aria-label="Library">
                 <NavLink to={`/w/${wid}/library`}>

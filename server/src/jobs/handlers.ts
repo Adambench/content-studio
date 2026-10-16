@@ -6,6 +6,8 @@ import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Transcript } from '../../../shared/types';
 import { onReviewFailed, runReview } from '../analytics/review';
 import { statsJob } from '../analytics/schedule';
+import { onReadFailed, readCampaign } from '../campaigns/read';
+import { downloadSource, onSourceFailed, transcribeSource } from '../campaigns/sources';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
 import { config } from '../config';
@@ -200,4 +202,12 @@ export function registerHandlers() {
   registerJob('stats.sync', statsJob, 1);
   registerJob('analytics.review', runReview, 1);
   onJobFailed('analytics.review', onReviewFailed);
+  // Campaigns: reading a page (one Haiku call), then sources one at a time — downloads are network-bound and
+  // transcripts share the CPU with everything else.
+  registerJob('campaign.read', readCampaign, 1);
+  onJobFailed('campaign.read', onReadFailed);
+  registerJob('source.download', downloadSource, 1);
+  onJobFailed('source.download', onSourceFailed);
+  registerJob('source.transcribe', transcribeSource, 1);
+  onJobFailed('source.transcribe', onSourceFailed);
 }

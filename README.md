@@ -28,6 +28,11 @@ Open **Content Studio** from the app menu. No terminal needed.
   **Personal brand**, **Business** or **Clipping page** — that presets its modules (Ideas & scripts, Filming,
   Grading, Campaigns, Clipping, Research brief), its stages and Claude's instructions, and a one-line **niche**.
   Modules can be switched on or off in workspace settings.
+- **Campaigns** — paste a Content Rewards campaign link (or write a brief for one of your businesses): the app reads
+  the page (in your signed-in Whop window when you've joined), makes a rule checklist, screens it against the halal
+  rules and waits for your OK and the pages it goes on. Source videos (YouTube, Twitch, Kick, Drive, uploads) download
+  to the computer and get a transcript. Signed-in windows for Whop, TikTok and Instagram are under Settings →
+  Connected sites.
 - **Pipeline board** — drag cards through your stages (customisable per workspace; clipping pages go Making →
   Review → Ready → Scheduled → Posted).
 - **Piece editor** — hook, script, notes and per-platform copy (TikTok, Instagram, YouTube Shorts, X) with

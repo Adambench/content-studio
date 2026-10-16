@@ -43,6 +43,13 @@
       "when": 1792092497130,
       "tag": "0005_workspace_kinds",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792103650448,
+      "tag": "0006_campaigns",
+      "breakpoints": true
     }
   ]
 }

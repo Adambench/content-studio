@@ -46,12 +46,14 @@ export const config = {
   skillsSource: join(resourcesDir, '.claude/skills'),
   pluginDir: existsSync(join(packagedPluginDir, '.claude-plugin/plugin.json')) ? packagedPluginDir : devPluginDir,
   devPluginDir,
+  // Campaigns' long source videos and their transcripts (sources/<campaign>/), apart from the pages' libraries.
+  sourcesDir: join(dataDir, 'sources'),
   // Whisper's Python environment lives with the data so app updates don't wipe it.
   whisperVenv: join(dataDir, 'whisper'),
   whisperPython: join(dataDir, 'whisper/bin/python'),
   vapidSubject: process.env.VAPID_SUBJECT ?? 'mailto:content-studio@example.com',
 };
 
-for (const dir of [config.dataDir, config.mediaDir, config.thumbsDir, config.transcriptsDir, config.framesDir, config.proxiesDir, config.rendersDir, config.cacheDir, config.tmpDir, config.logsDir, config.claudeDir]) {
+for (const dir of [config.dataDir, config.mediaDir, config.thumbsDir, config.transcriptsDir, config.framesDir, config.proxiesDir, config.rendersDir, config.cacheDir, config.tmpDir, config.logsDir, config.claudeDir, config.sourcesDir]) {
   mkdirSync(dir, { recursive: true });
 }

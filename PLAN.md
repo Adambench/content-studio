@@ -181,7 +181,23 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
      on the real TikTok, Instagram and Content Rewards pages; signing out of TikTok cleared its cookies and local
      storage and left the other sites'; Settings at desktop and phone width, in the app, a browser and without the
      desktop app. Not tested: a real sign-in (see *Where things stand*)
-   - [ ] 5 Campaigns
+   - [x] 5 Campaigns (2026-10-15): `campaigns`, `campaign_pages`, `campaign_sources` (migration 0006); add from a
+     Content Rewards link (read through the signed-in window, a plain fetch outside the desktop app) or a business's
+     brief; one Haiku call (`campaign.read`) gives the details, payouts per platform, budget, the rule checklist (with
+     the checks the app can do itself) and the halal screen; confirm with pages (a rejected one can't be); sources by
+     link (a video, a YouTube or Twitch channel or playlist lists its 30 latest, a Drive file or public folder, a direct
+     file) or upload, downloaded with yt-dlp into `sources/<campaign>/`, then transcribed from YouTube's captions or
+     with Whisper; `/campaigns` and `/campaigns/:id`, Today (to confirm, active, downloads), `get_campaigns` and
+     `get_campaign` for Claude. Tested with the built app on real pages: Mark Manson's podcast campaign (flagged:
+     swearing and music intros to check), LANY (rejected: music artist), LIV Las Vegas (rejected: nightclub, DJ sets),
+     SoFi (flagged: may be interest-based lending), a business brief (8 rules, 6 checked automatically); confirming a
+     rejected one or with no pages refused; a channel listed 30 videos; a 43 min and a 17 min episode downloaded at
+     1080p H.264 with progress and their captions turned into word-timed transcripts; a 75 s upload transcribed by
+     Whisper; the same video pasted as `youtu.be`, `&list=` or Shorts is found again; a Kick channel (live now) is
+     refused; deleting a campaign mid-download stops yt-dlp (its standalone build runs a second process, so the whole
+     process group goes); Claude's tools only see the page's own campaigns; screenshots at desktop and phone width.
+     Not tested: Twitch and Kick VOD downloads (Twitch channels list), Drive (no public link to hand), a joined
+     campaign's locked rules and files (needs the Whop sign-in)
    - [ ] 6 Clipping v1
    - [ ] 7 Submissions and earnings
    - [ ] 8 Research and daily brief
@@ -609,8 +625,8 @@ Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usag
   installed as the desktop app (`npm run install-app`).
 - Next: phase 0 on the platforms' sites (now including the analytics scopes), then connect real accounts; video
   studio extras (transitions, motion graphics). Phase 7 (clipping): steps 1 (playbook skill), 2 (skills in the app),
-  3 (kinds, Today, music out) and 4 (signed-in windows) done (2026-10-15); next is step 5 (campaigns) of the *Phase 7
-  build plan*. Waiting on the user:
+  3 (kinds, Today, music out), 4 (signed-in windows) and 5 (campaigns) done (2026-10-15); next is step 6 (clipping v1)
+  of the *Phase 7 build plan*. Waiting on the user:
   - listening to the built-in SFX;
   - in the desktop app (`npm run install-app` first), Settings → Connected sites: sign in to Whop (it opens
     contentrewards.com's sign-in), TikTok (its QR code works from the phone) and Instagram, and check each then shows
@@ -618,6 +634,8 @@ Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usag
     signed in", a session should list the HttpOnly cookies on contentrewards.com (remote debugging, as in CLAUDE.md)
     and pin the right one. Then "Try a page" with a campaign you've joined: its rules and source files should be in
     the text (signed out, they show "Join to unlock").
+  - then Campaigns → Add campaign with a campaign you've joined: its rules and source files should come in, then
+    confirm it on a page and get a source or two.
 
   The weekly review with the playbook in its prompt hasn't been run yet (no posts with numbers). The phone app needs a
   new release for Today and the nasheed change (`API_VERSION` 2: v0.1.0 asks to be updated).

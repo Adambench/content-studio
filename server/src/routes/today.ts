@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { REVIEW_STAGE, normalizeModules } from '../../../shared/types';
+import { busySources, listCampaigns } from '../campaigns/campaigns';
 import { db, schema } from '../db';
 import { getSetting } from '../lib/settings';
 import { todayPosts } from '../publish/posts';
@@ -14,11 +15,13 @@ const JOB_LABELS: Record<string, string> = {
   'voice.learn': 'Learning from your edits',
   'stats.sync': 'Reading the latest numbers',
   'analytics.review': 'Writing the weekly review',
+  'campaign.read': 'Reading a campaign',
 };
 
 /**
  * The Today view: what needs me across every workspace (clips to review, today's posts and the ones that failed),
- * what's running, and Claude usage. Campaigns, submissions and research briefs join it in later steps.
+ * what's running, campaigns (to confirm, budget left, deadline) and Claude usage. Submissions and research briefs
+ * join it in later steps.
  */
 export async function todayRoutes(app: FastifyInstance) {
   app.get('/api/today', async (req) => {
@@ -120,7 +123,37 @@ export async function todayRoutes(app: FastifyInstance) {
         status: j.status as 'queued' | 'running',
         progress: null,
       })),
+      ...busySources().map(({ source: s, campaignTitle }) => ({
+        id: s.id,
+        type: 'source' as const,
+        workspaceId: null,
+        pieceId: null,
+        campaignId: s.campaignId,
+        title: `${s.status === 'transcribing' ? 'Transcribing' : 'Downloading'} ${s.title || 'a source video'}`,
+        detail: [campaignTitle, s.status === 'queued' ? 'Waiting its turn' : s.detail].filter(Boolean).join(' · '),
+        status: (s.status === 'queued' || (s.status === 'transcribing' && s.detail === 'Waiting its turn') ? 'queued' : 'running') as 'queued' | 'running',
+        progress: s.status === 'downloading' ? s.progress : null,
+      })),
     ].filter((w) => !w.workspaceId || wsIds.includes(w.workspaceId));
+
+    // ---------- campaigns ----------
+    const campaigns = listCampaigns();
+    // Rejected by the halal screen: nothing to confirm (they stay under Campaigns until deleted).
+    const toConfirm = campaigns.filter((c) => c.status === 'to_confirm' && c.halalVerdict !== 'reject');
+    // Running ones, the nearest deadline first.
+    const active = campaigns.filter((c) => c.status === 'active').sort((a, b) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity));
+    const brief = (c: (typeof campaigns)[number]) => ({
+      id: c.id,
+      title: c.title,
+      brand: c.brand,
+      origin: c.origin,
+      ratePer1k: c.ratePer1k,
+      budgetLeft: c.budgetLeft,
+      budgetTotal: c.budgetTotal,
+      deadline: c.deadline,
+      halalVerdict: c.halalVerdict,
+      pageIds: c.pageIds,
+    });
 
     // ---------- each page at a glance ----------
     const counts = db
@@ -164,6 +197,7 @@ export async function todayRoutes(app: FastifyInstance) {
       posts: posts.filter((p) => p.scheduledAt >= from && p.scheduledAt < to),
       attention: posts.filter((p) => p.status === 'failed' || p.status === 'missed').sort((a, b) => b.scheduledAt - a.scheduledAt),
       work,
+      campaigns: { toConfirm: toConfirm.map(brief), active: active.map(brief) },
       usage: getSetting('claudeUsage') ?? null,
       // The most recent finished weekly reviews, newest first, so their suggestions aren't missed.
       reviews: db

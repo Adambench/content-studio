@@ -8,6 +8,8 @@ import { AnalyticsPage } from '@/pages/AnalyticsPage';
 import { AssetsPage } from '@/pages/AssetsPage';
 import { BoardPage } from '@/pages/BoardPage';
 import { CalendarPage } from '@/pages/CalendarPage';
+import { CampaignPage } from '@/pages/CampaignPage';
+import { CampaignsPage } from '@/pages/CampaignsPage';
 import { CapturePage } from '@/pages/CapturePage';
 import { HomeRedirect } from '@/pages/HomeRedirect';
 import { LibraryPage } from '@/pages/LibraryPage';
@@ -33,6 +35,8 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <HomeRedirect /> },
           { path: 'today', element: <TodayPage /> },
+          { path: 'campaigns', element: <CampaignsPage /> },
+          { path: 'campaigns/:id', element: <CampaignPage /> },
           { path: 'settings', element: <SettingsPage /> },
           { path: 'capture', element: <CapturePage /> },
           { path: 'share', element: <SharePage /> },

@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { PostStats, ReviewBody, ReviewStatus } from '../../../shared/analytics';
+import type { CampaignOrigin, CampaignPlatform, CampaignStatus, HalalVerdict, Payout, RuleItem, SourceKind, SourceStatus } from '../../../shared/campaigns';
 import type { EditSpec, EditTemplate } from '../../../shared/edit';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
 import type { SessionKind } from '../../../shared/devices';
@@ -411,4 +412,80 @@ export const reviews = sqliteTable(
     finishedAt: integer('finished_at'),
   },
   (t) => [index('reviews_workspace_idx').on(t.workspaceId, t.createdAt)],
+);
+
+/**
+ * A clipping campaign: a Content Rewards campaign (its page read and screened) or one of my businesses' own. It lives
+ * outside workspaces and is assigned to the pages it posts on (campaign_pages).
+ */
+export const campaigns = sqliteTable('campaigns', {
+  id: id(),
+  origin: text('origin').$type<CampaignOrigin>().notNull(),
+  // A business's own campaign: the workspace whose brand guide, assets and footage it uses.
+  businessWorkspaceId: text('business_workspace_id').references(() => workspaces.id, { onDelete: 'set null' }),
+  link: text('link'),
+  title: text('title').notNull().default(''),
+  brand: text('brand').notNull().default(''),
+  type: text('type').notNull().default(''),
+  category: text('category').notNull().default(''),
+  description: text('description').notNull().default(''),
+  status: text('status').$type<CampaignStatus>().notNull().default('reading'),
+  accepting: integer('accepting', { mode: 'boolean' }),
+  // The best rate per 1,000 views across its platforms; `payouts` has each one's.
+  ratePer1k: real('rate_per_1k'),
+  payouts: text('payouts', { mode: 'json' }).$type<Payout[]>().notNull().default(sql`'[]'`),
+  platforms: text('platforms', { mode: 'json' }).$type<CampaignPlatform[]>().notNull().default(sql`'[]'`),
+  budgetTotal: real('budget_total'),
+  budgetLeft: real('budget_left'),
+  deadline: integer('deadline'),
+  // The rules as the page words them, one per line; the checklist is made from them.
+  rulesText: text('rules_text').notNull().default(''),
+  rulesLocked: integer('rules_locked', { mode: 'boolean' }).notNull().default(false),
+  checklist: text('checklist', { mode: 'json' }).$type<RuleItem[]>().notNull().default(sql`'[]'`),
+  requirements: text('requirements').notNull().default(''),
+  halalVerdict: text('halal_verdict').$type<HalalVerdict>(),
+  halalReasons: text('halal_reasons', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+  // What the last read saw: the page's text, or the brief I typed for a business campaign.
+  pageText: text('page_text').notNull().default(''),
+  readAt: integer('read_at'),
+  readNote: text('read_note'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/** Which pages (workspaces) a campaign posts on. */
+export const campaignPages = sqliteTable(
+  'campaign_pages',
+  {
+    campaignId: text('campaign_id').notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.campaignId, t.workspaceId] }), index('campaign_pages_workspace_idx').on(t.workspaceId)],
+);
+
+/**
+ * A long video a campaign's clips are cut from: a YouTube/Twitch/Kick video, a Drive file or an upload. Its file and
+ * transcript live in the data folder's sources/<campaign>/, not in a page's library.
+ */
+export const campaignSources = sqliteTable(
+  'campaign_sources',
+  {
+    id: id(),
+    campaignId: text('campaign_id').notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+    kind: text('kind').$type<SourceKind>().notNull(),
+    link: text('link'),
+    title: text('title').notNull().default(''),
+    durationMs: integer('duration_ms'),
+    // Inside sources/<campaign>/ once downloaded.
+    fileName: text('file_name'),
+    size: integer('size'),
+    status: text('status').$type<SourceStatus>().notNull().default('found'),
+    progress: real('progress'),
+    detail: text('detail').notNull().default(''),
+    transcriptFrom: text('transcript_from').$type<'captions' | 'whisper'>(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('campaign_sources_campaign_idx').on(t.campaignId)],
 );

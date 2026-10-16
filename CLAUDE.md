@@ -65,6 +65,13 @@ HyperFrames + FFmpeg) is usable and being extended.
   cap (`CS_SITES_DAILY_CAP`, default 200), and never click, post or submit. Only when Electron started the server: in
   `npm run dev`/`dev:web` these answer "needs the desktop app" (test with the built app). Page text → JSON with
   `parsePage()` (`claude/extract.ts`, Haiku). Settings → Connected sites (`ConnectedSites.tsx`) has "Try a page".
+- Campaigns (`server/src/campaigns`, `shared/campaigns.ts`, `/campaigns`): outside workspaces, assigned to pages
+  (`campaign_pages`). `read.ts` (`campaign.read` job) reads the Content Rewards page or a business's brief and makes
+  the details, rule checklist and halal screen in one Haiku call; nothing is used until the user confirms it with
+  pages, and a rejected one can't be. `sources.ts`: long source videos in the data dir's `sources/<campaign>/` (not a
+  page's library) — `source.download` (yt-dlp, run in its own process group so a stop kills the standalone build's
+  second process) and `source.transcribe` (YouTube captions, else Whisper). Links go through `canonicalLink`.
+  Claude only reads them (`get_campaigns`, `get_campaign`).
 
 ## Commands
 

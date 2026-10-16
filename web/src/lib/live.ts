@@ -98,6 +98,10 @@ function apply(event: LiveEvent) {
       case 'sites':
         inv(keys.sites);
         break;
+      case 'campaigns':
+        inv(keys.campaigns);
+        inv(event.id ? keys.campaign(event.id) : ['campaign']);
+        break;
     }
   } else if (event.type === 'notify') {
     // Phones get web push from the server; the desktop app shows a native notification when it isn't in front.
@@ -111,6 +115,7 @@ function apply(event: LiveEvent) {
     if (event.status === 'done' && event.jobType === 'stats.sync') toast.success('Stats are up to date');
     if (event.status === 'done' && event.jobType === 'analytics.review') toast.success('Claude’s review is ready', { description: event.message?.slice(0, 160) });
     if (event.status === 'error' && event.jobType === 'analytics.review') toast.error('The review didn’t finish', { description: event.message?.slice(0, 200) });
+    if (event.status === 'error' && event.jobType === 'campaign.read') toast.error('Couldn’t read the campaign', { description: event.message?.slice(0, 200) });
   }
   for (const l of listeners) l(event);
 }
