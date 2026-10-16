@@ -35,6 +35,7 @@ import { onUgcScriptFailed, writeUgcScript } from '../campaigns/ugc';
 import { enqueue, onJobFailed, registerJob } from './queue';
 import { onPitchFailed, pitchDirections } from '../studio/directions';
 import { onFinderFailed, runFinder } from '../finder/finder';
+import { applyEffect, onEffectFailed } from '../studio/effects';
 
 const execFile = promisify(execFileCb);
 
@@ -259,6 +260,9 @@ export function registerHandlers() {
   onJobFailed('research.brief', onBriefFailed);
   registerJob('research.analyse', analyseItem, 1);
   onJobFailed('research.analyse', onAnalyseFailed);
+  // Effects that cut the person out: the matte (a local model) then FFmpeg; one at a time, they fill the CPU.
+  registerJob('media.effect', applyEffect, 1);
+  onJobFailed('media.effect', onEffectFailed);
   // The finder: a run per clipping page, one at a time (it only starts the jobs above).
   registerJob('finder.run', runFinder, 1);
   onJobFailed('finder.run', onFinderFailed);

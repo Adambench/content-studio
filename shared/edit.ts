@@ -127,7 +127,7 @@ export type BrollOverlay = OverlayBase & {
 
 // ---------- motion graphics ----------
 
-export const GRAPHICS = ['lowerThird', 'stat', 'list', 'quote', 'callout', 'chapter', 'cta', 'progress', 'kinetic'] as const;
+export const GRAPHICS = ['lowerThird', 'stat', 'list', 'quote', 'callout', 'chapter', 'cta', 'progress', 'kinetic', 'checklist', 'chart', 'wall'] as const;
 export type GraphicTemplate = (typeof GRAPHICS)[number];
 export type GraphicPosition = 'top' | 'center' | 'bottom';
 
@@ -147,6 +147,9 @@ export const GRAPHIC_INFO: Record<
   chapter: { label: 'Section title', hint: 'A full-screen card between parts', seconds: 1.6, position: null, fields: { sub: 'Small line above (e.g. Step 2)', text: 'Title' }, example: { sub: 'Step 2', text: 'Find the *real* problem' } },
   cta: { label: 'Follow prompt', hint: 'A nudge to follow, save or comment', seconds: 2.5, position: 'center', fields: { text: 'What it says' }, example: { text: 'Follow for part 2' } },
   progress: { label: 'Progress bar', hint: 'A thin bar that fills as the video plays', seconds: 0, position: 'top', fields: {}, example: {} },
+  checklist: { label: 'Checklist', hint: 'Boxes that tick one by one: what to do, what you get', seconds: 6, position: 'center', fields: { text: 'Heading (optional)', items: 'Points, one per line (up to 6)' }, example: { text: 'Before you post', items: ['Hook in 2 seconds', 'Captions on', 'No music'] } },
+  chart: { label: 'Bar chart', hint: 'Bars that grow to the numbers said; compare a few things', seconds: 5, position: 'center', fields: { text: 'Title (optional)', items: 'One bar per line as “Name: number” (up to 6)' }, example: { text: 'Views per video', items: ['Before: 800', 'After: 12000'] } },
+  wall: { label: 'Headline wall', hint: 'A stack of headlines or comments that pile in: proof, or the noise around a topic', seconds: 5, position: 'center', fields: { text: 'Small line above (optional)', items: 'One headline per line (up to 6)' }, example: { text: 'They said', items: ['It will never work', 'Nobody wants this', 'Too late to start'] } },
   kinetic: { label: 'Word slam', hint: 'A phrase slammed in word by word, full screen', seconds: 2.2, position: null, fields: { text: 'The phrase (*word* for the accent colour)' }, example: { text: 'Stop *guessing*' } },
 };
 
@@ -195,7 +198,7 @@ export const statCountSeconds = (o: Pick<GraphicOverlay, 'start' | 'end'>) => Ma
 /** When a graphic's parts come in (seconds on the finished video): a list's points, slammed words. */
 export function graphicBeats(o: GraphicOverlay): number[] {
   const len = o.end - o.start;
-  if (o.template === 'list') {
+  if (o.template === 'list' || o.template === 'checklist' || o.template === 'wall' || o.template === 'chart') {
     const step = Math.min(1.2, Math.max(0.35, (len - 1.2) / Math.max(1, o.items.length)));
     return o.items.map((_, k) => round(o.start + 0.45 + k * step));
   }
@@ -233,7 +236,13 @@ export function graphicSounds(spec: Pick<EditSpec, 'overlays'>): SfxCue[] {
         cue(o, 1, 'ding-glass', o.start + statCountSeconds(o), 0.5);
         break;
       case 'list':
+      case 'checklist':
+      case 'wall':
         beats.forEach((t, k) => cue(o, k, 'pop-high', t));
+        break;
+      case 'chart':
+        cue(o, 0, 'whoosh-soft', o.start, 0.4);
+        if (beats.length) cue(o, 1, 'ding-glass', beats[beats.length - 1] + 0.7, 0.5);
         break;
       case 'quote':
         cue(o, 0, 'whoosh-soft', o.start - 0.1, 0.5);

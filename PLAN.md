@@ -124,7 +124,7 @@ versionCode from the tag (`v1.2.3` → 10203).
    - [x] Step 4 — Skills and the creative arsenal (2026-10-16; no new skills installed, see the step)
    - [x] Step 5 — Creative directions (personal/business) and varied clip edits (clipping) (2026-10-16; the pitch untried against a real Claude login)
    - [x] Step 6 — One-button finder for clipping pages (2026-10-16; only tried against stand-ins, see the step)
-   - [ ] Step 7 — Effects library, local only
+   - [x] Step 7 — Effects library, local only (2026-10-16; a first set, see the step)
 
 ## Waiting on me
 
@@ -225,6 +225,6 @@ Today/Find shows them to join), creator sources (channels from the brief, yt-dlp
 matching (YouTube Shorts / TikTok searches for the creator's clips, outliers by views, their transcript found in the
 source), auto research (channels suggested and added), the *Find clips* button with one progress view. Daily.
 
-**Step 7 — Effects library.** The effects above as templates/scenes/edit effects with previews in the editor and in
+**Step 7 — Effects library (first set built).** Done: three new motion-graphic templates (Checklist, Bar chart that grows to the numbers, Headline wall; rendered and looked at); a local person matte (`server/scripts/matte.py`, U²-Net human segmentation via onnxruntime, cached per video as a grey mask video, model downloaded by `setup-tools.sh` — people who installed the clip tools earlier run Install again) and two effects built on it, made with FFmpeg into a new video file the edit's clips swap to: *New background* (blur, dim, colour, picture — the green-screen look) and *Glowing outline* (`shared/effects.ts`, `studio/effects.ts`, job `media.effect`, Claude's `apply_effect`; tried on a real portrait, ~0.25 s per frame on this CPU, so a minute of video takes ~4 min until the home workers). The arsenal lists them. Not done (still planned in the arsenal): orbit, frame break, vertigo, cover story / text behind the person (needs the text drawn as its own layer: FFmpeg's drawtext can't read the bundled woff2 fonts), couch wall, UI world, digital zoom, phone mockup, pull-back reveal, paper cut, doodle boil, glass type, collage/hand-drawn/film looks; no editor UI for the matte effects yet (Claude's tool only). Original plan: The effects above as templates/scenes/edit effects with previews in the editor and in
 the arsenal; a local person matte (u2net human seg via onnxruntime or HyperFrames' `remove-background`) cached per
 clip for frame break, green screen, vertigo, cover story and couch wall.

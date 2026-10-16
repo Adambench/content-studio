@@ -96,6 +96,66 @@ export function composeGraphic(o: GraphicOverlay, i: number, ctx: GraphicContext
       break;
     }
 
+    case 'checklist': {
+      const beats = graphicBeats(o);
+      const items = o.items.length ? o.items : ['Add your points'];
+      html = `<div class="cl" style="top:${px(y)}">${o.text ? `<div class="cl-h">${accent(esc(o.text))}</div>` : ''}<ul class="cl-items">${items
+        .map((it, k) => `<li class="cl-i cl-i${k}"><svg class="cl-box" viewBox="0 0 64 64"><rect x="4" y="4" width="56" height="56" rx="14"/><path class="cl-tick" d="M16 34 L28 46 L50 20" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></svg><span class="cl-t">${accent(esc(it))}</span></li>`)
+        .join('')}</ul></div>`;
+      tweens.push(`tl.fromTo(${sel('.cl')}, { scale: 0.94, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'power3.out' }, ${t(0)});`);
+      items.forEach((_, k) => {
+        const at = beats[k] ?? s + 0.45;
+        tweens.push(
+          `tl.fromTo(${sel(`.cl-i${k}`)}, { x: -30, opacity: 0 }, { x: 0, opacity: 1, duration: 0.25, ease: 'power2.out' }, ${n(at - 0.1)});`,
+          `tl.fromTo(${sel(`.cl-i${k} .cl-tick`)}, { attr: { 'stroke-dashoffset': 1 } }, { attr: { 'stroke-dashoffset': 0 }, duration: 0.28, ease: 'power2.out' }, ${n(at + 0.12)});`,
+          `tl.fromTo(${sel(`.cl-i${k} .cl-box`)}, { scale: 1 }, { scale: 1.18, duration: 0.12, ease: 'power2.out', yoyo: true, repeat: 1 }, ${n(at + 0.3)});`,
+        );
+      });
+      exit('.cl');
+      break;
+    }
+
+    case 'chart': {
+      const beats = graphicBeats(o);
+      // "Name: 120" (or "Name 120"): the number is the last one in the line; a line with none counts as 0.
+      const bars = (o.items.length ? o.items : ['Add: 1', 'your bars: 2']).slice(0, 6).map((it) => {
+        const m = /^(.*?)[\s:=-]*(-?\d[\d,]*(?:\.\d+)?)\s*(%|[a-zA-Z$€£]{0,2})\s*$/.exec(it.trim());
+        const unit = { k: 1e3, m: 1e6, b: 1e9 }[m?.[3]?.toLowerCase() as 'k'] ?? 1;
+        return m ? { label: m[1].trim() || it.trim(), value: Math.max(0, Number(m[2].replace(/,/g, '')) * unit), text: m[2] + m[3] } : { label: it.trim(), value: 0, text: '' };
+      });
+      const max = Math.max(1, ...bars.map((b) => b.value));
+      html = `<div class="bc" style="top:${px(y)}">${o.text ? `<div class="bc-h">${accent(esc(o.text))}</div>` : ''}${bars
+        .map((b, k) => `<div class="bc-r bc-r${k}"><div class="bc-l">${esc(b.label)}</div><div class="bc-track"><div class="bc-bar" style="width:${n((b.value / max) * 100)}%"></div></div><div class="bc-v">${esc(b.text)}</div></div>`)
+        .join('')}</div>`;
+      tweens.push(`tl.fromTo(${sel('.bc')}, { opacity: 0 }, { opacity: 1, duration: 0.25 }, ${t(0)});`);
+      bars.forEach((_, k) => {
+        const at = beats[k] ?? s + 0.45;
+        tweens.push(
+          `tl.fromTo(${sel(`.bc-r${k}`)}, { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.25, ease: 'power2.out' }, ${n(at - 0.1)});`,
+          `tl.fromTo(${sel(`.bc-r${k} .bc-bar`)}, { scaleX: 0 }, { scaleX: 1, duration: 0.7, ease: 'power3.out' }, ${n(at)});`,
+          `tl.fromTo(${sel(`.bc-r${k} .bc-v`)}, { opacity: 0 }, { opacity: 1, duration: 0.2 }, ${n(at + 0.45)});`,
+        );
+      });
+      exit('.bc');
+      break;
+    }
+
+    case 'wall': {
+      const beats = graphicBeats(o);
+      const items = o.items.length ? o.items : ['Add your headlines'];
+      const tilt = [-3, 2.4, -1.6, 3, -2.4, 1.6];
+      html = `<div class="wl" style="top:${px(y)}">${o.text ? `<div class="wl-h">${accent(esc(o.text))}</div>` : ''}${items
+        .map((it, k) => `<div class="wl-c wl-c${k}" style="transform:rotate(${tilt[k % tilt.length]}deg) translateX(${k % 2 ? 26 : -26}px)">${accent(esc(it))}</div>`)
+        .join('')}</div>`;
+      items.forEach((_, k) => {
+        const at = beats[k] ?? s + 0.45;
+        tweens.push(`tl.fromTo(${sel(`.wl-c${k}`)}, { y: -140, scale: 1.25, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.3, ease: 'back.out(1.8)' }, ${n(at)});`);
+      });
+      if (o.text) tweens.push(`tl.fromTo(${sel('.wl-h')}, { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3 }, ${t(0)});`);
+      exit('.wl');
+      break;
+    }
+
     case 'quote': {
       html = `<div class="qt-bg"></div><div class="qt" style="top:${px(y)}"><div class="qt-mark">“</div><div class="qt-text">${wordSpans(o.text || ' ', 'qw')}</div>${o.sub ? `<div class="qt-by">— ${esc(o.sub)}</div>` : ''}</div>`;
       const words = graphicWords(o.text).length;
@@ -212,6 +272,25 @@ export function graphicsCss(ctx: GraphicContext) {
 .ls-i { display: flex; align-items: center; gap: 24px; }
 .ls-n { flex: none; width: 76px; height: 76px; border-radius: 50%; background: ${color}; color: #111; display: grid; place-items: center; font: 900 42px/1 ${font('Montserrat')}; }
 .ls-t { font: 700 48px/1.2 ${font('Inter')}; color: #fff; }
+.g-checklist .cl { position: absolute; left: 7%; right: 7%; transform: translateY(-50%); background: rgba(10,10,10,.8); border-radius: 36px; padding: 44px 46px; box-sizing: border-box; }
+.cl-h { font: 900 68px/1.08 ${font('Montserrat')}; color: #fff; margin-bottom: 26px; }
+.cl-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 22px; }
+.cl-i { display: flex; align-items: center; gap: 24px; }
+.cl-box { flex: none; width: 76px; height: 76px; overflow: visible; }
+.cl-box rect { fill: none; stroke: ${color}; stroke-width: 6; }
+.cl-tick { fill: none; stroke: ${color}; stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; }
+.cl-t { font: 700 48px/1.2 ${font('Inter')}; color: #fff; }
+.g-chart .bc { position: absolute; left: 7%; right: 7%; transform: translateY(-50%); background: rgba(10,10,10,.8); border-radius: 36px; padding: 40px 44px; box-sizing: border-box; }
+.bc-h { font: 900 62px/1.08 ${font('Montserrat')}; color: #fff; margin-bottom: 26px; }
+.bc-r { display: grid; grid-template-columns: 24% 1fr 17%; align-items: center; gap: 16px; margin-top: 20px; }
+.bc-l { font: 700 38px/1.15 ${font('Inter')}; color: rgba(255,255,255,.9); overflow-wrap: anywhere; }
+.bc-track { height: 56px; border-radius: 14px; background: rgba(255,255,255,.12); overflow: hidden; }
+.bc-bar { height: 100%; border-radius: 14px; background: ${color}; transform-origin: 0 50%; }
+.bc-v { font: 800 44px/1 ${font('Montserrat')}; color: #fff; }
+.g-wall .wl { position: absolute; left: 6%; right: 6%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 18px; }
+.wl-h { font: 800 44px/1.2 ${font('Inter')}; color: ${color}; text-transform: uppercase; letter-spacing: .14em; text-align: center; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+.wl-c { background: #f4f1ea; color: #15130f; border-radius: 10px; padding: 24px 30px; font: 800 52px/1.15 ${font('Montserrat')}; box-shadow: 0 14px 34px rgba(0,0,0,.45); }
+.wl-c .acc { color: #fff; background: #15130f; padding: 0 .2em; border-radius: 6px; }
 .qt-bg { position: absolute; inset: 0; background: rgba(0,0,0,.5); }
 .g-quote .qt { position: absolute; left: 8%; right: 8%; transform: translateY(-50%); }
 .qt-mark { font: 400 300px/0.8 ${font('Anton')}; color: ${color}; height: 150px; transform-origin: 20% 60%; }

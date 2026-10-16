@@ -3,6 +3,7 @@
 // Halal: nothing here is music. Sound moves are sound effects only (shared/sfx.ts).
 
 import { CAPTION_PRESET_LABELS, CAPTION_PRESETS, GRAPHIC_INFO, GRAPHICS, TRANSITION_INFO, TRANSITIONS } from './edit';
+import { MATTE_EFFECT_INFO } from './effects';
 import { SFX_GROUPS } from './sfx';
 
 export const ARSENAL_KINDS = {
@@ -53,13 +54,14 @@ export const ARSENAL: ArsenalItem[] = [
   ...(Object.keys(SFX_GROUPS) as (keyof typeof SFX_GROUPS)[]).map((g) =>
     ready('sound', g, SFX_GROUPS[g], 'Sound effects only, never music; a few well placed beat more than one on every cut', `update_edit: audio sfx cues with list_assets ids (builtin:…) of this group`),
   ),
+  ...(Object.keys(MATTE_EFFECT_INFO) as (keyof typeof MATTE_EFFECT_INFO)[]).map((e) =>
+    ready('effect', `matte-${e}`, MATTE_EFFECT_INFO[e].label, MATTE_EFFECT_INFO[e].hint, `apply_effect effect="${e}" on a clip's video that has a person in it (a few minutes, runs in the background)`),
+  ),
   // Step 7 of the build plan (local effects library). Listed so a direction can plan around them later.
   planned('orbit', 'Orbit', 'The subject circled by the camera'),
   planned('frame-break', 'Frame break', 'The subject steps out of the frame over a background'),
-  planned('green-screen', 'Green screen', 'The subject placed in front of any scene'),
   planned('phone-mockup', 'Phone mockup', 'Screen recordings inside a phone'),
   planned('zoom-through', 'Zoom-through cut', 'Zooms into a detail and out of another'),
-  planned('chart-grow', 'Chart grow', 'Bars or lines that grow with the numbers said'),
   planned('paper-cut', 'Paper cut and collage', 'A handmade, cut-paper look'),
   planned('doodle-boil', 'Doodle boil', 'Hand-drawn lines that wobble'),
 ];

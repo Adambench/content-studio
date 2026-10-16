@@ -48,5 +48,13 @@ fetch() {
 fetch kokoro-v1.0.int8.onnx 6e742170d309016e5891a994e1ce1559c702a2ccd0075e67ef7157974f6406cb
 fetch voices-v1.0.bin bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d
 "$PY" -c "from kokoro_onnx import Kokoro; Kokoro('$KOKORO/kokoro-v1.0.int8.onnx', '$KOKORO/voices-v1.0.bin')"
+echo "Downloading the person model (U2-Net human segmentation, about 176 MB, one time)…"
+MATTE="$DIR/models/u2net_human_seg.onnx"
+if [ ! -s "$MATTE" ]; then
+  curl -fsSL --retry 3 -o "$MATTE.part" https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net_human_seg.onnx
+  echo "01eb6a29a5c4d8edb30b56adad9bb3a2a0535338e480724a213e0acfd2d1c73c  $MATTE.part" | sha256sum -c --quiet -
+  mv "$MATTE.part" "$MATTE"
+fi
+"$PY" -c "import onnxruntime as ort; ort.InferenceSession('$MATTE', providers=['CPUExecutionProvider'])"
 echo 2 > "$DIR/.ready"
 echo "The clip tools are ready."

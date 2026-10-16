@@ -37,6 +37,8 @@ import { clipToolsInstalled } from '../services/cliptools';
 import { enqueue, hasPendingJob } from '../jobs/queue';
 import { tightenEdit } from '../studio/tighten';
 import { arsenalText } from '../studio/arsenal';
+import { BACKGROUND_STYLES, MATTE_EFFECTS, MATTE_EFFECT_INFO } from '../../../shared/effects';
+import { matteReady, queueEffect } from '../studio/effects';
 import { ARSENAL_KINDS, type ArsenalKind } from '../../../shared/arsenal';
 import { ok, safe, ToolError } from './tool-helpers';
 
@@ -109,6 +111,8 @@ export function studioToolLabel(name: string, input: Record<string, any>): strin
       return input.kind ? `Wrote a ${RECIPE_INFO[input.kind as keyof typeof RECIPE_INFO]?.label.toLowerCase() ?? 'format'} video` : 'Wrote a format video';
     case 'list_assets':
       return 'Browsed brand assets';
+    case 'apply_effect':
+      return 'Started an effect on the person';
     case 'get_arsenal':
       return 'Looked through the toolbox of video moves';
     default:
@@ -428,6 +432,34 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         if (!edit) throw new ToolError('This piece has no video edit yet.');
         const r = queueRender(edit.id, 'claude');
         return ok(`Render of v${r.versionNumber} queued. The creator can watch its progress in the video editor.`);
+      }),
+    ),
+
+    tool(
+      'apply_effect',
+      'An effect that needs to know where the person is: the person is cut out locally and the rest changes. ' +
+        `Effects: ${MATTE_EFFECTS.map((e) => `${e} (${MATTE_EFFECT_INFO[e].hint})`).join('; ')}. ` +
+        'It takes a few minutes (a person matte of the whole video, made once and kept) and runs in the background: the edit gets a new version by itself when it is done (a clip in Review re-renders too), so do not wait for it and do not start it twice. ' +
+        'Only for footage with a person in it; look with view_frames first. Applies to the clip’s source video wherever the edit uses it.',
+      {
+        pieceId: z.string(),
+        mediaId: z.string().describe('The video (one of the edit’s clips’ mediaId) to apply it to'),
+        effect: z.enum(MATTE_EFFECTS),
+        style: z.enum(BACKGROUND_STYLES).optional().describe('background: blur, dim, color or image'),
+        color: z.string().optional().describe('A colour like #ffcc00 (background color, glow)'),
+        imageMediaId: z.string().optional().describe('background image: a picture from list_assets or the piece’s footage'),
+      },
+      safe(async ({ pieceId, mediaId, effect, style, color, imageMediaId }) => {
+        const edit = editFor(pieceId);
+        if (!edit) throw new ToolError('This piece has no video edit yet.');
+        const m = db.select().from(schema.media).where(and(eq(schema.media.id, mediaId), eq(schema.media.workspaceId, workspaceId))).get();
+        if (!m || m.kind !== 'video') throw new ToolError('That isn’t a video in this workspace.');
+        if (!normalizeEdit(edit.working).clips.some((c) => c.mediaId === mediaId)) throw new ToolError('The edit doesn’t use that video.');
+        if (!matteReady()) throw new ToolError('The person model isn’t installed: the creator needs to install the clip tools again (Settings → Clip tools).');
+        if (hasPendingJob('media.effect', 'mediaId', mediaId)) throw new ToolError('An effect on this video is already being made.');
+        if (effect === 'background' && (style ?? 'blur') === 'image' && !imageMediaId) throw new ToolError('A picture background needs imageMediaId.');
+        queueEffect({ pieceId, editId: edit.id, mediaId, effect, options: { style, color, imageMediaId } });
+        return ok(`Started: ${MATTE_EFFECT_INFO[effect].label.toLowerCase()}. It runs in the background; the edit gets a new version when it is done.`);
       }),
     ),
 

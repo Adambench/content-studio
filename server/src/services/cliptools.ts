@@ -17,6 +17,8 @@ let install: ClipToolsInstall = { state: 'idle', message: '' };
 
 export const clipToolsInstallStatus = () => install;
 export const clipToolsInstalled = () => existsSync(join(config.toolsDir, '.ready')) && existsSync(config.toolsPython);
+/** The person matte model (U²-Net, human segmentation) for effects that cut the person out. */
+export const matteModel = () => join(config.toolsDir, 'models/u2net_human_seg.onnx');
 export const yunetModel = () => join(config.toolsDir, 'models/face_detection_yunet_2023mar.onnx');
 /** For the tools' scripts: the models come from their own cache, offline (they were downloaded at install). */
 export const toolsEnv = () => ({ ...process.env, HF_HOME: join(config.toolsDir, 'hf'), HF_HUB_OFFLINE: '1', PYTHONUNBUFFERED: '1' });
