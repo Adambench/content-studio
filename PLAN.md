@@ -72,7 +72,8 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
    - [x] Render queue in a child process (headless Chrome downloaded on first render), result into the library
    - [x] Brand look (template) per workspace; Claude tools: get/update/tighten/render edits, list assets
    - [ ] Transitions between clips, animated motion-graphics templates (and Claude-written HyperFrames scenes)
-   - [ ] Automatic reframing (face tracking); grade shown in the preview
+   - [x] Automatic reframing (face tracking, following the speaker; phase 7 step 9)
+   - [ ] Grade shown in the preview
    - [ ] Hardware encoding: needs an FFmpeg that matches the system libva (see below)
 3. **Scheduling & publishing** — built (2026-10-14); tested end to end against a stand-in for the three APIs, not
    yet against the real platforms (that needs phase 0)
@@ -285,6 +286,19 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
        transcript is kept, so it's ready as soon as it's down). Tested: free refused while active; ended two days ago
        with a one-day setting → both episodes' videos deleted at the next upkeep tick (transcripts and scans left);
        made active, *Download again* brought the 17-min episode back straight to Ready
+     - [x] Reframing that follows the speaker (2026-10-16): `scripts/speakers.py` (clip tools' OpenCV, 8 samples a
+       second, about 0.2× real time) splits the footage into shots (sudden picture changes) and tracks the faces in
+       each, with how much each mouth moves (YuNet's mouth and nose landmarks); `studio/reframe.ts` turns that into
+       focus spans: a close-up stays on its face, people who fit side by side stay together, a wide shot too wide for
+       the frame goes to whoever's mouth moves most (a window a second, smoothed, held ≥ 1.5 s, zoomed so the face
+       reads as a medium shot, ≤ 1.6×), shots of still faces only (a photo, a listener) frame on the biggest one, and
+       the main track's clips split where the focus changes (punch-ins kept, running it twice gives the same edit).
+       `clip.make` uses it for every clip (its scan is kept for the studio); the studio's Clips tab has **Follow the
+       speaker** (`edit.reframe`, a new version; Claude's `follow_speaker`). Times come from each frame's timestamp,
+       so variable-frame-rate phone footage lines up. Tested on the step-6 clips (a solo podcast with close-ups and a
+       two-person wide shot: the frame stays on the one talking, the listener and a poster ignored), a heavily cut
+       two-person interview (41 shots, close-ups and over-the-shoulder two-shots), and a synthetic two-speaker wide
+       shot (switches at the turns, ignores a half-second interjection)
 
 ## Video studio decisions (2026-10-14)
 

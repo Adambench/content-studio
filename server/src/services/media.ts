@@ -91,7 +91,9 @@ async function addMedia(workspaceId: string, filename: string, mimetype: string,
 export async function deleteMedia(id: string) {
   const row = getMedia(id);
   db.delete(schema.media).where(eq(schema.media.id, id)).run();
-  await Promise.all([mediaPath(row), thumbPath(id), transcriptPath(id), ...proxyFiles(id)].map((p) => rm(p, { force: true })));
+  // The speaker scan (studio/reframe.ts) is kept beside the frames.
+  const scan = join(config.framesDir, `speakers-${id}.json`);
+  await Promise.all([mediaPath(row), thumbPath(id), transcriptPath(id), scan, ...proxyFiles(id)].map((p) => rm(p, { force: true })));
   emit({ type: 'changed', entity: 'media', workspaceId: row.workspaceId, id });
   if (row.pieceId) emit({ type: 'changed', entity: 'pieces', workspaceId: row.workspaceId, id: row.pieceId });
 }

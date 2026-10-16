@@ -28,6 +28,7 @@ import { createPiece, getWorkspace } from '../services/pieces';
 import { makeProxy, onProxyFailed } from '../studio/proxy';
 import { onPublishFailed, publishPost } from '../publish/publisher';
 import { renderJob } from '../studio/render';
+import { onReframeFailed, reframeEdit } from '../studio/reframe';
 import { enqueue, onJobFailed, registerJob } from './queue';
 
 const execFile = promisify(execFileCb);
@@ -203,6 +204,9 @@ export function registerHandlers() {
   registerJob('media.proxy', makeProxy, 1);
   onJobFailed('media.proxy', onProxyFailed);
   registerJob('video.render', renderJob, 1);
+  // "Follow the speaker": OpenCV over the footage (a minute or so per few minutes of video), then a new edit version.
+  registerJob('edit.reframe', reframeEdit, 1);
+  onJobFailed('edit.reframe', onReframeFailed);
   // Publishing is network-bound, so it doesn't wait behind renders; two at once keeps cross-posts close together.
   registerJob('post.publish', publishPost, 2);
   onJobFailed('post.publish', onPublishFailed);

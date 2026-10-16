@@ -1,7 +1,7 @@
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, Copy, GripVertical, Plus, Scissors, Trash2, Wand2 } from 'lucide-react';
+import { ChevronDown, Copy, GripVertical, Plus, ScanFace, Scissors, Trash2, Wand2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { EDIT_FORMATS, clipAt, clipLength, clipStarts, editDuration, fillGeometry, newEditId, splitClipAt, type EditClip } from '@shared/edit';
@@ -57,6 +57,19 @@ export function ClipsPanel() {
     }
   }
 
+  const [reframing, setReframing] = useState(false);
+  async function followSpeaker() {
+    setReframing(true);
+    try {
+      await serverAction(() => api(`/edits/${edit.id}/reframe`, { body: {} }));
+      toast('Finding the shots and who’s talking…', { description: 'A minute or so; it’s saved as a new version (undo from History).' });
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setReframing(false);
+    }
+  }
+
   const hit = clipAt(spec, time);
   const canSplit = !!hit && time - hit.start > 0.1 && hit.start + clipLength(hit.clip) - time > 0.1;
   const selected = selection?.kind === 'clip' ? spec.clips.find((c) => c.id === selection.id) : undefined;
@@ -93,6 +106,15 @@ export function ClipsPanel() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!spec.clips.some((c) => media.get(c.mediaId)?.kind === 'video') || reframing}
+          onClick={followSpeaker}
+          title="Split the footage into shots and keep whoever is talking in frame"
+        >
+          {reframing ? <Spinner /> : <ScanFace />} Follow the speaker
+        </Button>
         <Button size="sm" onClick={() => setPicking(true)}>
           <Plus /> Footage
         </Button>

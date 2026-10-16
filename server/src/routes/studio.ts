@@ -11,6 +11,8 @@ import { db, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, notFound } from '../lib/http';
 import { correctTranscript, getMedia } from '../services/media';
+import { clipToolsInstalled } from '../services/cliptools';
+import { enqueue, hasPendingJob } from '../jobs/queue';
 import { getPiece } from '../services/pieces';
 import { BUNDLED_FONTS, composeEdit } from '../studio/compose';
 import { createEdit, editDetail, findEditForPiece, getEdit, listRenders, restoreEditVersion, saveEditVersion, specMedia, specTranscripts, updateEditWorking } from '../studio/edits';
@@ -71,6 +73,14 @@ export async function studioRoutes(app: FastifyInstance) {
   });
 
   app.post<{ Params: { id: string } }>('/api/edits/:id/render', async (req) => queueRender(req.params.id, 'you'));
+
+  // "Follow the speaker": find the shots and who's talking in the footage, then reframe on them (a new version).
+  app.post<{ Params: { id: string } }>('/api/edits/:id/reframe', async (req) => {
+    const edit = getEdit(req.params.id);
+    if (!clipToolsInstalled()) throw badRequest('Install the clip tools first (Settings → Clip tools): they find the faces.');
+    if (!hasPendingJob('edit.reframe', 'editId', edit.id)) enqueue('edit.reframe', { editId: edit.id, author: 'you' }, { maxAttempts: 1 });
+    return { ok: true };
+  });
 
   app.post<{ Params: { id: string } }>('/api/renders/:id/cancel', async (req) => {
     cancelRender(req.params.id);

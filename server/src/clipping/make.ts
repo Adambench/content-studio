@@ -4,7 +4,7 @@
 // Making with Claude's captions, an edit in the page's look (tightened, captions, hook card, a few sound effects),
 // and a render. The render finishing moves the card to Review (studio/render.ts).
 import { execFile as execFileCb } from 'node:child_process';
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -24,10 +24,11 @@ import { emit } from '../lib/events';
 import { extractFrames, probe } from '../lib/ffmpeg';
 import { getSetting } from '../lib/settings';
 import { JobError } from '../jobs/queue';
-import { clipToolsInstalled, toolsEnv, yunetModel } from '../services/cliptools';
+import { clipToolsInstalled, toolsEnv } from '../services/cliptools';
 import { adoptFile, deleteMedia, whisperInstalled } from '../services/media';
 import { createPiece, getWorkspace } from '../services/pieces';
 import { createEdit, saveEditVersion } from '../studio/edits';
+import { applyFocusSpans, focusSpans, scanSpeakers } from '../studio/reframe';
 import { cancelRender, queueRender } from '../studio/render';
 import { getMoment, momentExists, updateMoment } from './moments';
 
@@ -125,26 +126,6 @@ function sliceTranscript(t: Transcript, from: number, to: number): Transcript {
       return { start: Math.max(0, s.start - from), end: Math.min(to, s.end) - from, text: words.length ? words.map((w) => w.word).join('').trim() : s.text, words };
     });
   return { language: t.language, duration: to - from, text: segments.map((s) => s.text).join(' '), segments };
-}
-
-type Face = { x: number; y: number; h: number };
-
-/**
- * Where to frame: the median centre of the biggest face in sampled frames. Two people taking turns in a wide shot
- * give two clusters; the busier one wins (following whoever speaks comes later).
- */
-async function findFocus(video: string, momentId: string): Promise<Face | null> {
-  const out = await run(config.toolsPython, [join(config.scriptsDir, 'faces.py'), video, '--model', yunetModel(), '--samples', '12'], { env: toolsEnv(), timeoutMs: 5 * 60_000, track: `clip:${momentId}` });
-  const r = JSON.parse(out.trim().split('\n').pop() ?? '{}') as { faces?: { x: number; y: number; h: number }[]; focus?: Face | null };
-  const faces = r.faces ?? [];
-  if (!faces.length) return null;
-  const xs = faces.map((f) => f.x).sort((a, b) => a - b);
-  let split = -1;
-  let gap = 0.2;
-  for (let i = 1; i < xs.length; i++) if (xs[i] - xs[i - 1] > gap) ((gap = xs[i] - xs[i - 1]), (split = i));
-  const group = split < 0 ? faces : (split >= xs.length - split ? faces.filter((f) => f.x < xs[split]) : faces.filter((f) => f.x >= xs[split]));
-  const med = (k: keyof Face) => percentile(group.map((f) => f[k]), 50);
-  return { x: med('x'), y: med('y'), h: med('h') };
 }
 
 /** Delete a clip's card with the files clipping made for it (the cut and its renders), e.g. when rejected. */
@@ -253,9 +234,9 @@ export async function makeClip({ momentId }: { momentId: string }) {
       return;
     }
 
-    // 5. The speaker's face, to frame on.
+    // 5. The shots and who's talking in each, to frame on (the frame follows the speaker in wide shots).
     step('Finding the speaker');
-    const face = await findFocus(video, momentId).catch((err: Error) => (console.warn(`[clip] faces for ${momentId}: ${err.message}`), null));
+    const speakers = await scanSpeakers(video, { track: `clip:${momentId}` }).catch((err: Error) => (console.warn(`[clip] faces for ${momentId}: ${err.message}`), null));
 
     // The finished cut: the picture with only the voice.
     const clip = join(dir, 'clip.mp4');
@@ -299,6 +280,8 @@ export async function makeClip({ momentId }: { momentId: string }) {
       .set({ durationMs: clipInfo.durationMs, width: clipInfo.width, height: clipInfo.height })
       .where(eq(schema.media.id, media.id))
       .run();
+    // Kept for "Follow the speaker" in the studio (the cut's times are the clip's).
+    if (speakers) await writeFile(join(config.framesDir, `speakers-${media.id}.json`), JSON.stringify(speakers)).catch(() => {});
 
     // 7. The edit, in the page's look.
     const edit = createEdit(pieceId, 'claude');
@@ -312,12 +295,16 @@ export async function makeClip({ momentId }: { momentId: string }) {
     base.mediaId = media.id;
     base.in = Math.max(0, (first?.start ?? rel.start) - 0.1);
     base.out = Math.min(clipLen, (last?.end ?? rel.end) + 0.35);
-    if (face) {
-      base.focusX = Math.round(face.x * 1000) / 1000;
-      base.focusY = Math.round(Math.max(0, face.y - 0.05) * 1000) / 1000;
+    const spans = speakers ? focusSpans(speakers, spec.format) : [];
+    // Where the frame sits most of the time, for anything outside the spans.
+    const main = [...spans].sort((a, b) => b.end - b.start - (a.end - a.start))[0];
+    if (main) {
+      base.focusX = main.x;
+      base.focusY = main.y;
     }
     let clips = tightenClips([base], { [media.id]: speechRangesFromTranscript(transcript, true) }, TIGHTEN_PRESETS.tight);
     if (!clips.length) clips = [base];
+    clips = applyFocusSpans(clips, media.id, spans);
     const next: EditSpec = { ...spec, clips, overlays: [...spec.overlays], audio: { ...spec.audio, sfx: [...spec.audio.sfx] } };
     const total = editDuration(next);
     if (m.hookCard) {

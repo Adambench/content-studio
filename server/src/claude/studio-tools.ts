@@ -17,6 +17,8 @@ import { ASSET_TYPES } from '../../../shared/types';
 import { db, schema } from '../db';
 import { createEdit, findEditForPiece, listEditVersions, listRenders, saveEditVersion, specMedia, specTranscripts } from '../studio/edits';
 import { queueRender } from '../studio/render';
+import { clipToolsInstalled } from '../services/cliptools';
+import { enqueue, hasPendingJob } from '../jobs/queue';
 import { tightenEdit } from '../studio/tighten';
 import { ok, safe, ToolError } from './tool-helpers';
 
@@ -61,6 +63,8 @@ export function studioToolLabel(name: string, input: Record<string, any>): strin
       return 'Cut the pauses';
     case 'render_edit':
       return 'Started a render';
+    case 'follow_speaker':
+      return 'Started reframing on the speaker';
     case 'list_assets':
       return 'Browsed brand assets';
     default:
@@ -210,6 +214,21 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         const opts = { ...TIGHTEN_PRESETS[pauses], ...(removeFillers !== undefined && { removeFillers }), ...(punchIn !== undefined && { punchIn }) };
         const r = await tightenEdit(edit.id, opts, 'claude');
         return ok(`Cut ${r.removedSeconds} s; ${r.clips} clip(s) now. Saved v${r.version}.`);
+      }),
+    ),
+
+    tool(
+      'follow_speaker',
+      'Reframe a piece’s edit so the frame follows whoever is talking: the footage is split into shots, close-ups stay on their face, and wide shots of two or more ' +
+        'people move to (and zoom in on) the one speaking, holding at least a second and a half. Runs on this computer for a minute or so, then saves a new version. ' +
+        'Needs the clip tools. Use it when footage is wider than the output (a landscape podcast in 9:16) or when the creator asks to follow the speaker.',
+      { pieceId: z.string() },
+      safe(async ({ pieceId }) => {
+        const edit = editFor(pieceId);
+        if (!edit) throw new ToolError('This piece has no video edit yet.');
+        if (!clipToolsInstalled()) throw new ToolError('The clip tools aren’t installed (Settings → Clip tools).');
+        if (!hasPendingJob('edit.reframe', 'editId', edit.id)) enqueue('edit.reframe', { editId: edit.id, author: 'claude' }, { maxAttempts: 1 });
+        return ok('Started: a new version is saved when it’s done (about a minute). Check it with get_edit afterwards.');
       }),
     ),
 
