@@ -15,6 +15,8 @@ Open **Content Studio** from the app menu. No terminal needed.
 - **Settings → Phone access** shows the one-time Tailscale setup, pairs the Android app (QR code) and lists paired
   phones; it also sets the password for using it in a phone's browser instead.
 - **Settings → Video rendering** fetches the video renderer (it also downloads by itself on the first render).
+- **Settings → Clip tools** installs Demucs and a face detector for clipping (about 1.3 GB, one click): clips can't
+  be made without them, since they remove background music.
 - **Settings → Publishing** holds the one-time platform setup (below).
 - **Settings → Weekly review** sets when Claude reviews each workspace's results (Mondays 9:00 by default), or turns it
   off.
@@ -33,6 +35,16 @@ Open **Content Studio** from the app menu. No terminal needed.
   rules and waits for your OK and the pages it goes on. Source videos (YouTube, Twitch, Kick, Drive, uploads) download
   to the computer and get a transcript. Signed-in windows for Whop, TikTok and Instagram are under Settings →
   Connected sites.
+- **Clipping** — an active campaign's source video is scanned for its liveliest stretches (loudness, speech pace,
+  the chat replay, the brief's words), then Claude picks 3–8 moments that stand alone, by the playbook and the
+  campaign's rules, with a hook card, a title and captions. Each moment is cut, keeps only the voice (Demucs removes
+  background music, or the clip is dropped), has three frames checked against the halal rules, is framed on the
+  speaker's face and edited in the page's look (tightened, captions, hook card, a sparing pop and whoosh), then
+  rendered into **Review**.
+- **Review** — every clip waiting for your yes or no, with its render, where it came from and the campaign's rules
+  checked against it (length, captions' mentions and hashtags, platforms; the rest as tick boxes). **Approve &
+  queue** sends it to the next free queue time of the page's accounts; **Reject** asks why, and the next picks read
+  your reasons.
 - **Pipeline board** — drag cards through your stages (customisable per workspace; clipping pages go Making →
   Review → Ready → Scheduled → Posted).
 - **Piece editor** — hook, script, notes and per-platform copy (TikTok, Instagram, YouTube Shorts, X) with

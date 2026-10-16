@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { and, eq, inArray } from 'drizzle-orm';
 import { EDIT_FORMATS, LOUDNESS_TARGET, clipLength, editDuration, normalizeEdit, type EditSpec } from '../../../shared/edit';
 import { builtinSfx } from '../../../shared/sfx';
+import { REVIEW_STAGE } from '../../../shared/types';
 import { config } from '../config';
 import { db, newId, now, schema } from '../db';
 import { findBinary } from '../lib/bin';
@@ -16,7 +17,7 @@ import { badRequest, HttpError, notFound } from '../lib/http';
 import { notify } from '../lib/push';
 import { enqueue } from '../jobs/queue';
 import { mediaPath, type MediaRow } from '../services/media';
-import { getPiece, type Author } from '../services/pieces';
+import { getPiece, getWorkspace, type Author } from '../services/pieces';
 import { ensureRenderer } from './browser';
 import { BUNDLED_FONTS, composeEdit, type ComposeMedia, type ComposeSource } from './compose';
 import { getEdit, saveEditVersion, specMedia, specTranscripts } from './edits';
@@ -236,7 +237,14 @@ export async function renderJob({ renderId }: { renderId: string }) {
     setRender(r, { status: 'done', progress: 1, stage: 'Done', mediaId, elapsedMs: Date.now() - started, finishedAt: now() });
     emit({ type: 'changed', entity: 'media', workspaceId: r.workspaceId, id: mediaId });
     emit({ type: 'changed', entity: 'pieces', workspaceId: r.workspaceId, id: r.pieceId });
-    await notify('Video ready', `“${piece.title}” finished rendering.`, `/w/${r.workspaceId}/p/${r.pieceId}/edit`);
+    // A clip being made (a card in Making) is ready for my yes or no once rendered.
+    const stages = getWorkspace(r.workspaceId).stages.map((s) => s.id);
+    const fresh = getPiece(r.pieceId);
+    if (fresh.stage === 'making' && stages.includes(REVIEW_STAGE)) {
+      db.update(schema.pieces).set({ stage: REVIEW_STAGE, updatedAt: now() }).where(eq(schema.pieces.id, r.pieceId)).run();
+      emit({ type: 'changed', entity: 'pieces', workspaceId: r.workspaceId, id: r.pieceId });
+      await notify('Clip ready for review', `“${piece.title}”`, `/review?piece=${r.pieceId}`);
+    } else await notify('Video ready', `“${piece.title}” finished rendering.`, `/w/${r.workspaceId}/p/${r.pieceId}/edit`);
   } catch (err) {
     const cancelled = abort.signal.aborted;
     const message = err instanceof Error ? err.message : String(err);

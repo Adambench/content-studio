@@ -36,7 +36,13 @@ export function getMedia(id: string) {
   return row;
 }
 
-type MediaOptions = { pieceId?: string | null; assetType?: AssetType | null; source?: 'upload' | 'capture' | 'share' };
+type MediaOptions = {
+  pieceId?: string | null;
+  assetType?: AssetType | null;
+  source?: 'upload' | 'capture' | 'share' | 'clip';
+  /** Already transcribed (a clip's cut): saved with it, so it isn't transcribed again. */
+  transcript?: Transcript;
+};
 
 export async function saveUpload(workspaceId: string, file: UploadedFile, opts: MediaOptions = {}) {
   return addMedia(workspaceId, file.filename, file.mimetype, opts, (dest) => pipeline(file.stream, createWriteStream(dest)));
@@ -61,6 +67,7 @@ async function addMedia(workspaceId: string, filename: string, mimetype: string,
     throw err;
   }
   const { size } = await stat(dest);
+  if (opts.transcript) await writeFile(transcriptPath(id), JSON.stringify(opts.transcript));
   const row = {
     id,
     workspaceId,
@@ -72,7 +79,8 @@ async function addMedia(workspaceId: string, filename: string, mimetype: string,
     fileName,
     mime: mimetype || 'application/octet-stream',
     size,
-  } as const;
+    ...(opts.transcript && { transcriptStatus: 'done' as const, transcriptText: opts.transcript.text, transcriptLang: opts.transcript.language }),
+  };
   db.insert(schema.media).values(row).run();
   if (row.kind !== 'other') enqueue('media.probe', { mediaId: id });
   emit({ type: 'changed', entity: 'media', workspaceId, id });

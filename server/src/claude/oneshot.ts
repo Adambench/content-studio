@@ -1,11 +1,25 @@
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { baseOptions, resolveModel } from './options';
 import { recordUsage } from './usage';
 
-/** Ask Claude for JSON matching `schema`, with no tools. Used by background jobs. */
-export async function askStructured<T>(input: { system: string; prompt: string; schema: Record<string, unknown>; model?: string }): Promise<T> {
+export type PromptImage = { data: string; mediaType: 'image/jpeg' | 'image/png' };
+
+/** The prompt as one user message with the images first, for a look at frames. */
+async function* withImages(text: string, images: PromptImage[]): AsyncGenerator<SDKUserMessage> {
+  yield {
+    type: 'user',
+    parent_tool_use_id: null,
+    message: {
+      role: 'user',
+      content: [...images.map((i) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: i.mediaType, data: i.data } })), { type: 'text' as const, text }],
+    },
+  };
+}
+
+/** Ask Claude for JSON matching `schema`, with no tools. Used by background jobs. `images` go before the prompt. */
+export async function askStructured<T>(input: { system: string; prompt: string; schema: Record<string, unknown>; model?: string; images?: PromptImage[] }): Promise<T> {
   const q = query({
-    prompt: input.prompt,
+    prompt: input.images?.length ? withImages(input.prompt, input.images) : input.prompt,
     options: {
       ...baseOptions(),
       model: resolveModel(input.model),

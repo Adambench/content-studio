@@ -3,6 +3,7 @@ import { api } from './api';
 import type { PairedDevice } from '@shared/devices';
 import type { CreatorInfo } from '@shared/publish';
 import type { Campaign, CampaignDetail } from '@shared/campaigns';
+import type { ReviewClip } from '@shared/clipping';
 import type { SitesStatus } from '@shared/sites';
 import type {
   Account,
@@ -62,6 +63,7 @@ export const keys = {
   sites: ['sites'] as const,
   campaigns: ['campaigns'] as const,
   campaign: (id: string) => ['campaign', id] as const,
+  review: ['review'] as const,
 };
 
 export type AuthStatus = { setupRequired: boolean; authenticated: boolean; desktopManaged: boolean };
@@ -98,6 +100,9 @@ export const useFcm = () => useQuery({ queryKey: keys.fcm, queryFn: () => api<Fc
 
 export const useCampaigns = () => useQuery({ queryKey: keys.campaigns, queryFn: () => api<Campaign[]>('/campaigns') });
 export const useCampaign = (id: string) => useQuery({ queryKey: keys.campaign(id), queryFn: () => api<CampaignDetail>(`/campaigns/${id}`), enabled: !!id });
+
+/** Clips waiting in Review across every page, oldest first. */
+export const useReview = () => useQuery({ queryKey: keys.review, queryFn: () => api<ReviewClip[]>('/review') });
 
 /** Settings → Connected sites: the desktop app's signed-in windows. */
 export const useSites = () => useQuery({ queryKey: keys.sites, queryFn: () => api<SitesStatus>('/sites') });

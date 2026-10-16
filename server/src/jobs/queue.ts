@@ -6,11 +6,14 @@ type Registration = { handler: Handler; concurrency: number; running: number };
 
 const handlers = new Map<string, Registration>();
 
-/** A job failure that says whether trying again could help, and when. Plain errors retry with backoff. */
+/**
+ * A job failure that says whether trying again could help, and when. Plain errors retry with backoff. `wait` puts the
+ * job back for `delayMs` without using up an attempt: it didn't fail, it can't start yet (e.g. Claude's usage is high).
+ */
 export class JobError extends Error {
   constructor(
     message: string,
-    public opts: { retry?: boolean; delayMs?: number } = {},
+    public opts: { retry?: boolean; delayMs?: number; wait?: boolean } = {},
   ) {
     super(message);
   }
@@ -68,6 +71,13 @@ async function run(reg: Registration, job: NonNullable<ReturnType<typeof claim>>
     db.update(schema.jobs).set({ status: 'done', error: null, updatedAt: now() }).where(eq(schema.jobs.id, job.id)).run();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (err instanceof JobError && err.opts.wait) {
+      db.update(schema.jobs)
+        .set({ status: 'queued', attempts: job.attempts - 1, error: message.slice(0, 4000), runAt: now() + (err.opts.delayMs ?? 60_000), updatedAt: now() })
+        .where(eq(schema.jobs.id, job.id))
+        .run();
+      return;
+    }
     const retry = job.attempts < job.maxAttempts && !(err instanceof JobError && err.opts.retry === false);
     console.error(`[job] ${job.type} failed (attempt ${job.attempts}/${job.maxAttempts}): ${message}`);
     db.update(schema.jobs)

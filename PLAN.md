@@ -198,7 +198,33 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
      process group goes); Claude's tools only see the page's own campaigns; screenshots at desktop and phone width.
      Not tested: Twitch and Kick VOD downloads (Twitch channels list), Drive (no public link to hand), a joined
      campaign's locked rules and files (needs the Whop sign-in)
-   - [ ] 6 Clipping v1
+   - [x] 6 Clipping v1 (2026-10-16): the clip tools (`setup-tools.sh` → `<data>/tools`: PyTorch CPU, Demucs, OpenCV
+     YuNet, gdown and their models, 1.3 GB; Settings → Clip tools); `moments` (migration 0007); after its transcript an
+     active campaign's source is scanned (`source.scan`, no Claude: windows of 20–75 s on line boundaries scored on
+     loudness, pace, chat replay, the brief's words; a source up to 15 min goes whole) and picked (`source.pick`, one
+     Sonnet call with the playbook, rules, pages' niches and past rejection reasons; 3–8 moments kept at 7/10+, snapped
+     to word boundaries); each moment is made (`clip.make`): cut with 0.5 s margins, Demucs (the clip keeps only the
+     voice; dropped when the voice isn't silent in the pauses behind background sound), Whisper on the voice, three
+     frames to Haiku, YuNet focus, a card in Making with Claude's captions and notes, an edit in the page's look (tight
+     tighten with punch-ins, captions, hook card with its accent word, a pop and one soft whoosh) and a render; the
+     render finishing moves it to Review. `/review` (sidebar + Today): the render, the moment, the campaign's rules
+     checked (length, mentions/hashtags/text in each platform's caption, platforms, watermark; the rest as tick boxes),
+     where it goes; **Approve & queue** (next free queue time of each account on the campaign's platforms, accounts that
+     can't take it skipped with the reason; TikTok direct asks who sees it), **Reject** with a reason (card and files go,
+     the reason feeds the next pick), Open in studio; swipe/arrow keys move through the queue. Campaign page: Moments
+     card (status, Make clip / Make again / Skip, open the clip) and Find moments on ready sources. Claude:
+     `find_moments`, `make_clip`, moments in `get_campaign`; it can't take a card out of Review or into
+     Scheduled/Posted. Background Claude jobs wait while the 5-hour usage is ≥ 80 %; clip-making waits while a render
+     runs (both fill the CPU and memory). Text overlays show `*word*` in the accent colour. Drive files Drive won't
+     hand over fall back to gdown. Tested on the laptop with the real Mark Manson campaign: the 17-min episode gave 5
+     moments (7–8/10) and the 43-min one 6 (8–9/10, a swear flagged), all made into 1080×1920 clips at −14 LUFS framed
+     on the speaker (≈3.5 min to render 35 s with the CPU free); a clip whose hashtag rule failed couldn't be approved,
+     then after fixing the caption was queued on a stand-in YouTube account (Instagram skipped: no public address, TikTok
+     left out: the campaign doesn't pay for it) and its card moved to Scheduled; a reject removed the card, cut and
+     render and kept the reason; Claude's tool handlers checked for scoping; the in-app install from a fresh data folder;
+     screenshots of Review, Today, the campaign page and Settings at desktop and phone width. Not tested: a source with
+     real background music (the music check was verified with non-musical stand-ins), a Twitch chat replay, Drive via
+     gdown, the frames check rejecting something
    - [ ] 7 Submissions and earnings
    - [ ] 8 Research and daily brief
    - [ ] 9 Later formats
@@ -353,6 +379,10 @@ Checked (2026-10-15):
 | Skills in the app | Agent SDK 0.3.300 has `skills` and local `plugins` options, so a bundled skills folder loads while `settingSources` stays `[]` — tested: `.claude/skills` copied into a plugin folder (`.claude-plugin/plugin.json` + `skills/`) gives all 35 as `studio-skills:<name>`, and none of my personal skills. But the app's Claude only has the web tools and our studio tools (no Bash, no Read): knowledge skills work (it needs Read on the skills folder for their reference files), and skills that run commands become app jobs/tools |
 | Free reel research | YouTube Shorts works with `yt-dlp` (search, a channel's Shorts with view counts, auto-captions for the spoken hook); tested. TikTok blocks `yt-dlp` from this machine, Instagram needs a login: use an in-app window signed in to my own accounts, or links I paste. `yt-dlp` now wants a JS runtime for YouTube: pass `--js-runtimes node` |
 | Voice isolation | Demucs `htdemucs` (two stems): 48 s for 70 s of speech over music, 1.5 GB RAM; the cleaned voice is silent where only music played (21 s silent vs 0.3 s in the original). MDX-Net Voc_FT: same result, 94 s and 3.4 GB. → Demucs, on chosen clips only (~30 s per 45 s clip). Install: PyTorch CPU (~900 MB venv) + `demucs` without `diffq` (needs a C compiler) |
+| Clip tools install (2026-10-16) | `setup-tools.sh`: PyTorch 2.14.0 CPU + Demucs 4.1.0 (its `diffq` is only an extra now, so a plain install after torch works) + OpenCV headless 4.13 + gdown, htdemucs from Hugging Face, YuNet 2023mar from opencv_zoo: 68 s, 1.3 GB |
+| Whisper on long sources (2026-10-16) | faster-whisper `small` int8 on 4 threads: 59 s for 5 min of podcast (0.2× real time, so a 2-hour VOD ≈ 25 min); `base` 42 s, same words. → keep `small` for whole sources; no base-then-small split |
+| Music check (2026-10-16) | Demucs on 45 s cuts of a real podcast: ~33 s each; the non-voice stem sits at −40 to −42 LUFS on speech alone (−58 on a quiet one), 14–19 dB under the voice. Podcasts barely pause (0–0.3 s of gaps per 45 s, Whisper word times). → a clip always keeps only the voice stem (speech-only loses nothing: −23.2 vs −23.1 LUFS); background = non-voice stem over −35 LUFS or within 12 dB of the voice; then the voice must be silent in the pauses (p90 under max(−50, speech − 25 dB)), or the clip is dropped; with under 1 s of pauses it's “unverified” and the review says to listen. Checked with non-musical stand-ins (pink noise as the bed, reversed speech as a leftover voice): none / removed / dropped as expected |
+| YuNet (2026-10-16) | On 1080p podcast cuts: a face in 9–11 of 12 sampled frames, ~3 s per clip |
 
 ## Phase 7 build plan (2026-10-15)
 
@@ -524,12 +554,11 @@ Halal:
 
 Tools environment: `server/scripts/setup-tools.sh` creates a `<data>/tools` venv (about 1 GB) with:
 - PyTorch CPU (pinned, from the PyTorch CPU index)
-- `demucs` with `--no-deps`, plus `dora-search einops julius lameenc openunmix pyyaml tqdm huggingface-hub
-  safetensors sphn soundfile numpy` (no `diffq`)
+- `demucs` (4.1 no longer needs `diffq`, so a plain install after torch; built: see *Checked*)
 - `opencv-python-headless` and `gdown`
 - the `htdemucs` and YuNet face models, downloaded at install
 
-Settings → "Clip tools: Install", like Whisper. YuNet isn't tested yet.
+Settings → "Clip tools: Install", like Whisper. (Built 2026-10-16; YuNet tested, see *Checked*.)
 
 Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usage is above about 80 %.
 1. `source.transcribe`: YouTube sources use YouTube's own captions through yt-dlp (instant). Otherwise
@@ -625,8 +654,11 @@ Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usag
   installed as the desktop app (`npm run install-app`).
 - Next: phase 0 on the platforms' sites (now including the analytics scopes), then connect real accounts; video
   studio extras (transitions, motion graphics). Phase 7 (clipping): steps 1 (playbook skill), 2 (skills in the app),
-  3 (kinds, Today, music out), 4 (signed-in windows) and 5 (campaigns) done (2026-10-15); next is step 6 (clipping v1)
-  of the *Phase 7 build plan*. Waiting on the user:
+  3 (kinds, Today, music out), 4 (signed-in windows) and 5 (campaigns) done (2026-10-15), 6 (clipping v1) done
+  (2026-10-16); next is step 7 (submissions and earnings) of the *Phase 7 build plan*. Waiting on the user:
+  - Settings → Clip tools → Install in the real app (about 2½ minutes, 1.3 GB) before the first clip; then on a
+    clipping page's active campaign, get a source (or Find moments on one) and look through Review. Listen to the first
+    clips from a source with background music: the music check was only tried on stand-ins;
   - listening to the built-in SFX;
   - in the desktop app (`npm run install-app` first), Settings → Connected sites: sign in to Whop (it opens
     contentrewards.com's sign-in), TikTok (its QR code works from the phone) and Instagram, and check each then shows
@@ -638,7 +670,8 @@ Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usag
     confirm it on a page and get a source or two.
 
   The weekly review with the playbook in its prompt hasn't been run yet (no posts with numbers). The phone app needs a
-  new release for Today and the nasheed change (`API_VERSION` 2: v0.1.0 asks to be updated).
+  new release for Today, the nasheed change (`API_VERSION` 2: v0.1.0 asks to be updated) and Review (its UI is
+  bundled; the API needed no version bump).
 - Phase 6 (Android app) is built: tested on an Android 15 emulator against a local server — pairing (link and deep
   link), share sheet from the Files app, background uploads with resume after a dropped connection, camera, voice memos,
   offline queue and banner, lock, video preview, launcher shortcuts, unpairing — and the desktop's pairing/Firebase

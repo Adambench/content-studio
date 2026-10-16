@@ -1,4 +1,4 @@
-import { Download, Loader2, Plus, RotateCcw, Upload, X } from 'lucide-react';
+import { Download, Loader2, Plus, RotateCcw, Sparkles, Upload, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { SOURCE_KIND_LABELS, SOURCE_STATUS_LABELS, type CampaignDetail, type CampaignSource } from '@shared/campaigns';
@@ -15,7 +15,7 @@ import { SourceKindIcon } from './common';
 
 const save = (c: CampaignDetail) => queryClient.setQueryData(keys.campaign(c.id), c);
 
-function SourceRow({ s }: { s: CampaignSource }) {
+function SourceRow({ s, moments, canFind }: { s: CampaignSource; moments: number; canFind: boolean }) {
   const [busy, setBusy] = useState(false);
   const pct = s.status === 'downloading' && s.progress !== null ? Math.round(s.progress * 100) : null;
   const working = s.status === 'queued' || s.status === 'downloading' || s.status === 'transcribing' || s.status === 'scanning';
@@ -31,7 +31,13 @@ function SourceRow({ s }: { s: CampaignSource }) {
     }
   }
 
-  const facts = [SOURCE_KIND_LABELS[s.kind], s.durationMs ? duration(s.durationMs) : null, s.size ? bytes(s.size) : null, s.status === 'ready' && s.transcriptFrom ? (s.transcriptFrom === 'captions' ? 'YouTube captions' : 'Whisper transcript') : null]
+  const facts = [
+    SOURCE_KIND_LABELS[s.kind],
+    s.durationMs ? duration(s.durationMs) : null,
+    s.size ? bytes(s.size) : null,
+    s.status === 'ready' && s.transcriptFrom ? (s.transcriptFrom === 'captions' ? 'YouTube captions' : 'Whisper transcript') : null,
+    moments ? `${moments} moment${moments === 1 ? '' : 's'}` : null,
+  ]
     .filter(Boolean)
     .join(' · ');
 
@@ -64,6 +70,10 @@ function SourceRow({ s }: { s: CampaignSource }) {
           ) : s.status === 'error' ? (
             <Button size="sm" variant="outline" disabled={busy} onClick={() => act('POST', `/sources/${s.id}/start`)}>
               {busy ? <Spinner /> : <RotateCcw />} Retry
+            </Button>
+          ) : canFind && s.transcriptFrom ? (
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => act('POST', `/sources/${s.id}/moments`)}>
+              {busy ? <Spinner /> : <Sparkles />} {moments ? 'Find again' : 'Find moments'}
             </Button>
           ) : (
             <Badge variant="secondary" className="text-emerald-400">
@@ -133,7 +143,7 @@ export function SourcesCard({ campaign }: { campaign: CampaignDetail }) {
         {sources.length > 0 ? (
           <ul className="divide-y rounded-lg border">
             {sources.map((s) => (
-              <SourceRow key={s.id} s={s} />
+              <SourceRow key={s.id} s={s} moments={campaign.moments.filter((m) => m.sourceId === s.id).length} canFind={campaign.status === 'active' && campaign.pageIds.length > 0} />
             ))}
           </ul>
         ) : (

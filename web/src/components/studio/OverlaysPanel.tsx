@@ -122,7 +122,10 @@ function OverlayEditor({ overlay }: { overlay: EditOverlay }) {
       </div>
 
       {overlay.type === 'text' && (
-        <Textarea value={text} onChange={(e) => setText(e.target.value)} onBlur={() => text.trim() && text !== overlay.text && set({ text: text.trim() })} rows={2} aria-label="Text" />
+        <div className="space-y-1">
+          <Textarea value={text} onChange={(e) => setText(e.target.value)} onBlur={() => text.trim() && text !== overlay.text && set({ text: text.trim() })} rows={2} aria-label="Text" />
+          <p className="text-xs text-muted-foreground">Put *stars* around a word to show it in the accent colour.</p>
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-3">

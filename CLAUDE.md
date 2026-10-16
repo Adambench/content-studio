@@ -72,6 +72,17 @@ HyperFrames + FFmpeg) is usable and being extended.
   page's library) — `source.download` (yt-dlp, run in its own process group so a stop kills the standalone build's
   second process) and `source.transcribe` (YouTube captions, else Whisper). Links go through `canonicalLink`.
   Claude only reads them (`get_campaigns`, `get_campaign`).
+- Clipping (`server/src/clipping`, `shared/clipping.ts`, `/review`): an active campaign's transcribed source goes to
+  `source.scan` (`scan.ts`, no Claude: windows on line boundaries scored on loudness, pace, chat replay, the brief's
+  words) then `source.pick` (`pick.ts`: one Sonnet call per source with the playbook, rules and past rejection reasons →
+  `moments`, kept at 7/10+). `clip.make` (`make.ts`): cut with margins → Demucs (`scripts/separate.py`; a clip always
+  keeps only the voice, and `musicCheck` drops it when the voice isn't silent in the pauses) → Whisper on the voice →
+  three frames to Haiku → YuNet focus (`scripts/faces.py`) → a piece in Making with an edit and a render; a finished
+  render moves Making → Review (`studio/render.ts`). `review.ts`: `checkRules`, approve (my click → `createPosts` on the
+  queue), reject (the reason stays on the moment, the card and its files go). Needs the clip tools venv
+  (`<data>/tools`, `scripts/setup-tools.sh`, Settings → Clip tools). Background Claude jobs wait (not fail) while the
+  5-hour usage is ≥ 80 %: `waitForUsage()` throws a `JobError` with `wait`. Claude gets `find_moments`/`make_clip`
+  (local work), never approve or schedule.
 
 ## Commands
 

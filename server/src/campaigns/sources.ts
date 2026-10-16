@@ -3,7 +3,7 @@
 // captions when there are some (instant), Whisper otherwise.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -17,8 +17,9 @@ import { extractAudio, probe } from '../lib/ffmpeg';
 import { badRequest } from '../lib/http';
 import { getSetting } from '../lib/settings';
 import { enqueue, JobError } from '../jobs/queue';
+import { clipToolsInstalled, toolsEnv } from '../services/cliptools';
 import { whisperInstalled, type UploadedFile } from '../services/media';
-import { campaignDir, emitCampaign, getCampaignRow, getSource, updateSource, type SourceRow } from './campaigns';
+import { campaignDir, emitCampaign, getCampaignRow, getSource, pagesOf, updateSource, type SourceRow } from './campaigns';
 
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const VIDEO_PLATFORMS: SourceKind[] = ['youtube', 'twitch', 'kick'];
@@ -26,13 +27,15 @@ const MAX_LISTED = 30;
 
 export const sourceFile = (s: Pick<SourceRow, 'campaignId' | 'fileName'>) => (s.fileName ? join(campaignDir(s.campaignId), s.fileName) : null);
 export const sourceTranscriptPath = (s: Pick<SourceRow, 'campaignId' | 'id'>) => join(campaignDir(s.campaignId), `${s.id}.transcript.json`);
+/** The scan's candidate windows (`source.scan`), which `source.pick` reads. */
+export const sourceScanPath = (s: Pick<SourceRow, 'campaignId' | 'id'>) => join(campaignDir(s.campaignId), `${s.id}.scan.json`);
 
 const exists = (id: string) => !!db.select({ id: schema.campaignSources.id }).from(schema.campaignSources).where(eq(schema.campaignSources.id, id)).get();
 
 // ---------- yt-dlp ----------
 
 /** yt-dlp needs a JavaScript runtime for YouTube: our own Node (the Electron binary runs as one with ELECTRON_RUN_AS_NODE). */
-function ytdlp() {
+export function ytdlp() {
   const bin = findBinary('yt-dlp');
   if (!bin) throw new JobError('yt-dlp isn’t installed on this computer (pipx install yt-dlp, or your package manager).', { retry: false });
   const ffmpeg = findBinary('ffmpeg');
@@ -55,7 +58,7 @@ function killTree(child: ChildProcess) {
   }
 }
 
-function run(bin: string, args: string[], opts: { env?: NodeJS.ProcessEnv; timeoutMs: number; onLine?: (line: string) => void; track?: string }) {
+export function run(bin: string, args: string[], opts: { env?: NodeJS.ProcessEnv; timeoutMs: number; onLine?: (line: string) => void; track?: string }) {
   return new Promise<string>((resolve, reject) => {
     const child = spawn(bin, args, { env: opts.env, detached: true });
     if (opts.track) running.set(opts.track, child);
@@ -168,10 +171,13 @@ function queueDownload(s: SourceRow, values: Partial<SourceRow> = {}) {
 export async function startSource(sourceId: string) {
   const s = getSource(sourceId);
   if (s.status !== 'found' && s.status !== 'error') return [s];
-  // Downloaded already (the transcript failed): only the transcript is tried again.
+  // Downloaded already: what failed after (the transcript, or finding moments) is tried again.
   if (s.status === 'error' && s.fileName) {
-    updateSource(s.id, { status: 'transcribing', detail: 'Waiting its turn' });
-    enqueue('source.transcribe', { sourceId: s.id }, { maxAttempts: 2 });
+    if (await readSourceTranscript(s)) queueScan(s.id);
+    else {
+      updateSource(s.id, { status: 'transcribing', detail: 'Waiting its turn' });
+      enqueue('source.transcribe', { sourceId: s.id }, { maxAttempts: 2 });
+    }
     return [getSource(s.id)];
   }
   if (!s.link) throw badRequest('This source has no link.');
@@ -269,7 +275,7 @@ export async function deleteSource(id: string) {
   db.delete(schema.campaignSources).where(eq(schema.campaignSources.id, id)).run();
   const dir = campaignDir(s.campaignId);
   const files = await readdir(dir).catch(() => [] as string[]);
-  await Promise.all(files.filter((f) => f.startsWith(id)).map((f) => rm(join(dir, f), { force: true })));
+  await Promise.all(files.filter((f) => f.startsWith(id)).map((f) => rm(join(dir, f), { recursive: true, force: true })));
   emitCampaign(s.campaignId);
 }
 
@@ -282,14 +288,18 @@ export async function downloadSource({ sourceId }: { sourceId: string }) {
   const dir = campaignDir(s.campaignId);
   await mkdir(dir, { recursive: true });
   // Leftovers of an earlier attempt.
-  for (const f of await readdir(dir)) if (f.startsWith(s.id)) await rm(join(dir, f), { force: true });
+  for (const f of await readdir(dir)) if (f.startsWith(s.id)) await rm(join(dir, f), { recursive: true, force: true });
 
   let file: string;
   if (VIDEO_PLATFORMS.includes(s.kind)) file = await ytdlpDownload(s, dir);
   else if (s.kind === 'drive') {
     const id = driveFileId(s.link!);
     if (!id) throw new JobError('That isn’t a Drive file link.', { retry: false });
-    file = await httpDownload(s, `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t`, dir);
+    file = await httpDownload(s, `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t`, dir).catch((err: Error) => {
+      // Drive sometimes answers with a page instead of the file (big files, quotas): gdown knows its ways round.
+      if (!clipToolsInstalled()) throw err;
+      return gdownFile(s, id, dir);
+    });
   } else file = await httpDownload(s, s.link!, dir);
   if (!exists(sourceId)) return void (await rm(file, { force: true }));
   await finishDownload(getSource(sourceId), file);
@@ -380,6 +390,23 @@ async function ytdlpDownload(s: SourceRow, dir: string) {
   return file;
 }
 
+/** A Drive file through gdown (in the clip tools), saved under its own name, then renamed to the source's id. */
+async function gdownFile(s: SourceRow, id: string, dir: string) {
+  const into = join(dir, `${s.id}.gdown`);
+  await mkdir(into, { recursive: true });
+  updateSource(s.id, { detail: 'Downloading from Drive (gdown)' });
+  await run(config.toolsPython, ['-m', 'gdown', '--fuzzy', `https://drive.google.com/uc?id=${id}`, '-O', `${into}/`], { env: toolsEnv(), timeoutMs: 6 * 60 * 60 * 1000, track: s.id }).catch((err: Error) => {
+    throw new JobError(`Drive wouldn’t give the file: ${err.message}`, { retry: false });
+  });
+  const name = (await readdir(into))[0];
+  if (!name) throw new JobError('gdown finished without a file.', { retry: false });
+  const file = join(dir, `${s.id}${extname(name).toLowerCase() || '.mp4'}`);
+  await rename(join(into, name), file);
+  await rm(into, { recursive: true, force: true });
+  if (!s.title) updateSource(s.id, { title: name });
+  return file;
+}
+
 const EXT_FOR: Record<string, string> = { 'video/mp4': '.mp4', 'video/quicktime': '.mov', 'video/webm': '.webm', 'video/x-matroska': '.mkv', 'audio/mpeg': '.mp3', 'audio/mp4': '.m4a', 'audio/wav': '.wav' };
 
 async function httpDownload(s: SourceRow, url: string, dir: string) {
@@ -436,7 +463,18 @@ export async function transcribeSource({ sourceId }: { sourceId: string }) {
     }
     from = 'whisper';
   }
-  if (exists(sourceId)) updateSource(sourceId, { status: 'ready', transcriptFrom: from, detail: '' });
+  if (!exists(sourceId)) return;
+  updateSource(sourceId, { transcriptFrom: from });
+  // An active campaign's source goes on to be scanned for moments; otherwise it waits, ready, for "Find moments".
+  const c = getCampaignRow(s.campaignId);
+  if (c.status === 'active' && pagesOf([c.id]).get(c.id)?.length) queueScan(sourceId);
+  else updateSource(sourceId, { status: 'ready', detail: '' });
+}
+
+/** Find moments in a transcribed source: the scan (no Claude), then one Claude request (`source.pick`). */
+export function queueScan(sourceId: string) {
+  updateSource(sourceId, { status: 'scanning', progress: null, detail: 'Waiting its turn' });
+  enqueue('source.scan', { sourceId }, { maxAttempts: 2 });
 }
 
 export function onSourceFailed({ sourceId }: { sourceId: string }, message: string) {

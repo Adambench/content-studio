@@ -36,7 +36,7 @@ const overlayShape = z.object({
   type: z.enum(['text', 'image', 'broll']),
   start: z.number().min(0).describe('Seconds on the finished video'),
   end: z.number(),
-  text: z.string().optional().describe('text: what it says'),
+  text: z.string().optional().describe('text: what it says; wrap the accent word in asterisks (*word*) to show it in the accent colour'),
   style: z.enum(['title', 'label', 'note']).optional().describe('text: title = big hook text, label = pill in the accent colour, note = small'),
   position: z.enum(['top', 'center', 'bottom']).optional().describe('text'),
   animation: z.enum(['pop', 'fade', 'slide', 'none']).optional(),

@@ -8,6 +8,9 @@ import { onReviewFailed, runReview } from '../analytics/review';
 import { statsJob } from '../analytics/schedule';
 import { onReadFailed, readCampaign } from '../campaigns/read';
 import { downloadSource, onSourceFailed, transcribeSource } from '../campaigns/sources';
+import { makeClip, onMakeFailed } from '../clipping/make';
+import { pickMoments } from '../clipping/pick';
+import { scanSource } from '../clipping/scan';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
 import { config } from '../config';
@@ -44,14 +47,16 @@ async function probeMedia({ mediaId }: { mediaId: string }) {
       () => false,
     );
   }
-  // Footage and voice memos get transcribed; brand assets (nasheeds, SFX…) and finished renders don't.
-  const wantsTranscript = !row.assetType && row.source !== 'render' && !!info?.hasAudio && (row.kind === 'video' || row.kind === 'audio');
+  // Footage and voice memos get transcribed; brand assets (nasheeds, SFX…) and finished renders don't, and a clip's
+  // cut arrives with its transcript.
+  const transcribed = row.transcriptStatus === 'done';
+  const wantsTranscript = !transcribed && !row.assetType && row.source !== 'render' && !!info?.hasAudio && (row.kind === 'video' || row.kind === 'audio');
   setMedia(mediaId, {
     durationMs: info?.durationMs ?? null,
     width: info?.width ?? null,
     height: info?.height ?? null,
     hasThumb,
-    transcriptStatus: wantsTranscript ? (whisperInstalled() ? 'queued' : 'unavailable') : 'none',
+    transcriptStatus: transcribed ? 'done' : wantsTranscript ? (whisperInstalled() ? 'queued' : 'unavailable') : 'none',
   });
   if (wantsTranscript && whisperInstalled()) enqueue('media.transcribe', { mediaId }, { maxAttempts: 2 });
   else if (row.source === 'capture') enqueue('capture.structure', { workspaceId: row.workspaceId, mediaId });
@@ -210,4 +215,12 @@ export function registerHandlers() {
   onJobFailed('source.download', onSourceFailed);
   registerJob('source.transcribe', transcribeSource, 1);
   onJobFailed('source.transcribe', onSourceFailed);
+  // Clipping, one of each at a time: the scan (no Claude), one Claude request per source to pick moments, then each
+  // moment cut, cleaned of music (Demucs), checked and edited before its render.
+  registerJob('source.scan', scanSource, 1);
+  onJobFailed('source.scan', onSourceFailed);
+  registerJob('source.pick', pickMoments, 1);
+  onJobFailed('source.pick', onSourceFailed);
+  registerJob('clip.make', makeClip, 1);
+  onJobFailed('clip.make', onMakeFailed);
 }

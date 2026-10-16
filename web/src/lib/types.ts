@@ -113,6 +113,8 @@ export type SystemStatus = {
   python: boolean;
   whisper: boolean;
   whisperInstall: { state: 'idle' | 'installing' | 'done' | 'error'; message: string };
+  clipTools: boolean;
+  clipToolsInstall: { state: 'idle' | 'installing' | 'done' | 'error'; message: string };
   renderer: boolean;
   rendererInstall: { state: 'idle' | 'installing' | 'done' | 'error'; message: string };
   desktop: boolean;
@@ -316,10 +318,10 @@ export type Review = {
 /** Something running in the background, for Today. */
 export type TodayWork = {
   id: string;
-  type: 'render' | 'transcribe' | 'job' | 'source';
+  type: 'render' | 'transcribe' | 'job' | 'source' | 'clip';
   workspaceId: string | null;
   pieceId: string | null;
-  /** A campaign's source video being fetched or transcribed. */
+  /** A campaign's source video being fetched, transcribed or scanned, or a clip being made from one of its moments. */
   campaignId?: string;
   title: string;
   detail: string;

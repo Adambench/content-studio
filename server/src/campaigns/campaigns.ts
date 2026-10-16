@@ -2,6 +2,7 @@ import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { asc, desc, eq, inArray, or } from 'drizzle-orm';
 import type { Campaign, CampaignDetail, CampaignSource } from '../../../shared/campaigns';
+import type { Moment } from '../../../shared/clipping';
 import { config } from '../config';
 import { db, now, schema } from '../db';
 import { emit } from '../lib/events';
@@ -9,6 +10,7 @@ import { notFound } from '../lib/http';
 
 export type CampaignRow = typeof schema.campaigns.$inferSelect;
 export type SourceRow = typeof schema.campaignSources.$inferSelect;
+export type MomentRow = typeof schema.moments.$inferSelect;
 
 export const campaignDir = (campaignId: string) => join(config.sourcesDir, campaignId);
 
@@ -45,9 +47,23 @@ export function listSources(campaignId: string) {
   return db.select().from(schema.campaignSources).where(eq(schema.campaignSources.campaignId, campaignId)).orderBy(asc(schema.campaignSources.createdAt)).all();
 }
 
+export const toMoment = (row: MomentRow, pieceStage?: string | null): Moment => ({ ...row, pieceStage: pieceStage ?? null });
+
+/** A campaign's moments, in source order, with their clip's card stage. */
+export function listMoments(campaignId: string) {
+  return db
+    .select({ moment: schema.moments, stage: schema.pieces.stage })
+    .from(schema.moments)
+    .leftJoin(schema.pieces, eq(schema.pieces.id, schema.moments.pieceId))
+    .where(eq(schema.moments.campaignId, campaignId))
+    .orderBy(asc(schema.moments.sourceId), asc(schema.moments.start))
+    .all()
+    .map((r) => toMoment(r.moment, r.stage));
+}
+
 export function getCampaignDetail(id: string): CampaignDetail {
   const row = getCampaignRow(id);
-  return { ...toCampaign(row, pagesOf([id]).get(id)), sources: listSources(id).map(toSource) };
+  return { ...toCampaign(row, pagesOf([id]).get(id)), sources: listSources(id).map(toSource), moments: listMoments(id) };
 }
 
 /** Campaigns a workspace works on: assigned to it, or its own (a business's). For Claude's read-only tools. */

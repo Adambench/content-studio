@@ -51,6 +51,9 @@ export const config = {
   // Whisper's Python environment lives with the data so app updates don't wipe it.
   whisperVenv: join(dataDir, 'whisper'),
   whisperPython: join(dataDir, 'whisper/bin/python'),
+  // The clip tools (Demucs, OpenCV's YuNet, gdown) and their models: a Python environment installed from Settings.
+  toolsDir: join(dataDir, 'tools'),
+  toolsPython: join(dataDir, 'tools/bin/python'),
   vapidSubject: process.env.VAPID_SUBJECT ?? 'mailto:content-studio@example.com',
 };
 

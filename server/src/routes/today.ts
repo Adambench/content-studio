@@ -129,11 +129,28 @@ export async function todayRoutes(app: FastifyInstance) {
         workspaceId: null,
         pieceId: null,
         campaignId: s.campaignId,
-        title: `${s.status === 'transcribing' ? 'Transcribing' : 'Downloading'} ${s.title || 'a source video'}`,
+        title: `${s.status === 'transcribing' ? 'Transcribing' : s.status === 'scanning' ? 'Finding moments in' : 'Downloading'} ${s.title || 'a source video'}`,
         detail: [campaignTitle, s.status === 'queued' ? 'Waiting its turn' : s.detail].filter(Boolean).join(' · '),
         status: (s.status === 'queued' || (s.status === 'transcribing' && s.detail === 'Waiting its turn') ? 'queued' : 'running') as 'queued' | 'running',
         progress: s.status === 'downloading' ? s.progress : null,
       })),
+      ...db
+        .select({ id: schema.moments.id, workspaceId: schema.moments.workspaceId, campaignId: schema.moments.campaignId, title: schema.moments.title, detail: schema.moments.detail })
+        .from(schema.moments)
+        .where(eq(schema.moments.status, 'making'))
+        .orderBy(asc(schema.moments.updatedAt))
+        .all()
+        .map((m) => ({
+          id: m.id,
+          type: 'clip' as const,
+          workspaceId: m.workspaceId,
+          pieceId: null,
+          campaignId: m.campaignId,
+          title: `Making a clip: ${m.title || 'a moment'}`,
+          detail: m.detail || 'Waiting its turn',
+          status: (m.detail.startsWith('Waiting') ? 'queued' : 'running') as 'queued' | 'running',
+          progress: null,
+        })),
     ].filter((w) => !w.workspaceId || wsIds.includes(w.workspaceId));
 
     // ---------- campaigns ----------

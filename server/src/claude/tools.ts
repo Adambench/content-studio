@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { and, desc, eq, inArray, isNull, like, or } from 'drizzle-orm';
 import { z } from 'zod';
-import { normalizeDraft, type DraftContent } from '../../../shared/types';
+import { REVIEW_STAGE, normalizeDraft, type DraftContent } from '../../../shared/types';
 import { config } from '../config';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
@@ -11,7 +11,10 @@ import { extractFrames } from '../lib/ffmpeg';
 import { formatTime, getMedia, mediaPath, readTranscript } from '../services/media';
 import { createBranch, createPiece, getBranch, getPiece, getPieceDetail, getWorkspace, mergeDraft, saveVersion } from '../services/pieces';
 import { digest } from '../analytics/report';
-import { campaignsForWorkspace, listSources } from '../campaigns/campaigns';
+import { clock, MOMENT_KIND_LABELS } from '../../../shared/clipping';
+import { campaignsForWorkspace, listMoments, listSources } from '../campaigns/campaigns';
+import { getMoment, queueMake } from '../clipping/moments';
+import { findMoments } from '../routes/clipping';
 import { accountLabel, listAccounts } from '../publish/accounts';
 import { piecePosts, upcomingPosts } from '../publish/posts';
 import { studioTools, studioToolLabel } from './studio-tools';
@@ -85,6 +88,10 @@ export function toolLabel(fullName: string, input: Record<string, any>): string 
       return 'Read the campaigns';
     case 'get_campaign':
       return 'Read a campaign’s rules';
+    case 'find_moments':
+      return 'Started finding moments';
+    case 'make_clip':
+      return 'Started making a clip';
     case 'WebSearch':
       return `Searched the web: ${input.query ?? ''}`;
     case 'WebFetch':
@@ -236,6 +243,9 @@ export function buildTools(workspaceId: string) {
         const piece = ownPiece(pieceId);
         const ws = getWorkspace(workspaceId);
         if (stage && !ws.stages.some((s) => s.id === stage)) throw new ToolError(`Unknown stage. Valid ids: ${ws.stages.map((s) => s.id).join(', ')}`);
+        // Leaving Review is the creator's yes or no; Scheduled and Posted follow real posts.
+        if (stage && stage !== piece.stage && piece.stage === REVIEW_STAGE) throw new ToolError('Only the creator takes a card out of Review (approve or reject it there).');
+        if (stage && stage !== piece.stage && (stage === 'scheduled' || stage === 'posted')) throw new ToolError('Cards move to Scheduled and Posted by themselves when posts are scheduled and go out.');
         db.update(schema.pieces)
           .set({ title: title ?? piece.title, stage: stage ?? piece.stage, tags: tags ?? piece.tags, updatedAt: now() })
           .where(eq(schema.pieces.id, pieceId))
@@ -442,12 +452,29 @@ export function buildTools(workspaceId: string) {
       safe(async ({ campaignId }) => {
         const c = campaignsForWorkspace(workspaceId).find((x) => x.id === campaignId);
         if (!c) throw new ToolError('That campaign isn’t one this page works on.');
+        const moments = listMoments(c.id);
         const sources = listSources(c.id).map((s) => ({
+          id: s.id,
           title: s.title || s.link || 'Upload',
           kind: s.kind,
           minutes: s.durationMs ? Math.round(s.durationMs / 60000) : undefined,
           status: s.status,
+          detail: s.detail || undefined,
           transcript: s.transcriptFrom ?? undefined,
+          moments: moments
+            .filter((m) => m.sourceId === s.id)
+            .map((m) => ({
+              id: m.id,
+              at: `${clock(m.start)}–${clock(m.end)}`,
+              title: m.title,
+              kind: MOMENT_KIND_LABELS[m.kind],
+              score: m.score,
+              status: m.status,
+              forThisPage: m.workspaceId === workspaceId,
+              clipStage: m.pieceStage ?? undefined,
+              pieceId: m.workspaceId === workspaceId ? (m.pieceId ?? undefined) : undefined,
+              why: m.status === 'rejected' ? `Rejected: ${m.rejectReason}` : m.status === 'dropped' || m.status === 'failed' ? m.detail : undefined,
+            })),
         }));
         return ok({
           title: c.title,
@@ -467,6 +494,38 @@ export function buildTools(workspaceId: string) {
           halal: { verdict: c.halalVerdict, reasons: c.halalReasons },
           sources,
         });
+      }),
+    ),
+
+    tool(
+      'find_moments',
+      'Start finding moments in one of a campaign’s source videos (downloaded and transcribed): the app scans it, then one background Claude request picks 3–8 moments ' +
+        'by the playbook and the campaign’s rules, and each is made into a clip that lands in Review. Local work, allowed; it replaces the moments still waiting. ' +
+        'Approving, scheduling and submitting stay the creator’s click.',
+      { sourceId: z.string().describe('From get_campaign') },
+      safe(async ({ sourceId }) => {
+        const c = campaignsForWorkspace(workspaceId).find((x) => listSources(x.id).some((s) => s.id === sourceId));
+        if (!c) throw new ToolError('That source isn’t in a campaign this page works on.');
+        await findMoments(sourceId).catch((err: Error) => {
+          throw new ToolError(err.message);
+        });
+        return ok('Started: the scan runs first, then the pick. The moments and clips show on the campaign’s page and in Review.');
+      }),
+    ),
+
+    tool(
+      'make_clip',
+      'Make (or make again) the clip of one moment: cut, music removed, checked, edited in the page’s look and rendered into Review. For a moment that was skipped, failed ' +
+        'or dropped, or whose card was deleted. Local work, allowed.',
+      { momentId: z.string().describe('From get_campaign') },
+      safe(async ({ momentId }) => {
+        const m = getMoment(momentId);
+        if (!campaignsForWorkspace(workspaceId).some((c) => c.id === m.campaignId) || m.workspaceId !== workspaceId) throw new ToolError('That moment is for another page.');
+        if (m.status === 'making') throw new ToolError('It’s being made already.');
+        if (m.status === 'made' && m.pieceId) throw new ToolError('Its clip is already on the board.');
+        if (campaignsForWorkspace(workspaceId).find((c) => c.id === m.campaignId)?.status !== 'active') throw new ToolError('The campaign isn’t active.');
+        queueMake(m.id);
+        return ok('Queued: the clip lands in Review once it’s rendered.');
       }),
     ),
 

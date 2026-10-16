@@ -79,7 +79,7 @@ function PostRow({ post, ws, onOpen, showDay }: { post: Post; ws: Ws | undefined
 
 function ReviewTile({ item, ws }: { item: TodayData['review'][number]; ws: Ws | undefined }) {
   return (
-    <Link to={`/w/${item.workspaceId}/p/${item.id}`} className="group flex min-w-0 flex-col gap-1.5">
+    <Link to={`/review?piece=${item.id}`} className="group flex min-w-0 flex-col gap-1.5">
       <div className="relative aspect-[9/16] overflow-hidden rounded-lg border bg-muted group-hover:border-foreground/30">
         {item.thumbMediaId ? (
           <img src={mediaThumbUrl(item.thumbMediaId)} alt="" loading="lazy" className="size-full object-cover" />
@@ -130,7 +130,7 @@ function WorkRow({ item, ws }: { item: TodayWork; ws: Ws | undefined }) {
       ? `/w/${item.workspaceId}/p/${item.pieceId}/edit`
       : item.type === 'transcribe' && item.workspaceId
         ? `/w/${item.workspaceId}/library`
-        : item.type === 'source' && item.campaignId
+        : (item.type === 'source' || item.type === 'clip') && item.campaignId
           ? `/campaigns/${item.campaignId}`
           : null;
   return to ? (
@@ -235,8 +235,11 @@ export function TodayPage() {
               )}
               {data.review.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">
+                  <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                     {data.review.length === 1 ? 'A clip is' : `${data.review.length} clips are`} ready for your yes or no.
+                    <Link to="/review" className="text-foreground underline-offset-2 hover:underline">
+                      Review {data.review.length === 1 ? 'it' : 'them'}
+                    </Link>
                   </p>
                   <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
                     {data.review.map((item) => (

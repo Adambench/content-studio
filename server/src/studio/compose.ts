@@ -71,6 +71,8 @@ const VOICE_FX = {
 const MASTER_FX = { version: 1, nodes: [{ type: 'truepeak', id: 'm1', label: 'Delivery ceiling', params: { ceiling: -1, lookahead: 3, release: 80 } }] };
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+/** Text overlays mark their accent word(s) like *this*: shown in the accent colour (after escaping). */
+const accent = (escaped: string) => escaped.replace(/\*([^*\n]+)\*/g, '<span class="acc">$1</span>');
 const attrJson = (v: unknown) => esc(JSON.stringify(v));
 const n = (v: number) => String(Math.round(v * 1000) / 1000);
 const px = (v: number) => `${Math.round(v * 100) / 100}px`;
@@ -157,7 +159,7 @@ export function composeEdit(input: ComposeInput) {
       return;
     }
     const y = o.position === 'top' ? 0.15 : o.position === 'center' ? 0.5 : 0.8;
-    body.push(`<div id="o${i}" class="clip layer t-${o.style}" ${timing}><div class="line" style="top:${px(y * H)}"><div class="oi">${esc(o.text).replace(/\n/g, '<br>')}</div></div></div>`);
+    body.push(`<div id="o${i}" class="clip layer t-${o.style}" ${timing}><div class="line" style="top:${px(y * H)}"><div class="oi">${accent(esc(o.text)).replace(/\n/g, '<br>')}</div></div></div>`);
     tl.push(...animate(`#o${i} .oi`, o.animation, start, len));
   });
 
@@ -276,6 +278,8 @@ html, body { margin: 0; background: #000; }
 .t-label { z-index: 30; }
 .t-label .oi { font-family: ${fontStack('Montserrat')}; font-weight: 800; font-size: 54px; line-height: 1.15; color: #111; background: ${spec.captions.highlight}; padding: .28em .6em; border-radius: .45em; max-width: 84%; }
 .t-note { z-index: 30; }
+.t-title .acc, .t-note .acc { color: ${spec.captions.highlight}; }
+.t-label .acc { color: #fff; }
 .t-note .oi { font-family: ${fontStack('Inter')}; font-weight: 600; font-size: 44px; line-height: 1.3; color: #fff; max-width: 84%; text-shadow: 0 2px 6px rgba(0,0,0,.85); }
 hf-audio-group { display: none !important; }
 ${css.join('\n')}

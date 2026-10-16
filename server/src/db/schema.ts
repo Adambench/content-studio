@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { PostStats, ReviewBody, ReviewStatus } from '../../../shared/analytics';
+import type { FramesCheck, MomentCaptions, MomentKind, MomentStatus, MusicCheck, StandaloneScores } from '../../../shared/clipping';
 import type { CampaignOrigin, CampaignPlatform, CampaignStatus, HalalVerdict, Payout, RuleItem, SourceKind, SourceStatus } from '../../../shared/campaigns';
 import type { EditSpec, EditTemplate } from '../../../shared/edit';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
@@ -488,4 +489,44 @@ export const campaignSources = sqliteTable(
     updatedAt: updatedAt(),
   },
   (t) => [index('campaign_sources_campaign_idx').on(t.campaignId)],
+);
+
+/**
+ * A moment Claude picked in a source video for a page: in/out points, the hook card, title and captions, the
+ * standalone score and the checks. Made into a clip (a piece on the page's board) or rejected with a reason, which the
+ * next pick reads.
+ */
+export const moments = sqliteTable(
+  'moments',
+  {
+    id: id(),
+    sourceId: text('source_id').notNull().references(() => campaignSources.id, { onDelete: 'cascade' }),
+    campaignId: text('campaign_id').notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+    // The page it's made for.
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    // In and out points in the source (seconds).
+    start: real('start').notNull(),
+    end: real('end').notNull(),
+    firstLine: text('first_line').notNull().default(''),
+    hookCard: text('hook_card').notNull().default(''),
+    title: text('title').notNull().default(''),
+    kind: text('kind').$type<MomentKind>().notNull().default('other'),
+    why: text('why').notNull().default(''),
+    score: integer('score').notNull().default(0),
+    scores: text('scores', { mode: 'json' }).$type<StandaloneScores>(),
+    captions: text('captions', { mode: 'json' }).$type<MomentCaptions>(),
+    halalFlags: text('halal_flags', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+    checkByEye: text('check_by_eye', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+    music: text('music', { mode: 'json' }).$type<MusicCheck>(),
+    frames: text('frames', { mode: 'json' }).$type<FramesCheck>(),
+    status: text('status').$type<MomentStatus>().notNull().default('candidate'),
+    // What it's doing while being made, or why it was dropped or failed.
+    detail: text('detail').notNull().default(''),
+    rejectReason: text('reject_reason'),
+    // The clip, once made (kept as null if the card is deleted, so the moment and its reason stay).
+    pieceId: text('piece_id').references(() => pieces.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('moments_source_idx').on(t.sourceId), index('moments_campaign_idx').on(t.campaignId), index('moments_piece_idx').on(t.pieceId)],
 );

@@ -98,6 +98,8 @@ export function SettingsPage() {
 
           <RenderingCard />
 
+          <ClipToolsCard />
+
           <PublishingCard />
 
           <ConnectedSitesCard />
@@ -298,6 +300,49 @@ function RenderingCard() {
             </div>
           ))}
         {st && <Status ok={st.ffmpeg}>{st.ffmpeg ? 'FFmpeg found.' : 'FFmpeg is missing — install it from the Software app to edit video.'}</Status>}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Demucs and YuNet for clipping: removing background music (the halal rule) and finding the speaker to reframe on. */
+function ClipToolsCard() {
+  const { data: st } = useSystemStatus();
+  const installing = st?.clipToolsInstall.state === 'installing';
+
+  async function install() {
+    try {
+      await api('/system/clip-tools/install', { body: {} });
+      queryClient.invalidateQueries({ queryKey: keys.status });
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Clip tools</CardTitle>
+        <CardDescription>
+          For clipping pages: Demucs separates each clip’s voice from everything else, so background music is removed (or the clip is dropped), and a face detector finds the speaker to frame
+          on. They run on this computer.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {st &&
+          (st.clipTools ? (
+            <Status ok>The clip tools are installed.</Status>
+          ) : (
+            <div className="space-y-3">
+              <Status ok={false}>{st.python ? 'Not installed yet (about 1.3 GB, one time). Clips can’t be made without them.' : 'Python 3 is needed first — install it from the Software app.'}</Status>
+              <Button size="sm" onClick={install} disabled={installing || !st.python}>
+                {installing && <Spinner />} {installing ? 'Installing…' : 'Install the clip tools'}
+              </Button>
+              {st.clipToolsInstall.state !== 'idle' && (
+                <p className={st.clipToolsInstall.state === 'error' ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>{st.clipToolsInstall.message}</p>
+              )}
+            </div>
+          ))}
       </CardContent>
     </Card>
   );

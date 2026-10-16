@@ -1,6 +1,6 @@
-import { BadgeDollarSign, CalendarDays, ChartColumn, FolderOpen, KanbanSquare, Mic, Palette, Settings, Sparkles, Sun } from 'lucide-react';
+import { BadgeDollarSign, CalendarDays, ChartColumn, FolderOpen, KanbanSquare, ListChecks, Mic, Palette, Settings, Sparkles, Sun } from 'lucide-react';
 import { NavLink, Outlet, useMatch } from 'react-router';
-import type { ModuleId } from '@shared/types';
+import { REVIEW_STAGE, type ModuleId } from '@shared/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
@@ -51,6 +51,18 @@ function TodayBadge({ className }: { className?: string }) {
   );
 }
 
+/** Clips waiting in Review across every page. */
+function ReviewBadge({ className }: { className?: string }) {
+  const today = useToday();
+  const n = today.data?.review.length ?? 0;
+  if (!n) return null;
+  return (
+    <Badge variant="secondary" className={cn('h-4 min-w-4 px-1 text-[10px] tabular-nums', className)} aria-label={`${n} clip${n === 1 ? '' : 's'} to review`}>
+      {n}
+    </Badge>
+  );
+}
+
 /** How many posts failed or missed their time: they need a decision. */
 function AttentionBadge({ wid, className }: { wid: string; className?: string }) {
   const posts = useUpcomingPosts(wid);
@@ -75,8 +87,9 @@ export function AppShell() {
   const desktopOpen = useStore(claudeDesktopOpen);
   const { data: workspaces = [] } = useWorkspaces();
   const modules = workspaces.find((w) => w.id === wid)?.modules ?? [];
-  // Campaigns live outside workspaces: shown when any page uses them.
+  // Campaigns live outside workspaces: shown when any page uses them; Review when any page has the column.
   const campaigns = workspaces.some((w) => w.modules.includes('campaigns'));
+  const reviewing = workspaces.some((w) => w.stages.some((s) => s.id === REVIEW_STAGE));
 
   return (
     <div className="flex h-full">
@@ -87,6 +100,12 @@ export function AppShell() {
             Today
             <TodayBadge className="ml-auto" />
           </SideLink>
+          {reviewing && (
+            <SideLink to="/review" icon={ListChecks}>
+              Review
+              <ReviewBadge className="ml-auto" />
+            </SideLink>
+          )}
           {campaigns && (
             <SideLink to="/campaigns" icon={BadgeDollarSign}>
               Campaigns

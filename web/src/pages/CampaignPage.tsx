@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { CAMPAIGN_PLATFORM_LABELS, money, type CampaignDetail } from '@shared/campaigns';
 import { BudgetBar, deadlineText, HalalBadge, PageChips, PagePicker, StatusBadge } from '@/components/campaigns/common';
 import { RulesCard } from '@/components/campaigns/RulesCard';
+import { MomentsCard } from '@/components/campaigns/MomentsCard';
 import { SourcesCard } from '@/components/campaigns/SourcesCard';
 import { PageHeader } from '@/components/PageHeader';
 import { PlatformIcon } from '@/components/publish/common';
@@ -388,6 +389,7 @@ export function CampaignPage() {
               <OverviewCard c={c} workspaces={workspaces} />
               <BriefCard c={c} />
               <RulesCard campaign={c} />
+              <MomentsCard campaign={c} workspaces={workspaces} />
               <SourcesCard campaign={c} />
             </>
           )}

@@ -1,7 +1,8 @@
 import type { SDKRateLimitInfo } from '@anthropic-ai/claude-agent-sdk';
 import type { ClaudeUsage } from '../../../shared/types';
 import { emit } from '../lib/events';
-import { setSetting } from '../lib/settings';
+import { getSetting, setSetting } from '../lib/settings';
+import { JobError } from '../jobs/queue';
 
 type Window = { utilization: number; resetsAt: number };
 
@@ -20,4 +21,19 @@ export function recordUsage(info: SDKRateLimitInfo): ClaudeUsage {
   setSetting('claudeUsage', usage);
   emit({ type: 'changed', entity: 'settings' });
   return usage;
+}
+
+/** Background Claude jobs (picking moments, checking frames) leave the last ~20 % of the 5-hour window for me. */
+const BUSY_AT = 0.8;
+
+/**
+ * Throw a waiting JobError while the 5-hour usage is above ~80 %, so the job tries again a minute after the window
+ * resets; the chat stays usable meanwhile. A reading from a window that has already reset doesn't count.
+ */
+export function waitForUsage() {
+  const five = getSetting('claudeUsage')?.fiveHour;
+  if (!five || five.utilization < BUSY_AT || five.resetsAt <= Date.now()) return;
+  const delayMs = five.resetsAt - Date.now() + 60_000;
+  const at = new Date(Date.now() + delayMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  throw new JobError(`Waiting for Claude’s 5-hour usage to come down (${Math.round(five.utilization * 100)} %), until about ${at}.`, { wait: true, delayMs });
 }

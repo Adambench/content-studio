@@ -16,6 +16,7 @@ import { getSetting, setSetting } from '../lib/settings';
 import { openSse } from '../lib/sse';
 import { appVersion } from '../lib/version';
 import { findBinary } from '../lib/bin';
+import { clipToolsInstalled, clipToolsInstallStatus, installClipTools } from '../services/cliptools';
 import { whisperInstalled } from '../services/media';
 import { installWhisper, whisperInstallStatus } from '../services/whisper';
 import { ensureRenderer, rendererInstalled, rendererInstallStatus } from '../studio/browser';
@@ -71,6 +72,8 @@ export async function systemRoutes(app: FastifyInstance) {
     python: !!findBinary('python3'),
     whisper: whisperInstalled(),
     whisperInstall: whisperInstallStatus(),
+    clipTools: clipToolsInstalled(),
+    clipToolsInstall: clipToolsInstallStatus(),
     renderer: rendererInstalled(),
     rendererInstall: rendererInstallStatus(),
     desktop: !!config.desktopToken,
@@ -82,6 +85,7 @@ export async function systemRoutes(app: FastifyInstance) {
   }));
 
   app.post('/api/system/whisper/install', async () => installWhisper());
+  app.post('/api/system/clip-tools/install', async () => installClipTools());
 
   // Renders download it on first use anyway; this lets Settings fetch it ahead of time.
   app.post('/api/system/renderer/install', async () => {

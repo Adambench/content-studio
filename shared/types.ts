@@ -155,7 +155,8 @@ export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
 };
 
 export type TranscriptStatus = 'none' | 'queued' | 'running' | 'done' | 'error' | 'unavailable';
-export type MediaSource = 'upload' | 'capture' | 'share' | 'render';
+/** `clip`: cut from a campaign's source video by clipping. */
+export type MediaSource = 'upload' | 'capture' | 'share' | 'render' | 'clip';
 /** The browser-friendly copy of a clip that the video studio previews and renders from. */
 export type ProxyStatus = 'none' | 'queued' | 'running' | 'done' | 'error';
 export type RenderStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled';

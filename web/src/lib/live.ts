@@ -16,19 +16,27 @@ export function onLiveEvent(listener: Listener) {
   return () => void listeners.delete(listener);
 }
 
-/** Today gathers from everything, so most events touch it; renders report progress often, so at most every 2 s. */
-let todayTimer: ReturnType<typeof setTimeout> | null = null;
-function refreshToday() {
-  if (todayTimer) return;
-  todayTimer = setTimeout(() => {
-    todayTimer = null;
-    queryClient.invalidateQueries({ queryKey: keys.today });
-  }, 2000);
+/** Today and Review gather from everything, so most events touch them; renders report progress often, so at most every 2 s. */
+const timers = new Map<string, ReturnType<typeof setTimeout>>();
+function refreshSoon(key: readonly unknown[]) {
+  const id = JSON.stringify(key);
+  if (timers.has(id)) return;
+  timers.set(
+    id,
+    setTimeout(() => {
+      timers.delete(id);
+      queryClient.invalidateQueries({ queryKey: key });
+    }, 2000),
+  );
 }
+const refreshToday = () => refreshSoon(keys.today);
 
 function apply(event: LiveEvent) {
   const inv = (key: readonly unknown[]) => queryClient.invalidateQueries({ queryKey: key });
   if (event.type === 'changed' || event.type === 'job') refreshToday();
+  // The review queue: cards moving in or out of Review, their renders, captions and the campaigns' rules.
+  if (event.type === 'changed' && ['pieces', 'renders', 'media', 'campaigns', 'accounts', 'posts'].includes(event.entity)) refreshSoon(keys.review);
+  if (event.type === 'branch') refreshSoon(keys.review);
   if (event.type === 'changed') {
     const wid = event.workspaceId;
     switch (event.entity) {
@@ -116,6 +124,8 @@ function apply(event: LiveEvent) {
     if (event.status === 'done' && event.jobType === 'analytics.review') toast.success('Claude’s review is ready', { description: event.message?.slice(0, 160) });
     if (event.status === 'error' && event.jobType === 'analytics.review') toast.error('The review didn’t finish', { description: event.message?.slice(0, 200) });
     if (event.status === 'error' && event.jobType === 'campaign.read') toast.error('Couldn’t read the campaign', { description: event.message?.slice(0, 200) });
+    if (event.status === 'done' && event.jobType === 'source.pick') toast.success(event.message ?? 'Moments found');
+    if (event.status === 'error' && event.jobType === 'clip.make') toast.error('A clip couldn’t be made', { description: event.message?.slice(0, 200) });
   }
   for (const l of listeners) l(event);
 }

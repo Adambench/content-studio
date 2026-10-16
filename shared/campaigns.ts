@@ -1,6 +1,8 @@
 // Campaigns: Content Rewards campaigns (read from their page) and my businesses' own, assigned to the pages they post
 // on, with their rule checklist, halal screen and source videos. Shared by the server and the web app.
 
+import type { Moment } from './clipping';
+
 /** Where a campaign comes from: a Content Rewards (Whop) campaign page, or one of my businesses (no link). */
 export const CAMPAIGN_ORIGINS = ['content_rewards', 'business'] as const;
 export type CampaignOrigin = (typeof CAMPAIGN_ORIGINS)[number];
@@ -50,7 +52,8 @@ export const SOURCE_KIND_LABELS: Record<SourceKind, string> = { youtube: 'YouTub
 
 /**
  * `found`: listed on the campaign page or in a channel, not downloaded (I pick). Then `queued` → `downloading` →
- * `transcribing` → `ready`, or `error`. (`scanning` comes with clipping.)
+ * `transcribing` → `scanning` (an active campaign's: the liveliest stretches found, then Claude picks moments) →
+ * `ready`, or `error`.
  */
 export const SOURCE_STATUSES = ['found', 'queued', 'downloading', 'transcribing', 'scanning', 'ready', 'error'] as const;
 export type SourceStatus = (typeof SOURCE_STATUSES)[number];
@@ -59,7 +62,7 @@ export const SOURCE_STATUS_LABELS: Record<SourceStatus, string> = {
   queued: 'Waiting',
   downloading: 'Downloading',
   transcribing: 'Transcribing',
-  scanning: 'Scanning',
+  scanning: 'Finding moments',
   ready: 'Ready',
   error: 'Failed',
 };
@@ -119,7 +122,7 @@ export type Campaign = {
   reading?: boolean;
 };
 
-export type CampaignDetail = Campaign & { sources: CampaignSource[] };
+export type CampaignDetail = Campaign & { sources: CampaignSource[]; moments: Moment[] };
 
 /** What a link points at, by its address. */
 export function sourceKindOf(url: string): SourceKind {

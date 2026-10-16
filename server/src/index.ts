@@ -17,6 +17,7 @@ import { startScheduler, stopScheduler } from './publish/scheduler';
 import { analyticsRoutes } from './routes/analytics';
 import { authRoutes, cookieSecret, isAuthenticated } from './routes/auth';
 import { campaignRoutes } from './routes/campaigns';
+import { clippingRoutes } from './routes/clipping';
 import { chatRoutes } from './routes/chat';
 import { deviceRoutes } from './routes/devices';
 import { mediaRoutes } from './routes/media';
@@ -112,6 +113,7 @@ await app.register(analyticsRoutes);
 await app.register(todayRoutes);
 await app.register(siteRoutes);
 await app.register(campaignRoutes);
+await app.register(clippingRoutes);
 
 registerHandlers();
 startWorker();
