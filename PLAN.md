@@ -215,13 +215,15 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
      card (status, Make clip / Make again / Skip, open the clip) and Find moments on ready sources. Claude:
      `find_moments`, `make_clip`, moments in `get_campaign`; it can't take a card out of Review or into
      Scheduled/Posted. Background Claude jobs wait while the 5-hour usage is ≥ 80 %; clip-making waits while a render
-     runs (both fill the CPU and memory). Text overlays show `*word*` in the accent colour. Drive files Drive won't
+     runs (both fill the CPU and memory); clips not made yet wait when their campaign is paused. Text overlays show `*word*` in the accent colour. Drive files Drive won't
      hand over fall back to gdown. Tested on the laptop with the real Mark Manson campaign: the 17-min episode gave 5
      moments (7–8/10) and the 43-min one 6 (8–9/10, a swear flagged), all made into 1080×1920 clips at −14 LUFS framed
      on the speaker (≈3.5 min to render 35 s with the CPU free); a clip whose hashtag rule failed couldn't be approved,
      then after fixing the caption was queued on a stand-in YouTube account (Instagram skipped: no public address, TikTok
      left out: the campaign doesn't pay for it) and its card moved to Scheduled; a reject removed the card, cut and
-     render and kept the reason; Claude's tool handlers checked for scoping; the in-app install from a fresh data folder;
+     render and kept the reason; a business campaign's upload gave a 25 s clip whose captions carried its required
+     hashtag, mention and link on all three platforms (6 of its 8 rules checked automatically, all passing); a moment
+     still waiting its turn can be skipped; Claude's tool handlers checked for scoping; the in-app install from a fresh data folder;
      screenshots of Review, Today, the campaign page and Settings at desktop and phone width. Not tested: a source with
      real background music (the music check was verified with non-musical stand-ins), a Twitch chat replay, Drive via
      gdown, the frames check rejecting something

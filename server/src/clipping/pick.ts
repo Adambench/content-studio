@@ -155,8 +155,11 @@ export async function pickMoments({ sourceId }: { sourceId: string }) {
       ),
     )
     .orderBy(desc(schema.moments.updatedAt))
-    .limit(20)
-    .all();
+    .limit(30)
+    .all()
+    // A skip without a reason teaches nothing (the moment itself stays taken, so it isn't picked again).
+    .filter((r) => r.reason && r.reason !== 'Skipped')
+    .slice(0, 20);
 
   const platforms: CampaignPlatform[] = c.platforms.length ? c.platforms : ['tiktok', 'instagram', 'youtube'];
   const lines = toLines(t);

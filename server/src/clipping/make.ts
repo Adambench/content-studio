@@ -180,6 +180,11 @@ export async function makeClip({ momentId }: { momentId: string }) {
   }
   const s = getSource(m.sourceId);
   const c = getCampaignRow(m.campaignId);
+  // Paused or ended meanwhile: it waits as found, to make later by hand.
+  if (c.status !== 'active') {
+    updateMoment(momentId, { status: 'candidate', detail: 'Not made: the campaign isn’t active.' });
+    return;
+  }
   const file = sourceFile(s);
   if (!file) throw new JobError('The source video isn’t downloaded any more.', { retry: false });
   const info = await probe(file);
@@ -196,6 +201,8 @@ export async function makeClip({ momentId }: { momentId: string }) {
   await mkdir(dir, { recursive: true });
   const step = (detail: string) => {
     if (!momentExists(momentId)) throw new JobError('The moment was deleted.', { retry: false });
+    // Skipped just as it started: leave it skipped.
+    if (getMoment(momentId).status !== 'making') throw new Skipped();
     updateMoment(momentId, { detail });
   };
   try {
@@ -332,10 +339,14 @@ export async function makeClip({ momentId }: { momentId: string }) {
     // 8. Render; finishing moves it to Review.
     queueRender(edit.id, 'claude');
     updateMoment(momentId, { status: 'made', detail: '' });
+  } catch (err) {
+    if (!(err instanceof Skipped)) throw err;
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
+
+class Skipped extends Error {}
 
 export function onMakeFailed({ momentId }: { momentId: string }, message: string) {
   if (!momentExists(momentId)) return;

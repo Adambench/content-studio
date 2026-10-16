@@ -44,7 +44,9 @@ export async function clippingRoutes(app: FastifyInstance) {
   app.post('/api/moments/:id/skip', async (req) => {
     const m = getMoment(idParam.parse(req.params).id);
     const { reason } = z.object({ reason: z.string().trim().max(300).default('') }).parse(req.body ?? {});
-    if (m.status === 'making' || (m.status === 'made' && m.pieceId)) throw new HttpError(409, 'It has a clip already: reject that one at review.');
+    // One still waiting its turn can go; once it's being made, it finishes and is judged at review.
+    if (m.status === 'making' && !m.detail.startsWith('Waiting')) throw new HttpError(409, 'It’s being made: reject it at review.');
+    if (m.status === 'made' && m.pieceId) throw new HttpError(409, 'It has a clip already: reject that one at review.');
     updateMoment(m.id, { status: 'rejected', rejectReason: reason || 'Skipped', detail: '' });
     return getCampaignDetail(m.campaignId);
   });

@@ -118,8 +118,8 @@ function MomentRow({ m, link, page, active }: { m: Moment; link: string | null; 
                 {busy ? <Spinner /> : <RotateCcw />} {m.status === 'candidate' ? 'Make clip' : 'Make again'}
               </Button>
             )}
-            {m.status === 'candidate' && (
-              <Button size="icon-sm" variant="ghost" disabled={busy} aria-label="Skip this moment" onClick={() => act(`/moments/${m.id}/skip`)}>
+            {(m.status === 'candidate' || (m.status === 'making' && m.detail.startsWith('Waiting'))) && (
+              <Button size="icon-sm" variant="ghost" disabled={busy} aria-label="Skip this moment" title="Skip this moment" onClick={() => act(`/moments/${m.id}/skip`)}>
                 <SkipForward />
               </Button>
             )}
