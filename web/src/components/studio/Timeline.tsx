@@ -1,10 +1,11 @@
-import { AudioLines, Image as ImageIcon, Type, Video } from 'lucide-react';
+import { AudioLines, Image as ImageIcon, Shapes, Type, Video } from 'lucide-react';
 import { useRef } from 'react';
 import { TRANSITION_INFO, clipLength, clipStarts, editDuration, transitionWindows } from '@shared/edit';
 import { mediaThumbUrl } from '@/lib/api';
 import { sfxName } from '@/lib/sfx';
 import { cn } from '@/lib/utils';
 import { useStudio } from './context';
+import { overlayName } from './OverlaysPanel';
 
 const STEPS = [1, 2, 5, 10, 15, 30, 60, 120];
 
@@ -77,7 +78,7 @@ export function Timeline({ className }: { className?: string }) {
         {/* overlays */}
         <div className="relative mt-1 h-5">
           {spec.overlays.map((o) => {
-            const Icon = o.type === 'text' ? Type : o.type === 'image' ? ImageIcon : Video;
+            const Icon = o.type === 'text' ? Type : o.type === 'image' ? ImageIcon : o.type === 'graphic' ? Shapes : Video;
             const selected = selection?.kind === 'overlay' && selection.id === o.id;
             return (
               <button
@@ -86,13 +87,13 @@ export function Timeline({ className }: { className?: string }) {
                 onPointerDown={() => select({ kind: 'overlay', id: o.id })}
                 className={cn(
                   'absolute inset-y-0 flex items-center gap-1 overflow-hidden rounded px-1 text-[10px] whitespace-nowrap',
-                  o.type === 'text' ? 'bg-sky-500/25 text-sky-200' : o.type === 'image' ? 'bg-emerald-500/25 text-emerald-200' : 'bg-violet-500/30 text-violet-200',
+                  o.type === 'text' ? 'bg-sky-500/25 text-sky-200' : o.type === 'image' ? 'bg-emerald-500/25 text-emerald-200' : o.type === 'graphic' ? 'bg-amber-500/25 text-amber-200' : 'bg-violet-500/30 text-violet-200',
                   selected && 'ring-2 ring-brand',
                 )}
                 style={{ left: pct(o.start), width: pct(o.end - o.start) }}
               >
                 <Icon className="size-3 shrink-0" />
-                <span className="truncate">{o.type === 'text' ? o.text : (media.get(o.mediaId)?.originalName ?? '')}</span>
+                <span className="truncate">{overlayName(o, (id) => media.get(id)?.originalName)}</span>
               </button>
             );
           })}

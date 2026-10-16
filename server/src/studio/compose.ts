@@ -8,6 +8,7 @@ import {
   fillGeometry,
   speechSpans,
   timelineWords,
+  graphicSounds,
   transitionSounds,
   transitionWindows,
   type CaptionPreset,
@@ -16,6 +17,8 @@ import {
   type TransitionWindow,
 } from '../../../shared/edit';
 import { builtinSfx } from '../../../shared/sfx';
+import { composeGraphic, graphicsCss, STAT_HELPER } from './graphics';
+import { accent, attrJson, esc, js, n, px } from './html';
 import type { AssetType, MediaKind, Transcript } from '../../../shared/types';
 
 /**
@@ -76,13 +79,8 @@ const VOICE_FX = {
 };
 const MASTER_FX = { version: 1, nodes: [{ type: 'truepeak', id: 'm1', label: 'Delivery ceiling', params: { ceiling: -1, lookahead: 3, release: 80 } }] };
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-/** Text overlays mark their accent word(s) like *this*: shown in the accent colour (after escaping). */
-const accent = (escaped: string) => escaped.replace(/\*([^*\n]+)\*/g, '<span class="acc">$1</span>');
-const attrJson = (v: unknown) => esc(JSON.stringify(v));
-const n = (v: number) => String(Math.round(v * 1000) / 1000);
-const px = (v: number) => `${Math.round(v * 100) / 100}px`;
-const js = (v: unknown) => JSON.stringify(v);
+
+const GRAPHICS_CSS_MARK = '/* graphics */';
 
 export function composeEdit(input: ComposeInput) {
   const { spec, media } = input;
@@ -169,11 +167,23 @@ export function composeEdit(input: ComposeInput) {
 
   // ---------- overlays ----------
   const fontStack = (family: string) => (spec.captions.fontMediaId ? `'Brand', '${family}', sans-serif` : `'${family}', sans-serif`);
+  const graphicCtx = { W, H, color: spec.captions.highlight, font: fontStack };
+  const helpers = new Set<string>();
   spec.overlays.forEach((o, i) => {
     const start = Math.min(o.start, duration);
     const len = Math.max(0.1, Math.min(o.end, duration) - start);
     if (o.end <= 0 || o.start >= duration) return;
     const timing = `data-start="${n(start)}" data-duration="${n(len)}" data-track-index="${o.type === 'broll' ? 1 : 2}"`;
+    if (o.type === 'graphic') {
+      const g = composeGraphic({ ...o, start, end: start + len }, i, graphicCtx);
+      // Full-screen ones (a section card, a word slam) cover the captions; the rest sit under them.
+      const z = o.template === 'chapter' || o.template === 'kinetic' ? 45 : 30;
+      body.push(`<div id="o${i}" class="clip layer g g-${o.template}" ${timing} style="z-index:${z}">${g.html}</div>`);
+      tl.push(...g.tweens);
+      if (o.template === 'stat') helpers.add(STAT_HELPER);
+      if (!css.includes(GRAPHICS_CSS_MARK)) css.push(GRAPHICS_CSS_MARK, graphicsCss(graphicCtx));
+      return;
+    }
     if (o.type === 'broll') {
       const m = media.get(o.mediaId);
       const source = m ? input.brollSource(i) : null;
@@ -280,7 +290,7 @@ ${
       offset = 0;
     }
   }
-  [...spec.audio.sfx, ...transitionSounds(spec)].forEach((s, i) => {
+  [...spec.audio.sfx, ...transitionSounds(spec), ...graphicSounds(spec)].forEach((s, i) => {
     const builtin = builtinSfx(s.mediaId);
     const m = media.get(s.mediaId);
     if (s.at >= duration || (!builtin && m?.assetType !== 'sfx')) return;
@@ -336,6 +346,7 @@ ${body.join('\n')}
 <script>
 window.__timelines = window.__timelines || {};
 const tl = gsap.timeline({ paused: true });
+${[...helpers].join('\n')}
 ${tl.join('\n')}
 tl.set({}, {}, ${n(duration)});
 window.__timelines.main = tl;

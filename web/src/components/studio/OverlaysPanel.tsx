@@ -1,7 +1,11 @@
-import { Clapperboard, Image as ImageIcon, Sparkles, Trash2, Type } from 'lucide-react';
+import { ChevronDown, Clapperboard, Image as ImageIcon, Shapes, Sparkles, Trash2, Type } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { editDuration, newEditId, OVERLAY_ANIMATIONS, type EditOverlay, type OverlayAnimation } from '@shared/edit';
+import { editDuration, GRAPHIC_INFO, GRAPHICS, newEditId, OVERLAY_ANIMATIONS, type EditOverlay, type GraphicOverlay, type GraphicTemplate, type OverlayAnimation } from '@shared/edit';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useStudio } from './context';
@@ -9,6 +13,15 @@ import { ChoiceSelect, Field, PanelEmpty, preciseClock, SecondsField, SliderFiel
 import { MediaPicker } from './MediaPicker';
 
 const ANIMATION_LABELS: Record<OverlayAnimation, string> = { pop: 'Pop in', fade: 'Fade in', slide: 'Slide up', none: 'None' };
+
+/** What a row in the list says about an overlay. */
+export function overlayName(o: EditOverlay, mediaName: (id: string) => string | undefined) {
+  if (o.type === 'text') return o.text;
+  if (o.type === 'graphic') return `${GRAPHIC_INFO[o.template].label}${o.text ? `: ${o.text.replace(/\*/g, '')}` : ''}`;
+  return mediaName(o.mediaId) ?? 'Missing file';
+}
+
+const OVERLAY_ICONS = { text: Type, image: ImageIcon, broll: Clapperboard, graphic: Shapes } as const;
 
 export function OverlaysPanel() {
   const { spec, update, time, seek, selection, select, media, footage, assets, piece } = useStudio();
@@ -23,6 +36,12 @@ export function OverlaysPanel() {
   const span = (len: number) => ({ start: Math.round(at * 100) / 100, end: Math.round(Math.min(Math.max(at + len, at + 0.5), Math.max(duration, at + 0.5)) * 100) / 100 });
   const selected = selection?.kind === 'overlay' ? spec.overlays.find((o) => o.id === selection.id) : undefined;
   const images = [...assets.filter((m) => m.kind === 'image'), ...footage.filter((m) => m.kind === 'image')];
+  const newGraphic = (template: GraphicTemplate): GraphicOverlay => {
+    const info = GRAPHIC_INFO[template];
+    // A progress bar runs the whole video; the rest start at the playhead.
+    const when = template === 'progress' ? { start: 0, end: Math.max(duration, 0.5) } : span(info.seconds);
+    return { id: newEditId(), type: 'graphic', template, text: info.example.text ?? '', sub: info.example.sub ?? '', items: info.example.items ?? [], x: 0.5, y: 0.45, position: info.position ?? 'center', sound: template !== 'progress', ...when };
+  };
   const broll = footage.filter((m) => (m.kind === 'video' || m.kind === 'image') && m.source !== 'render');
 
   return (
@@ -42,12 +61,29 @@ export function OverlaysPanel() {
         <Button size="sm" variant="outline" onClick={() => setPicking('broll')}>
           <Clapperboard /> B-roll
         </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline">
+              <Shapes /> Motion graphic <ChevronDown />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-72">
+            {GRAPHICS.map((g) => (
+              <DropdownMenuItem key={g} onSelect={() => add(newGraphic(g))}>
+                <div>
+                  <p>{GRAPHIC_INFO[g].label}</p>
+                  <p className="text-xs text-muted-foreground">{GRAPHIC_INFO[g].hint}</p>
+                </div>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {spec.overlays.length ? (
         <ol className="space-y-1">
           {spec.overlays.map((o) => {
-            const Icon = o.type === 'text' ? Type : o.type === 'image' ? ImageIcon : Clapperboard;
+            const Icon = OVERLAY_ICONS[o.type];
             return (
               <li key={o.id}>
                 <button
@@ -59,7 +95,7 @@ export function OverlaysPanel() {
                   className={cn('flex w-full items-center gap-2.5 rounded-lg border bg-card px-2.5 py-2 text-left', selected?.id === o.id && 'border-brand/60 bg-brand-soft')}
                 >
                   <Icon className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate text-sm">{o.type === 'text' ? o.text : (media.get(o.mediaId)?.originalName ?? 'Missing file')}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm">{overlayName(o, (id) => media.get(id)?.originalName)}</span>
                   <span className="text-xs text-muted-foreground tabular-nums">
                     {preciseClock(o.start)}–{preciseClock(o.end)}
                   </span>
@@ -69,7 +105,7 @@ export function OverlaysPanel() {
           })}
         </ol>
       ) : (
-        <PanelEmpty>On-screen text, logos, stickers and cutaway footage go here. New ones start at the playhead.</PanelEmpty>
+        <PanelEmpty>On-screen text, motion graphics, logos, stickers and cutaway footage go here. New ones start at the playhead.</PanelEmpty>
       )}
 
       {selected && <OverlayEditor key={selected.id} overlay={selected} />}
@@ -106,7 +142,7 @@ function OverlayEditor({ overlay }: { overlay: EditOverlay }) {
   return (
     <section className="space-y-4 rounded-lg border p-3" aria-label="Selected overlay">
       <div className="flex items-center gap-2">
-        <h3 className="mr-auto text-sm font-medium">{overlay.type === 'text' ? 'Text' : overlay.type === 'image' ? 'Image' : 'B-roll'}</h3>
+        <h3 className="mr-auto text-sm font-medium">{overlay.type === 'text' ? 'Text' : overlay.type === 'image' ? 'Image' : overlay.type === 'broll' ? 'B-roll' : GRAPHIC_INFO[overlay.template].label}</h3>
         <Button
           size="icon-sm"
           variant="ghost"
@@ -168,7 +204,9 @@ function OverlayEditor({ overlay }: { overlay: EditOverlay }) {
         </>
       )}
 
-      {overlay.type !== 'broll' && (
+      {overlay.type === 'graphic' && <GraphicFields overlay={overlay} set={set} />}
+
+      {(overlay.type === 'text' || overlay.type === 'image') && (
         <Field label="Animation">
           <ChoiceSelect label="Animation" value={overlay.animation} onChange={(animation) => set({ animation })} options={OVERLAY_ANIMATIONS.map((a) => ({ value: a, label: ANIMATION_LABELS[a] }))} />
         </Field>
@@ -177,3 +215,85 @@ function OverlayEditor({ overlay }: { overlay: EditOverlay }) {
   );
 }
 
+
+/** A template's own words and settings; each template uses only some of them (GRAPHIC_INFO). */
+function GraphicFields({ overlay, set }: { overlay: GraphicOverlay; set: (patch: Partial<GraphicOverlay>) => void }) {
+  const info = GRAPHIC_INFO[overlay.template];
+  const [text, setText] = useState(overlay.text);
+  const [sub, setSub] = useState(overlay.sub);
+  const [items, setItems] = useState(overlay.items.join('\n'));
+  useEffect(() => {
+    setText(overlay.text);
+    setSub(overlay.sub);
+    setItems(overlay.items.join('\n'));
+  }, [overlay]);
+  return (
+    <>
+      <p className="text-xs text-muted-foreground">{info.hint}. Put *stars* around a word for the accent colour.</p>
+      {info.fields.sub && overlay.template === 'chapter' && (
+        <Field label={info.fields.sub}>
+          <Input value={sub} onChange={(e) => setSub(e.target.value)} onBlur={() => sub !== overlay.sub && set({ sub: sub.trim() })} className="h-8" />
+        </Field>
+      )}
+      {info.fields.text && (
+        <Field label={info.fields.text}>
+          {overlay.template === 'quote' || overlay.template === 'kinetic' ? (
+            <Textarea value={text} onChange={(e) => setText(e.target.value)} onBlur={() => text !== overlay.text && set({ text: text.trim() })} rows={2} />
+          ) : (
+            <Input value={text} onChange={(e) => setText(e.target.value)} onBlur={() => text !== overlay.text && set({ text: text.trim() })} className="h-8" />
+          )}
+        </Field>
+      )}
+      {info.fields.sub && overlay.template !== 'chapter' && (
+        <Field label={info.fields.sub}>
+          <Input value={sub} onChange={(e) => setSub(e.target.value)} onBlur={() => sub !== overlay.sub && set({ sub: sub.trim() })} className="h-8" />
+        </Field>
+      )}
+      {info.fields.items && (
+        <Field label={info.fields.items}>
+          <Textarea
+            value={items}
+            onChange={(e) => setItems(e.target.value)}
+            onBlur={() => set({ items: items.split('\n').map((i) => i.trim()).filter(Boolean).slice(0, 6) })}
+            rows={4}
+          />
+        </Field>
+      )}
+      {info.fields.point && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <SliderField label="Points at, across" value={overlay.x} min={0} max={1} format={(v) => `${Math.round(v * 100)}%`} onChange={(x) => set({ x })} />
+          <SliderField label="Points at, down" value={overlay.y} min={0} max={1} format={(v) => `${Math.round(v * 100)}%`} onChange={(y) => set({ y })} />
+        </div>
+      )}
+      {info.position && (
+        <Field label="Where">
+          <ChoiceSelect
+            label="Where"
+            value={overlay.position}
+            onChange={(position) => set({ position })}
+            options={
+              overlay.template === 'progress'
+                ? [
+                    { value: 'top', label: 'Top edge' },
+                    { value: 'bottom', label: 'Bottom edge' },
+                  ]
+                : [
+                    { value: 'top', label: 'Top' },
+                    { value: 'center', label: 'Middle' },
+                    { value: 'bottom', label: 'Bottom' },
+                  ]
+            }
+          />
+        </Field>
+      )}
+      {overlay.template !== 'progress' && (
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor={`gsound-${overlay.id}`} className="text-xs">
+            Its sound effects <span className="font-normal text-muted-foreground">(pops, a swish — never music)</span>
+          </Label>
+          <Switch id={`gsound-${overlay.id}`} checked={overlay.sound} onCheckedChange={(sound) => set({ sound })} />
+        </div>
+      )}
+    </>
+  );
+}

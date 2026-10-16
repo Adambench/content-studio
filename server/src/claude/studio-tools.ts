@@ -4,6 +4,8 @@ import { z } from 'zod';
 import {
   CAPTION_PRESET_DEFAULTS,
   CAPTION_PRESETS,
+  GRAPHIC_INFO,
+  GRAPHICS,
   SHORT_MAX_SECONDS,
   TIGHTEN_PRESETS,
   TRANSITION_INFO,
@@ -48,15 +50,22 @@ const clipShape = z.object({
 
 const overlayShape = z.object({
   id: z.string().optional(),
-  type: z.enum(['text', 'image', 'broll']),
+  type: z.enum(['text', 'image', 'broll', 'graphic']),
   start: z.number().min(0).describe('Seconds on the finished video'),
   end: z.number(),
-  text: z.string().optional().describe('text: what it says; wrap the accent word in asterisks (*word*) to show it in the accent colour'),
+  template: z
+    .enum(GRAPHICS)
+    .optional()
+    .describe(`graphic: ${GRAPHICS.map((g) => `${g} = ${GRAPHIC_INFO[g].label} (${GRAPHIC_INFO[g].hint}; ${Object.entries(GRAPHIC_INFO[g].fields).map(([k, v]) => (k === 'point' ? 'x/y = what it points at' : `${k} = ${v}`)).join(', ') || 'no words'})`).join('; ')}`),
+  sub: z.string().optional().describe('graphic: the second line (see template)'),
+  items: z.array(z.string()).max(6).optional().describe('graphic list: the points'),
+  sound: z.boolean().optional().describe('graphic: its own built-in sound effects (default on)'),
+  text: z.string().optional().describe('text and graphic: what it says; wrap the accent word in asterisks (*word*) to show it in the accent colour'),
   style: z.enum(['title', 'label', 'note']).optional().describe('text: title = big hook text, label = pill in the accent colour, note = small'),
-  position: z.enum(['top', 'center', 'bottom']).optional().describe('text'),
+  position: z.enum(['top', 'center', 'bottom']).optional().describe('text, and graphics that sit somewhere (progress: top or bottom edge)'),
   animation: z.enum(['pop', 'fade', 'slide', 'none']).optional(),
   mediaId: z.string().optional().describe('image / broll: library file'),
-  x: z.number().min(0).max(1).optional().describe('image: centre, 0–1'),
+  x: z.number().min(0).max(1).optional().describe('image: centre, 0–1; graphic callout: the point it shows'),
   y: z.number().min(0).max(1).optional(),
   width: z.number().min(0.05).max(1).optional().describe('image: width as a fraction of the frame'),
   in: z.number().min(0).optional().describe('broll: where in the source to start'),

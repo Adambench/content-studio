@@ -122,7 +122,124 @@ export type BrollOverlay = OverlayBase & {
   focusX: number;
   focusY: number;
 };
-export type EditOverlay = TextOverlay | ImageOverlay | BrollOverlay;
+
+// ---------- motion graphics ----------
+
+export const GRAPHICS = ['lowerThird', 'stat', 'list', 'quote', 'callout', 'chapter', 'cta', 'progress', 'kinetic'] as const;
+export type GraphicTemplate = (typeof GRAPHICS)[number];
+export type GraphicPosition = 'top' | 'center' | 'bottom';
+
+/**
+ * The motion-graphics templates. `fields` names what each one uses (and how the editor labels it); unused fields are
+ * kept but ignored. `seconds` is how long a new one lasts.
+ */
+export const GRAPHIC_INFO: Record<
+  GraphicTemplate,
+  { label: string; hint: string; seconds: number; position: GraphicPosition | null; fields: { text?: string; sub?: string; items?: string; point?: boolean }; example: Partial<Pick<GraphicOverlay, 'text' | 'sub' | 'items'>> }
+> = {
+  lowerThird: { label: 'Name tag', hint: 'Who’s speaking: a name and a line about them', seconds: 4, position: 'bottom', fields: { text: 'Name', sub: 'Who they are' }, example: { text: 'Mark Manson', sub: 'Author, Subtle Art' } },
+  stat: { label: 'Big number', hint: 'A number that counts up, with what it means', seconds: 3, position: 'center', fields: { text: 'The number (e.g. $1.2M, 87%, 10,000)', sub: 'What it is' }, example: { text: '87%', sub: 'of bombers never came back' } },
+  list: { label: 'List', hint: 'Points that tick in one by one', seconds: 6, position: 'center', fields: { text: 'Heading (optional)', items: 'Points, one per line (up to 6)' }, example: { text: '3 rules', items: ['Start before you’re ready', 'Ship every day', 'Ask for feedback'] } },
+  quote: { label: 'Quote', hint: 'A line worth keeping, with who said it', seconds: 4, position: 'center', fields: { text: 'The quote', sub: 'Who said it' }, example: { text: 'Look at *what survived*, not what failed.', sub: 'Abraham Wald' } },
+  callout: { label: 'Arrow callout', hint: 'Points at something on screen', seconds: 2.5, position: null, fields: { text: 'Label', point: true }, example: { text: 'Look here' } },
+  chapter: { label: 'Section title', hint: 'A full-screen card between parts', seconds: 1.6, position: null, fields: { sub: 'Small line above (e.g. Step 2)', text: 'Title' }, example: { sub: 'Step 2', text: 'Find the *real* problem' } },
+  cta: { label: 'Follow prompt', hint: 'A nudge to follow, save or comment', seconds: 2.5, position: 'center', fields: { text: 'What it says' }, example: { text: 'Follow for part 2' } },
+  progress: { label: 'Progress bar', hint: 'A thin bar that fills as the video plays', seconds: 0, position: 'top', fields: {}, example: {} },
+  kinetic: { label: 'Word slam', hint: 'A phrase slammed in word by word, full screen', seconds: 2.2, position: null, fields: { text: 'The phrase (*word* for the accent colour)' }, example: { text: 'Stop *guessing*' } },
+};
+
+/** An animated motion-graphics template, in the brand's accent colour and fonts. */
+export type GraphicOverlay = OverlayBase & {
+  type: 'graphic';
+  template: GraphicTemplate;
+  /** The main words (a name, a number, a title, a quote); *word* shows in the accent colour. */
+  text: string;
+  /** The second line (who they are, what the number means, who said it). */
+  sub: string;
+  /** A list's points. */
+  items: string[];
+  /** A callout's target on the frame (0–1). */
+  x: number;
+  y: number;
+  position: GraphicPosition;
+  /** Its own sound effects (a pop per point, a whoosh on a section card…), built in and non-musical. */
+  sound: boolean;
+};
+
+export type EditOverlay = TextOverlay | ImageOverlay | BrollOverlay | GraphicOverlay;
+
+/** A phrase split into words, with the ones inside *stars* marked as accent. */
+export function graphicWords(text: string) {
+  let on = false;
+  return text
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((raw) => {
+      // A star opens at the start of a word (after any opening punctuation) and closes at its end (before any closing).
+      if (/^[^\w*]*\*/.test(raw)) on = true;
+      const word = { text: raw.replace(/\*/g, ''), accent: on };
+      if (/\*[^\w*]*$/.test(raw.replace(/^[^\w*]*\*/, ''))) on = false;
+      return word;
+    })
+    .filter((w) => w.text);
+}
+
+/** How long a big number takes to count up. */
+export const statCountSeconds = (o: Pick<GraphicOverlay, 'start' | 'end'>) => Math.min(1.4, (o.end - o.start) * 0.5);
+
+/** When a graphic's parts come in (seconds on the finished video): a list's points, slammed words. */
+export function graphicBeats(o: GraphicOverlay): number[] {
+  const len = o.end - o.start;
+  if (o.template === 'list') {
+    const step = Math.min(1.2, Math.max(0.35, (len - 1.2) / Math.max(1, o.items.length)));
+    return o.items.map((_, k) => round(o.start + 0.45 + k * step));
+  }
+  if (o.template === 'kinetic') {
+    const words = graphicWords(o.text);
+    const step = Math.min(0.4, (len * 0.6) / Math.max(1, words.length));
+    return words.map((_, k) => round(o.start + 0.15 + k * step));
+  }
+  return [];
+}
+
+/** The built-in sounds of graphics that have `sound` on. */
+export function graphicSounds(spec: Pick<EditSpec, 'overlays'>): SfxCue[] {
+  const cues: SfxCue[] = [];
+  const cue = (o: GraphicOverlay, k: number, name: string, at: number, volume = 0.6) => cues.push({ id: `g-${o.id}-${k}`, mediaId: builtinSfxId(name), at: round(Math.max(0, at)), volume });
+  for (const o of spec.overlays) {
+    if (o.type !== 'graphic' || !o.sound) continue;
+    const beats = graphicBeats(o);
+    switch (o.template) {
+      case 'lowerThird':
+        cue(o, 0, 'swish', o.start + 0.05);
+        break;
+      case 'stat':
+        cue(o, 0, 'pop', o.start);
+        cue(o, 1, 'ding-glass', o.start + statCountSeconds(o), 0.5);
+        break;
+      case 'list':
+        beats.forEach((t, k) => cue(o, k, 'pop-high', t));
+        break;
+      case 'quote':
+        cue(o, 0, 'whoosh-soft', o.start - 0.1, 0.5);
+        break;
+      case 'callout':
+        cue(o, 0, 'pop', o.start);
+        cue(o, 1, 'pop-high', o.start + 0.4, 0.5);
+        break;
+      case 'chapter':
+        cue(o, 0, 'whoosh-heavy', o.start - 0.15, 0.55);
+        break;
+      case 'cta':
+        cue(o, 0, 'bloop', o.start + 0.05);
+        break;
+      case 'kinetic':
+        beats.forEach((t, k) => cue(o, k, 'knock', t, 0.5));
+        break;
+    }
+  }
+  return cues;
+}
 
 /** `mediaId` is a sound-effect asset or one of the app's own sounds (`builtin:<name>`, shared/sfx.ts). */
 export type SfxCue = { id: string; mediaId: string; at: number; volume: number };
@@ -314,6 +431,23 @@ function normalizeOverlay(input: Loose): EditOverlay | null {
     case 'image':
       if (typeof input.mediaId !== 'string') return null;
       return { ...base, type: 'image', mediaId: input.mediaId, x: round(num(input.x, 0.5, 0, 1)), y: round(num(input.y, 0.3, 0, 1)), width: round(num(input.width, 0.4, 0.05, 1)), animation };
+    case 'graphic': {
+      if (!GRAPHICS.includes(input.template as GraphicTemplate)) return null;
+      const template = input.template as GraphicTemplate;
+      const items = (Array.isArray(input.items) ? input.items : []).filter((i): i is string => typeof i === 'string').map((i) => i.trim().slice(0, 120)).filter(Boolean).slice(0, 6);
+      return {
+        ...base,
+        type: 'graphic',
+        template,
+        text: str(input.text, '').slice(0, 300),
+        sub: str(input.sub, '').slice(0, 200),
+        items,
+        x: round(num(input.x, 0.5, 0, 1)),
+        y: round(num(input.y, 0.5, 0, 1)),
+        position: oneOf(input.position, ['top', 'center', 'bottom'] as const, GRAPHIC_INFO[template].position ?? 'center'),
+        sound: typeof input.sound === 'boolean' ? input.sound : true,
+      };
+    }
     case 'broll':
       if (typeof input.mediaId !== 'string') return null;
       return {

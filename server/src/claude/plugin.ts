@@ -34,6 +34,13 @@ const CHAT_SKILLS = [
   'content-strategy',
   'marketing-psychology',
   'offers',
+  // Motion design, for transitions, motion graphics and the scenes Claude writes (write_scene). Their command-line
+  // and rendering steps don't apply in the app: the prompt says so.
+  'hyperframes-animation',
+  'hyperframes-creative',
+  'motion-graphics',
+  'gsap-core',
+  'gsap-timeline',
 ];
 
 const manifest = join(config.pluginDir, '.claude-plugin/plugin.json');

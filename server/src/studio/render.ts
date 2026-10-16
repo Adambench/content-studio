@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { and, eq, inArray } from 'drizzle-orm';
-import { EDIT_FORMATS, LOUDNESS_TARGET, clipLength, editDuration, normalizeEdit, transitionHandles, transitionSounds, type EditSpec } from '../../../shared/edit';
+import { EDIT_FORMATS, LOUDNESS_TARGET, clipLength, editDuration, graphicSounds, normalizeEdit, transitionHandles, transitionSounds, type EditSpec } from '../../../shared/edit';
 import { builtinSfx } from '../../../shared/sfx';
 import { REVIEW_STAGE } from '../../../shared/types';
 import { config } from '../config';
@@ -164,7 +164,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
     }
 
     // Everything else is used as-is: fonts, logos, the nasheed, sound effects.
-    const fileIds = new Set([...spec.overlays.flatMap((o) => (o.type === 'image' ? [o.mediaId] : [])), ...[...spec.audio.sfx, ...transitionSounds(spec)].map((s) => s.mediaId)]);
+    const fileIds = new Set([...spec.overlays.flatMap((o) => (o.type === 'image' ? [o.mediaId] : [])), ...[...spec.audio.sfx, ...transitionSounds(spec), ...graphicSounds(spec)].map((s) => s.mediaId)]);
     for (const id of [spec.audio.nasheed?.mediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) fileIds.add(id);
     const fileNames = new Map<string, string>();
     for (const id of fileIds) {
