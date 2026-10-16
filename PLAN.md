@@ -195,6 +195,11 @@ go (Review → the Clips board's Review column and Today); Brand assets hidden o
 box later); a note goes to the package's Claude thread with the time and a frame. Claude changes the edit (studio
 tools), the package re-renders by itself when it's in Review, and shows before/after with the version. Approve /
 reject / schedule live in the package.
+Where things are: the player is `web/src/components/package/VideoPanel.tsx` (`ClipPlayer` in `ClipReview.tsx`); the
+video's chat is `ClaudePanel` (`videoChat`, `usePieceThread`, `send` posts `/threads/:id/messages` with
+`contextPieceId`); edits change through `update_edit` / `tighten_edit` in `server/src/claude/studio-tools.ts`
+(`saveEditVersion`, `listEditVersions`), renders through `queueRender` (`server/src/studio/render.ts`); tools return
+frames as `{type:'image'}` content like `view_overlay`; the package summary is `GET /api/review/:id` (`buildClip`).
 
 **Step 3 — Compute workers.** A small worker (Node, systemd service) on each home PC, reached over Tailscale and
 paired like the phone (a device token). The laptop's job queue sends heavy jobs to a free worker that has the tool —
