@@ -36,6 +36,8 @@ import { ttsInstalled } from '../services/tts';
 import { clipToolsInstalled } from '../services/cliptools';
 import { enqueue, hasPendingJob } from '../jobs/queue';
 import { tightenEdit } from '../studio/tighten';
+import { arsenalText } from '../studio/arsenal';
+import { ARSENAL_KINDS, type ArsenalKind } from '../../../shared/arsenal';
 import { ok, safe, ToolError } from './tool-helpers';
 
 const clipShape = z.object({
@@ -107,6 +109,8 @@ export function studioToolLabel(name: string, input: Record<string, any>): strin
       return input.kind ? `Wrote a ${RECIPE_INFO[input.kind as keyof typeof RECIPE_INFO]?.label.toLowerCase() ?? 'format'} video` : 'Wrote a format video';
     case 'list_assets':
       return 'Browsed brand assets';
+    case 'get_arsenal':
+      return 'Looked through the toolbox of video moves';
     default:
       return null;
   }
@@ -424,6 +428,18 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         if (!edit) throw new ToolError('This piece has no video edit yet.');
         const r = queueRender(edit.id, 'claude');
         return ok(`Render of v${r.versionNumber} queued. The creator can watch its progress in the video editor.`);
+      }),
+    ),
+
+    tool(
+      'get_arsenal',
+      'The arsenal: every move a video can use here (transitions, caption looks, motion graphics, custom scenes, formats, camera moves, cuts, sound effects) with when each fits and how to do it, ' +
+        'and how often this page’s recent edits used each. Consider it whenever you plan or edit a video, pick what fits the idea, avoid what the last videos already leaned on so videos on this page differ, ' +
+        'and say in a line which moves you chose and why. Items with ready=false are not built yet.',
+      { kind: z.enum(Object.keys(ARSENAL_KINDS) as [ArsenalKind, ...ArsenalKind[]]).optional().describe('Only this group'), pieceId: z.string().optional().describe('The video you are working on, so its own edit does not count as "recent"') },
+      safe(async ({ kind, pieceId }) => {
+        if (pieceId) ownPiece(pieceId);
+        return ok(arsenalText(workspaceId, { kind, excludePieceId: pieceId }));
       }),
     ),
 

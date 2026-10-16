@@ -121,7 +121,7 @@ versionCode from the tag (`v1.2.3` → 10203).
    - [x] Step 1 — Every video is a package; nav per kind; Inbox + search instead of the Library (2026-10-16)
    - [ ] Step 2 — Feedback loop in the package (timestamped notes → Claude edits → re-render → before/after)
    - [ ] Step 3 — Compute workers on the home PCs
-   - [ ] Step 4 — Skills and the creative arsenal
+   - [x] Step 4 — Skills and the creative arsenal (2026-10-16; no new skills installed, see the step)
    - [ ] Step 5 — Creative directions (personal/business) and varied clip edits (clipping)
    - [ ] Step 6 — One-button finder for clipping pages
    - [ ] Step 7 — Effects library, local only
@@ -209,7 +209,7 @@ speaker scan, Kokoro, the person matte, FFmpeg cuts/encodes (NVENC), HyperFrames
 to the queue (laptop CPU last). Settings → Compute: workers, their GPU, what they can run, an install script
 (`scripts/setup-worker.sh`), a test job. Measure each tool's speed on both cards against the laptop first.
 
-**Step 4 — Skills and the arsenal.** Survey and install more skills (video styles, direction, ads/UGC scripting,
+**Step 4 — Skills and the arsenal (built).** Done: `shared/arsenal.ts` (46 moves, 8 marked not ready = step 7 effects), `get_arsenal` (with how often the page's last 8 edits used each; `server/src/studio/arsenal.ts`, reused by step 5), a prompt line, and five more motion skills in `CHAT_SKILLS`. Not done: surveying/installing new skills (`find-skills`, needs the network and my say on licences). Original plan: Survey and install more skills (video styles, direction, ads/UGC scripting,
 storytelling), keep licences in mind (personal use only where unlicensed). Allow-list every knowledge skill in the
 chat. `shared/arsenal.ts` + `get_arsenal`; the prompts tell Claude to consider the arsenal for every video and say
 which pieces it chose and why.

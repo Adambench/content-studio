@@ -41,6 +41,11 @@ const CHAT_SKILLS = [
   'motion-graphics',
   'gsap-core',
   'gsap-timeline',
+  'gsap-utils',
+  'gsap-plugins',
+  'gsap-performance',
+  'hyperframes-keyframes',
+  'hyperframes-core',
 ];
 
 const manifest = join(config.pluginDir, '.claude-plugin/plugin.json');
