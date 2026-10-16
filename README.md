@@ -15,8 +15,9 @@ Open **Content Studio** from the app menu. No terminal needed.
 - **Settings → Phone access** shows the one-time Tailscale setup, pairs the Android app (QR code) and lists paired
   phones; it also sets the password for using it in a phone's browser instead.
 - **Settings → Video rendering** fetches the video renderer (it also downloads by itself on the first render).
-- **Settings → Clip tools** installs Demucs and a face detector for clipping (about 1.3 GB, one click): clips can't
-  be made without them, since they remove background music.
+- **Settings → Clip tools** installs Demucs, a face detector and the voices (about 1.4 GB, one click): clips can't be
+  made without them, since they remove background music, and format videos need the voices. An older install shows
+  **Add the voices**.
 - **Settings → Publishing** holds the one-time platform setup (below).
 - **Settings → Weekly review** sets when Claude reviews each workspace's results (Mondays 9:00 by default), or turns it
   off.
@@ -41,8 +42,12 @@ Open **Content Studio** from the app menu. No terminal needed.
   the chat replay, the brief's words), then Claude picks 3–8 moments that stand alone, by the playbook and the
   campaign's rules, with a hook card, a title and captions. Each moment is cut, keeps only the voice (Demucs removes
   background music, or the clip is dropped), has three frames checked against the halal rules, is framed on the
-  speaker's face and edited in the page's look (tightened, captions, hook card, a sparing pop and whoosh), then
-  rendered into **Review**.
+  speaker (in podcasts with several people and shots, the frame follows whoever is talking) and edited in the page's
+  look (tightened, captions, hook card, a sparing pop and whoosh), then rendered into **Review**.
+- **Filmed videos (UGC)** — for a campaign that wants you on camera with the product (or your own business's): on the
+  campaign's page, **Write a video** and Claude writes the hook, what to say with shot cues, a shot list, every
+  requirement as a checklist and the captions with the campaign's mentions and tags, as a card on the page. Film it,
+  edit it like any piece; its posts get submissions like clips.
 - **Review** — every clip waiting for your yes or no, with its render, where it came from and the campaign's rules
   checked against it (length, captions' mentions and hashtags, platforms; the rest as tick boxes). **Approve &
   queue** sends it to the next free queue time of the page's accounts; **Reject** asks why, and the next picks read
@@ -78,19 +83,31 @@ Open **Content Studio** from the app menu. No terminal needed.
 - **Video editor** (piece → **Edit video**) — your footage laid end to end in the brand's look, with a live preview
   that matches the render:
   - **Clips**: reorder, trim, split at the playhead, reframe (click where the subject is), zoom, clip volume.
-    **Tighten** cuts the pauses (and “um”s) using the transcript's word timings.
+    **Tighten** cuts the pauses (and “um”s) using the transcript's word timings. **Follow the speaker** splits the
+    footage into shots and keeps whoever is talking in frame. Each clip can come in with a **transition** (crossfade,
+    dip to black, flash, zoom through, whip pan, push up, blur, glitch), with a matching sound if you like — the
+    timing doesn't move.
   - **Captions** from what's said, in four styles (Bold, Karaoke, Clean, Subtitle), your fonts and colours. Fix
     misheard words there — it corrects the transcript too.
   - **Text & images**: titles, labels, logos and b-roll cutaways (full screen, top half, picture in picture);
-    one click puts the draft's hook on screen.
+    one click puts the draft's hook on screen. **Motion graphic** adds an animated template in your accent colour and
+    fonts: name tag, big number that counts up, list, quote, arrow callout, section card, follow prompt, progress bar,
+    word slam. Claude can also design a **scene** of its own (it looks at it before you do); you can fix its words.
+  - **Script** (format videos): make a video from words, no filming — **Story + gameplay** (a story read over your
+    background footage, its title on a post card), **Fake texts** (a conversation that plays out, each message read
+    aloud) or **Talking characters** (two drawn characters — Sam, Max, Lina in a hijab, Bolt the robot — whose mouths
+    move with their voices). Pick voices (listen first), the speed and background footage, then **Make the voice**:
+    it's spoken on this laptop and the video is timed around it. Start one from an empty edit (*Or make it from
+    words*) or ask Claude.
   - **Sound**: built-in and brand sound effects, voice clean-up, loudness levelled to −14 LUFS (what TikTok, Reels
     and Shorts play at), and optionally a vocal-only nasheed that dips under your voice — only you can add one.
   - **Look**: 9:16 / 4:5 / 1:1, a LUT colour grade (applied in the render), a watermark. **Save this look** makes it
     the brand's default for new edits.
   - **Render** makes an MP4 on this laptop (about a minute for a short video) that lands in the piece's
     *Finished videos*. Every change is versioned — **History** restores any earlier edit.
-  - Claude can do all of it from the chat: pick the best takes, tighten, caption, reframe, add sound effects and
-    render. It never adds music or touches the nasheed.
+  - Claude can do all of it from the chat: pick the best takes, tighten, caption, reframe or follow the speaker, add
+    transitions, motion graphics, its own scenes and sound effects, write format videos, and render. It never adds
+    music or touches the nasheed.
 
 - **Calendar** — every post in week, month or list view. Drag a post to another day (or onto a free queue time) to
   move it; drag a piece from *Ready to schedule* onto the calendar to schedule it. Failed or missed posts show at the

@@ -3,8 +3,8 @@
 Content Studio is a single-user desktop app (Electron) for planning, writing, editing and scheduling social
 content, with a web UI that the phone uses through an Android app (Capacitor) or as a PWA. README.md lists features;
 PLAN.md has the decisions and phased roadmap. Built: phase 1 (pipeline + Claude), 3 (scheduling/publishing via the
-platforms' official APIs), 4 (analytics + weekly Claude review) and 6 (Android app); phase 2 (video studio:
-HyperFrames + FFmpeg) is usable and being extended.
+platforms' official APIs), 4 (analytics + weekly Claude review), 6 (Android app) and 7 (clipping, campaigns, research,
+format videos); phase 2 (video studio: HyperFrames + FFmpeg) is usable and being extended.
 
 ## Architecture
 
@@ -42,6 +42,18 @@ HyperFrames + FFmpeg) is usable and being extended.
   graded segments, then forks `worker.ts` → `server/dist/render-worker.mjs`, which runs `@hyperframes/producer`).
   Timed elements must not be zero-height (the runtime stretches them): put positioned content inside a full-frame
   `.layer`. HyperFrames' own colour grading hangs headless Chrome here — grade with FFmpeg `lut3d`.
+  - Transitions (`clip.transition`, `transitionWindows`): only the pictures overlap — muted copies of both shots run
+    past the cut (render segments are cut with `transitionHandles`) while the sound still cuts, so timings never move.
+  - Overlays: text, image, b-roll, `graphic` (nine templates, `studio/graphics.ts`) and `scene` (`shared/scene.ts`:
+    Claude's own motion graphics as data — allow-listed CSS and JSON GSAP tweens, built with everything escaped; never
+    let a scene carry script, `url()` or `random()`). `previewOverlay` (`studio/preview.ts`) renders one overlay at
+    10 fps for Claude's `view_overlay`. Built-in sounds of transitions, graphics and formats come from
+    `transitionSounds`/`graphicSounds`/`recipeSounds` — add new ones to compose *and* render's file list.
+  - Format videos (`spec.recipe`, `shared/recipe.ts`): story, fake texts, two characters; `format.build`
+    (`studio/formats.ts`) speaks it with Kokoro (`scripts/tts.py` in the clip tools venv, `services/tts.ts`), times
+    every line, transcribes it, lays out muted backgrounds and sets `audio.voiceover`; `studio/recipe-layers.ts` and
+    `studio/characters.ts` draw them. The voiceover only plays speech made here (`source: tts`) or an in-app voice memo
+    (`capture`) — never an uploaded track (that's how music would get in).
 
 - Publishing (`server/src/publish`): accounts per workspace (tokens server-side only — `publicAccount` strips them),
   OAuth via the system browser back to `/api/oauth/:platform/callback` (public; the one-time `state` is the proof),
@@ -87,7 +99,8 @@ HyperFrames + FFmpeg) is usable and being extended.
   `createPosts` on the queue), reject (the reason stays on the moment, the card and its files go). Needs the clip tools venv
   (`<data>/tools`, `scripts/setup-tools.sh`, Settings → Clip tools). Background Claude jobs wait (not fail) while the
   5-hour usage is ≥ 80 %: `waitForUsage()` throws a `JobError` with `wait`. Claude gets `find_moments`/`make_clip`
-  (local work), never approve or schedule.
+  (local work), never approve or schedule. UGC (`campaigns/ugc.ts`): a piece filmed for a campaign is linked by
+  `pieces.campaign_id` (clips through `moments`); `ugc.script` writes it from the brief; both kinds get submissions.
 - Research (`server/src/research`, `shared/research.ts`, `/w/:wid/research`): `workspaces.research` is the watch list
   (`normalizeResearch`). `sweep.ts` (`research.sweep`, daily via `schedule.ts`, no Claude): YouTube Shorts tabs and
   keyword searches through yt-dlp, TikTok/Instagram profiles through `readPage` (the grid's link text is the views;

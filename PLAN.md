@@ -71,7 +71,7 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
      track only the user sets (phase 7, step 3; see *Halal*)
    - [x] Render queue in a child process (headless Chrome downloaded on first render), result into the library
    - [x] Brand look (template) per workspace; Claude tools: get/update/tighten/render edits, list assets
-   - [ ] Transitions between clips, animated motion-graphics templates (and Claude-written HyperFrames scenes)
+   - [x] Transitions between clips, animated motion-graphics templates and Claude-written scenes (phase 7 step 9)
    - [x] Automatic reframing (face tracking, following the speaker; phase 7 step 9)
    - [ ] Grade shown in the preview
    - [ ] Hardware encoding: needs an FFmpeg that matches the system libva (see below)
@@ -134,8 +134,8 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
      `~/.config/content-studio/android-release/` (back it up!) and the signing secrets; v0.1.0 released by CI
    - [ ] Real-phone test: install from Obtainium, pair, QR scanning (Google's code scanner needs Play services; the
      emulator image couldn't download it), FCM with a real Firebase project
-7. **Clipping, campaigns & research** — planned (2026-10-15); see *Use cases and organisation*, *Halal* and
-   *Clipping plan* below
+7. **Clipping, campaigns & research** — built (2026-10-15 to 2026-10-16), steps 1–9; see *Use cases and organisation*,
+   *Halal*, *Clipping plan* and *Formats decisions* below
    - [x] Skills survey (shortlist → I picked, 2026-10-15): 35 skills in `.claude/skills` — HyperFrames (core,
      animation, keyframes, creative, registry, cli, motion-graphics, embedded-captions, talking-head-recut; not its
      audio/media/music skills), GSAP (core, timeline, plugins, utils, performance), Melvynx video-agent (clips,
@@ -299,6 +299,51 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
        two-person wide shot: the frame stays on the one talking, the listener and a poster ignored), a heavily cut
        two-person interview (41 shots, close-ups and over-the-shoulder two-shots), and a synthetic two-speaker wide
        shot (switches at the turns, ignores a half-second interjection)
+     - [x] Transitions (2026-10-16): a clip's `transition` (crossfade, dip to black, flash, zoom through, whip pan, push
+       up, blur, glitch; 0.15–1.2 s; an optional matching built-in sound). Only the pictures overlap: each shot runs
+       past the cut from its own source (the render cuts each segment with those handles; the preview uses the whole
+       file) on a black backing while the clip sound still cuts at the cut, so timings and captions never move.
+       Picker in the selected clip (*Use on every cut*), markers on the timeline, `update_edit` for Claude. Tested: a
+       render with all eight on a real podcast clip (each checked frame by frame), the picker at desktop and phone width
+     - [x] Motion-graphics templates (2026-10-16): overlay type `graphic` with nine templates (`studio/graphics.ts`):
+       name tag, big number that counts up (keeps the text's format: `$1,250,000`, `87%`), list that ticks in, quote,
+       arrow callout, section card (covers the captions), follow prompt, progress bar, word slam; the accent colour and
+       brand font; each with its own built-in sounds (switchable). *Motion graphic* menu and per-template fields in
+       Text & images; Claude through `update_edit`. The HyperFrames/GSAP knowledge skills (`hyperframes-animation`,
+       `hyperframes-creative`, `motion-graphics`, `gsap-core`, `gsap-timeline`) joined the app's allow-list. Tested: a
+       render with all nine, the editor and menu at both widths
+     - [x] Scenes Claude designs (2026-10-16): overlay type `scene` (`shared/scene.ts`): elements (box, text, SVG path,
+       library image) with allow-listed CSS and GSAP tweens as JSON, built into the page with everything escaped — no
+       script, no `url()`, no `random()`, ids and eases checked, finite repeats. `write_scene` (what's dropped is
+       listed back) and `view_overlay` (the overlay alone over a still of the footage, rendered by HyperFrames at
+       10 fps: ~7 s). Tested: a hand-written scene with injection attempts (style breaking out of the attribute,
+       `url()`, `onComplete`, `innerHTML`, a bad ease) — all dropped and reported, the rest rendered as designed
+     - [x] Format videos from words (2026-10-16, see *Formats decisions*): story + gameplay, fake texts, talking
+       characters. Tested with the built app's server on the step-6 data: one of each built (Kokoro voice, Whisper
+       timings, the generated background) and rendered at −14 LUFS: the post card then 2-word captions; messages
+       growing in and pushing up; Sam and Lina with mouths following their lines, leaning in when they talk; Claude's
+       `write_format_video` handler made and built a dialogue; voice samples; the Script tab at both widths
+     - [x] UGC (2026-10-16): `pieces.campaign_id` (migration 0011) links a filmed piece to its campaign; *Filmed
+       videos* on the campaign page (page, optional angle) → `ugc.script` (one Sonnet call with the playbook) writes a
+       card with the hook, what to say with shot cues, a shot list, every requirement as a checklist and captions with
+       the campaign's mentions, tags and link; its review checks the campaign's rules, its posts get submissions, the
+       results count it; Claude's `write_ugc_video`. Tested: a real run on the business campaign (a 35 s founder story,
+       five shots, ten requirements, `#myshop @myshop myshop.example` in every caption), a posted UGC post getting its
+       `to_submit` submission, the card at desktop width
+
+## Formats decisions (2026-10-16)
+
+| Topic | Decision |
+|---|---|
+| What a format is | A recipe on the edit (`shared/recipe.ts`): the words and voices, and (after a build) each line's time. The background, voice track and captions are ordinary edit parts, so everything else in the studio still works on it |
+| Speech | Kokoro 82M (Apache-2.0, int8 ONNX, 92 MB + 28 MB of voices) in the clip tools' venv via `kokoro-onnx`, checked by SHA-256 at install. 12 English voices that grade well; samples in the Script tab. Not Piper (flatter), not voice cloning (the free models are non-commercial) |
+| Voiceover track | Only speech made here (`source: tts`) or a voice memo recorded in the app (`capture`), never an uploaded file: that would be a way in for music. Its words are the captions; muted clips' words aren't |
+| Timing | One WAV for the whole recipe, lines back to back with set pauses; each line's start/end from where it landed; Whisper for word times (proportional spread without Whisper) |
+| Backgrounds | The creator's own footage (gameplay they recorded, b-roll), muted, from a different point per video; otherwise a slow FFmpeg gradient made once per page. No stock gameplay is bundled (copyright) |
+| Story | Title on a generic post card (no platform's branding) while it's read; then bold 2-word captions in the middle |
+| Fake texts | A generic messaging screen in the top half (no platform's branding); each message grows in as its voice starts (grid-row height, so layout pushes the others up without measuring); a pop received, a swish sent |
+| Characters | Four built-in SVG busts (Sam, Max, Lina in a hijab, Bolt the robot); five mouth shapes switched from the voice's loudness 15 times a second (per line, never drifting), blinks, breathing, the speaker leans in. Drawn, simple and modest |
+| UGC | Filmed by the creator: Claude writes the script, shot list, requirements and captions from the brief; editing, review, posting and submitting are the usual flow |
 
 ## Video studio decisions (2026-10-14)
 
@@ -454,6 +499,9 @@ Checked (2026-10-15):
 | Whisper on long sources (2026-10-16) | faster-whisper `small` int8 on 4 threads: 59 s for 5 min of podcast (0.2× real time, so a 2-hour VOD ≈ 25 min); `base` 42 s, same words. → keep `small` for whole sources; no base-then-small split |
 | Music check (2026-10-16) | Demucs on 45 s cuts of a real podcast: ~33 s each; the non-voice stem sits at −40 to −42 LUFS on speech alone (−58 on a quiet one), 14–19 dB under the voice. Podcasts barely pause (0–0.3 s of gaps per 45 s, Whisper word times). → a clip always keeps only the voice stem (speech-only loses nothing: −23.2 vs −23.1 LUFS); background = non-voice stem over −35 LUFS or within 12 dB of the voice; then the voice must be silent in the pauses (p90 under max(−50, speech − 25 dB)), or the clip is dropped; with under 1 s of pauses it's “unverified” and the review says to listen. Checked with non-musical stand-ins (pink noise as the bed, reversed speech as a leftover voice): none / removed / dropped as expected |
 | YuNet (2026-10-16) | On 1080p podcast cuts: a face in 9–11 of 12 sampled frames, ~3 s per clip |
+| Speaker scan (2026-10-16) | `speakers.py` at 8 samples/s: 3 min of 1080p in 30 s, 2 min of 720p in 23 s. Mouth activity on a solo podcast's wide shot: speaker 0.5–0.9 vs listener 0.1–0.4 every second; a poster 0.02. Frame counts drift on files with dropped frames (a 130 s download read as 121 s): use each frame's timestamp |
+| Kokoro (2026-10-16) | int8 model on this laptop: 32 s of speech in 19 s (load 0.7 s); Whisper `small` gives every word back exactly on clean TTS |
+| Transitions render (2026-10-16) | 15 s with all eight transitions: 2 min (no slower than without); HyperFrames handles CSS `filter`, `clip-path` and per-frame `grid-template-rows` in headless Chrome |
 
 ## Phase 7 build plan (2026-10-15)
 
@@ -699,48 +747,49 @@ Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usag
   - Claude explains the hook, structure and edit (cuts per second from FFmpeg scene detection, caption density). It
     never copies the words.
 
-### Step 9 — Later
+### Step 9 — Later (built 2026-10-16)
 
 - Formats: story + gameplay, fake texts, talking characters (2D first, with lip sync from the audio, run locally),
-  UGC. AI-generated only if a free, local route exists.
+  UGC. AI-generated only if a free, local route exists. (Built as below; Minecraft and 3D characters, and AI video,
+  weren't: no free local route that's good enough yet.)
 - Transitions and motion-graphics templates with the HyperFrames skills (`hyperframes-animation`, `motion-graphics`;
   add them to the app's allow-list then).
 - Reframing that follows the speaker: split at scene cuts, handle two-speaker podcasts.
 - Delete a campaign's downloaded sources some days after it ends; keep transcripts and clips.
 
-## Where things stand (2026-10-15)
+## Where things stand (2026-10-16)
 
 - Phase 1 is built and packaged as the desktop app (installed in `~/.local/lib/content-studio`).
 - Not yet tested on a real phone: PWA install, push, share target, voice recording (needs Tailscale Funnel set up).
-  Whisper has only been run on a test clip without speech.
+  Whisper has transcribed real podcast speech (phase 7) and the app's own TTS.
 - Phase 0 (developer accounts + TikTok/YouTube audits) is on the user and not started; publishing is blocked on it.
-- Phase 2 (video studio) is usable end to end: edit, preview, tighten, captions, sound, look, render. Tested with
-  generated footage and a hand-made transcript (no real speech yet), in the browser and as the packaged app.
+- Phase 2 (video studio) is usable end to end: edit, preview, tighten, captions, sound, look, render; since phase 7
+  also transitions, motion graphics, Claude's scenes, following the speaker and format videos. Tested with real
+  podcast footage from the step-6 campaign, in the browser and as the packaged app.
 - Phase 3 (scheduling & publishing) is built: tested against a local stand-in for the TikTok, Instagram and YouTube
   APIs (sign-in, chunked/resumable uploads, retries without double posts, sleep catch-up, restarts) and in the
   browser at desktop and phone sizes. Real posting waits on phase 0 (developer apps, Funnel).
 - Phase 4 (analytics & weekly review) is built: tested against a stand-in for the platforms' stats APIs (including
   TikTok inbox drafts, missing permissions, the YouTube Analytics API turned off) with two months of seeded posts,
-  one manual and one scheduled weekly review run on the real Claude, and the UI at desktop and phone sizes. Not yet
-  installed as the desktop app (`npm run install-app`).
-- Next: phase 0 on the platforms' sites (now including the analytics scopes), then connect real accounts; video
-  studio extras (transitions, motion graphics). Phase 7 (clipping): steps 1 (playbook skill), 2 (skills in the app),
-  3 (kinds, Today, music out), 4 (signed-in windows) and 5 (campaigns) done (2026-10-15), 6 (clipping v1), 7
-  (submissions and earnings) and 8 (research and daily brief) done (2026-10-16); next is step 9 (later formats) of
-  the *Phase 7 build plan*. Waiting on the user:
-  - Settings → Clip tools → Install in the real app (about 2½ minutes, 1.3 GB) before the first clip; then on a
-    clipping page's active campaign, get a source (or Find moments on one) and look through Review. Listen to the first
-    clips from a source with background music: the music check was only tried on stand-ins;
-  - listening to the built-in SFX;
+  one manual and one scheduled weekly review run on the real Claude, and the UI at desktop and phone sizes.
+- Phase 7 (clipping, campaigns, research, formats) is built: steps 1–5 (2026-10-15) and 6–9 (2026-10-16). Next: phase
+  0 on the platforms' sites (now including the analytics scopes), then connect real accounts. Waiting on the user:
+  - Settings → Clip tools → Install in the real app (about 3 minutes, 1.4 GB: Demucs, the face detector and the
+    voices) before the first clip or format video; then on a clipping page's active campaign, get a source (or Find
+    moments on one) and look through Review. Listen to the first clips from a source with background music: the music
+    check was only tried on stand-ins;
+  - listening to the built-in SFX, and to the voices (Script tab of a format video → the play button by each voice);
+  - a format video for real: an empty edit → *Or make it from words* (or ask Claude), with gameplay you recorded as
+    the background; and a UGC video from a campaign that wants you on camera (campaign page → *Filmed videos*);
   - on each page with the Research brief: its Research page → *What it watches* (or *Find channels for me*), then
     *Run now* once; after that it runs every morning. Signing in to TikTok under Connected sites makes TikTok profiles
     read reliably;
-  - in the desktop app (`npm run install-app` first), Settings → Connected sites: sign in to Whop (it opens
-    contentrewards.com's sign-in), TikTok (its QR code works from the phone) and Instagram, and check each then shows
-    "Signed in". Whop's sign-in cookie is a guess (`SITES.whop.sessionCookie` in `shared/sites.ts`): if it stays "Not
-    signed in", a session should list the HttpOnly cookies on contentrewards.com (remote debugging, as in CLAUDE.md)
-    and pin the right one. Then "Try a page" with a campaign you've joined: its rules and source files should be in
-    the text (signed out, they show "Join to unlock").
+  - in the desktop app, Settings → Connected sites: sign in to Whop (it opens contentrewards.com's sign-in), TikTok
+    (its QR code works from the phone) and Instagram, and check each then shows "Signed in". Whop's sign-in cookie is
+    a guess (`SITES.whop.sessionCookie` in `shared/sites.ts`): if it stays "Not signed in", a session should list the
+    HttpOnly cookies on contentrewards.com (remote debugging, as in CLAUDE.md) and pin the right one. Then "Try a
+    page" with a campaign you've joined: its rules and source files should be in the text (signed out, they show
+    "Join to unlock").
   - then Campaigns → Add campaign with a campaign you've joined: its rules and source files should come in, then
     confirm it on a page and get a source or two.
   - once a clip of a joined campaign is posted and submitted: Campaigns → the campaign → Submissions → *Check now*
@@ -749,14 +798,15 @@ Pipeline: one job of each type at a time. Claude jobs wait while the 5-hour usag
     read it with "Try a page" (Settings → Connected sites, `https://contentrewards.com/c/submissions`) and adjust
     `syncSubmissions` (e.g. open each submission, or match by campaign and date).
 
-  The weekly review with the playbook in its prompt hasn't been run yet (no posts with numbers). The phone app needs a
-  new release for Today, the nasheed change (`API_VERSION` 2: v0.1.0 asks to be updated) and Review (its UI is
-  bundled; the API needed no version bump).
+  Not run with a real chat yet: Claude using `write_scene`/`view_overlay`, `write_format_video`, `write_ugc_video` and
+  transitions in a conversation (their handlers were tested directly, to spare the 5-hour usage). The weekly review
+  with the playbook in its prompt hasn't been run yet (no posts with numbers). The phone app needs a new release for
+  Today, the nasheed change (`API_VERSION` 2: v0.1.0 asks to be updated), Review and the studio's new parts
+  (transitions, graphics, scenes, format videos: an older bundled UI would drop them when saving an edit).
 - Phase 6 (Android app) is built: tested on an Android 15 emulator against a local server — pairing (link and deep
   link), share sheet from the Files app, background uploads with resume after a dropped connection, camera, voice memos,
   offline queue and banner, lock, video preview, launcher shortcuts, unpairing — and the desktop's pairing/Firebase
   settings in the browser. FCM sending tested against a stand-in. v0.1.0 is on GitHub Releases (signed APK built by
-  CI). Not yet: a real phone, a real Firebase project; the installed desktop app predates phase 6 (`npm run
-  install-app` updates it — the phone can't pair until then).
+  CI). Not yet: a real phone, a real Firebase project.
 - The code is on GitHub (private): `https://github.com/Adambench/content-studio`, branch `main`.
 
