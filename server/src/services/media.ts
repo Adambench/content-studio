@@ -10,6 +10,7 @@ import { db, newId, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, notFound } from '../lib/http';
 import { enqueue } from '../jobs/queue';
+import { workerFor } from '../compute/workers';
 
 export type MediaRow = typeof schema.media.$inferSelect;
 export type UploadedFile = { stream: Readable; filename: string; mimetype: string };
@@ -143,7 +144,8 @@ export async function correctTranscript(id: string, start: number, end: number, 
   return t;
 }
 
-export const whisperInstalled = () => existsSync(config.whisperPython);
+/** Whisper is here, or on a compute worker that's online (shared/compute.ts). */
+export const whisperInstalled = () => existsSync(config.whisperPython) || workerFor('transcribe');
 
 export function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60);

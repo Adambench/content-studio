@@ -21,6 +21,7 @@ import { adoptFile, getMedia, whisperInstalled } from '../services/media';
 import { type Author } from '../services/pieces';
 import { speak, ttsInstalled } from '../services/tts';
 import { getEdit, saveEditVersion } from './edits';
+import { runTool } from '../compute/run';
 
 const execFile = promisify(execFileCb);
 
@@ -34,10 +35,7 @@ const CAPTIONS: Record<Recipe['kind'], Partial<CaptionSettings>> = {
 /** Whisper's words, or (without Whisper) each line's words spread over its time by length. */
 async function transcribe(wav: string, out: string, speech: { text: string }[], timing: { start: number; end: number }[], duration: number): Promise<Transcript> {
   if (whisperInstalled()) {
-    await execFile(config.whisperPython, [join(config.scriptsDir, 'transcribe.py'), wav, '--out', out, '--model', getSetting('whisperModel') ?? 'small'], {
-      maxBuffer: 20 * 1024 * 1024,
-      timeout: 60 * 60 * 1000,
-    });
+    await runTool('transcribe', { audio: wav, json: out }, { model: getSetting('whisperModel') ?? 'small' }, { timeoutMs: 60 * 60 * 1000 });
     return JSON.parse(await readFile(out, 'utf8')) as Transcript;
   }
   const segments = speech.flatMap((s, i) => {

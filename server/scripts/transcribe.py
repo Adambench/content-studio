@@ -16,8 +16,20 @@ parser.add_argument("--out", required=True)
 parser.add_argument("--model", default="small")
 args = parser.parse_args()
 
-# CPU-only box: int8 keeps memory around 1 GB for the small model.
-model = WhisperModel(args.model, device="cpu", compute_type="int8", cpu_threads=max(1, (os.cpu_count() or 4) // 2))
+def load():
+    # A compute worker has a GPU: int8 on it (Pascal cards have no fast fp16). The laptop is CPU-only, where int8 keeps
+    # memory around 1 GB for the small model.
+    try:
+        import ctranslate2
+
+        if ctranslate2.get_cuda_device_count() > 0:
+            return WhisperModel(args.model, device="cuda", compute_type="int8")
+    except Exception:
+        pass
+    return WhisperModel(args.model, device="cpu", compute_type="int8", cpu_threads=max(1, (os.cpu_count() or 4) // 2))
+
+
+model = load()
 # The server hands us 16 kHz mono 16-bit WAV (made by ffmpeg). Decode it ourselves rather than
 # through PyAV, whose API changes between releases.
 with wave.open(args.audio, "rb") as w:

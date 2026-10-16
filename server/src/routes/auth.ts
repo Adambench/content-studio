@@ -116,7 +116,7 @@ export function requestSession(req: FastifyRequest): Session | null {
   if (session && session.expiresAt <= now()) session = null;
   // Note when it was last used (at most every 10 minutes); a device's sign-in lasts a year from then.
   if (session && (session.lastSeenAt ?? 0) < now() - 10 * 60 * 1000) {
-    const values = { lastSeenAt: now(), ...(session.kind === 'device' && { expiresAt: now() + DEVICE_MS }) };
+    const values = { lastSeenAt: now(), ...((session.kind === 'device' || session.kind === 'worker') && { expiresAt: now() + DEVICE_MS }) };
     db.update(schema.sessions).set(values).where(eq(schema.sessions.id, session.id)).run();
     session = { ...session, ...values };
   }
@@ -125,6 +125,12 @@ export function requestSession(req: FastifyRequest): Session | null {
 }
 
 export const isAuthenticated = (req: FastifyRequest) => !!requestSession(req);
+
+/** A compute worker may only call its own endpoints (and the health check). */
+export function mayCall(req: FastifyRequest) {
+  const session = requestSession(req);
+  return !!session && (session.kind !== 'worker' || req.url.startsWith('/api/worker/'));
+}
 
 // ---------- pairing the Android app ----------
 
@@ -187,7 +193,7 @@ export async function authRoutes(app: FastifyInstance) {
   // The Android app trades the code from the desktop's QR for a long-lived device token. Only its hash is stored.
   app.post('/api/auth/pair', async (req) => {
     checkRate(req.ip);
-    const body = z.object({ code: z.string().max(40), name: z.string().trim().min(1).max(80).default('Android phone') }).parse(req.body);
+    const body = z.object({ code: z.string().max(40), name: z.string().trim().min(1).max(80).default('Android phone'), worker: z.boolean().optional() }).parse(req.body);
     const code = normalizePairingCode(body.code);
     if (!pairing || pairing.expiresAt < now() || !tokensMatch(code, pairing.normalized)) {
       recordFailure(req.ip);
@@ -197,9 +203,9 @@ export async function authRoutes(app: FastifyInstance) {
     pairing = null;
     const token = randomBytes(32).toString('base64url');
     db.insert(schema.sessions)
-      .values({ id: sha256(token), kind: 'device', name: body.name, expiresAt: now() + DEVICE_MS, lastSeenAt: now(), userAgent: req.headers['user-agent'] ?? null })
+      .values({ id: sha256(token), kind: body.worker ? 'worker' : 'device', name: body.name, expiresAt: now() + DEVICE_MS, lastSeenAt: now(), userAgent: req.headers['user-agent'] ?? null })
       .run();
-    emit({ type: 'changed', entity: 'devices' });
+    emit({ type: 'changed', entity: body.worker ? 'compute' : 'devices' });
     return { token, api: API_VERSION, version: appVersion };
   });
 

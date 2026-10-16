@@ -28,7 +28,9 @@ total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
 every = max(1, round(fps / max(1.0, args.fps)))
 out_fps = fps / every
 
-session = ort.InferenceSession(args.model, providers=["CPUExecutionProvider"])
+# A compute worker's GPU when onnxruntime has CUDA, else the CPU.
+providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in ort.get_available_providers()]
+session = ort.InferenceSession(args.model, providers=providers)
 input_name = session.get_inputs()[0].name
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)

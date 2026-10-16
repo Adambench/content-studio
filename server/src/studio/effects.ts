@@ -9,18 +9,18 @@ import { eq } from 'drizzle-orm';
 import { REVIEW_STAGE } from '../../../shared/types';
 import { MATTE_EFFECT_INFO, matteFilter, type MatteEffect, type MatteEffectOptions } from '../../../shared/effects';
 import { normalizeEdit } from '../../../shared/edit';
-import { run } from '../campaigns/sources';
 import { config } from '../config';
 import { db, schema } from '../db';
 import { requireBinary } from '../lib/bin';
 import { probe } from '../lib/ffmpeg';
 import { emit } from '../lib/events';
 import { JobError, enqueue } from '../jobs/queue';
-import { clipToolsInstalled, matteModel, toolsEnv } from '../services/cliptools';
+import { clipToolsInstalled, matteModel } from '../services/cliptools';
 import { adoptFile, getMedia, mediaPath } from '../services/media';
 import { getPiece } from '../services/pieces';
 import { findEditForPiece, saveEditVersion } from './edits';
 import { queueRender } from './render';
+import { runTool } from '../compute/run';
 
 const execFile = promisify(execFileCb);
 const matteFile = (mediaId: string) => join(config.framesDir, `matte-${mediaId}.mp4`);
@@ -35,7 +35,7 @@ export async function ensureMatte(mediaId: string, track?: string) {
   if (m.kind !== 'video') throw new JobError('Only a video can have a person matte.', { retry: false });
   if (!matteReady()) throw new JobError('Install the clip tools again (Settings → Clip tools): the person model isn’t there yet.', { retry: false });
   const part = `${out}.part.mp4`;
-  await run(config.toolsPython, [join(config.scriptsDir, 'matte.py'), mediaPath(m), '--model', matteModel(), '--out', part, '--ffmpeg', requireBinary('ffmpeg')], { env: toolsEnv(), timeoutMs: 60 * 60_000, track });
+  await runTool('matte', { video: mediaPath(m), mask: part }, {}, { timeoutMs: 60 * 60_000, track });
   await execFile('mv', [part, out]);
   return out;
 }

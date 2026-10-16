@@ -25,6 +25,7 @@ import { enqueue, JobError } from '../jobs/queue';
 import { getMedia, mediaPath, readTranscript, whisperInstalled } from '../services/media';
 import { getWorkspace } from '../services/pieces';
 import { emitResearch, getItem, updateItem } from './research';
+import { runTool } from '../compute/run';
 
 const execFile = promisify(execFileCb);
 
@@ -126,7 +127,7 @@ async function whisper(file: string, dir: string): Promise<Transcript | null> {
   const wav = join(dir, 'audio.wav');
   const out = join(dir, 'transcript.json');
   await extractAudio(file, wav);
-  await execFile(config.whisperPython, [join(config.scriptsDir, 'transcribe.py'), wav, '--out', out, '--model', getSetting('whisperModel') ?? 'small'], { maxBuffer: 20 * 1024 * 1024, timeout: 20 * 60_000 });
+  await runTool('transcribe', { audio: wav, json: out }, { model: getSetting('whisperModel') ?? 'small' }, { timeoutMs: 20 * 60_000 });
   return JSON.parse(await readFile(out, 'utf8')) as Transcript;
 }
 

@@ -10,6 +10,9 @@ PY="$DIR/bin/python"
 # Only releases at least two weeks older than this script, so a just-published (or hijacked) version never comes in.
 PIN=(--uploaded-prior-to 2026-10-01T00:00:00Z)
 pip() { "$PY" -m pip install --disable-pip-version-check --quiet "$@"; }
+# A compute worker (scripts/setup-worker.sh) sets CS_TORCH_INDEX to a CUDA build of PyTorch and CS_GPU=1 for the GPU
+# builds of onnxruntime and faster-whisper's CUDA libraries. The laptop leaves both unset: CPU only.
+TORCH_INDEX="${CS_TORCH_INDEX:-https://download.pytorch.org/whl/cpu}"
 
 if [ ! -x "$PY" ]; then
   echo "Creating Python environment…"
@@ -18,11 +21,20 @@ fi
 pip --upgrade "pip==26.0.1"
 echo "Installing PyTorch, CPU only (about 200 MB)…"
 # The CPU build from PyTorch's own index: PyPI's default build brings 3 GB of CUDA libraries.
-pip --index-url https://download.pytorch.org/whl/cpu "torch==2.14.0"
+pip --index-url "$TORCH_INDEX" "torch==2.14.0"
 echo "Installing Demucs, OpenCV, gdown and Kokoro…"
 # Demucs 4.1 needs no compiler (diffq is only its "quantized" extra); torch is already satisfied by the CPU build.
 # kokoro-onnx brings onnxruntime and its own espeak-ng library, so nothing else is needed on the system.
 pip "${PIN[@]}" "demucs==4.1.0" "opencv-python-headless==4.13.0.92" "gdown==6.3.0" "numpy>=2,<2.5" "kokoro-onnx==0.6.1" "soundfile==0.13.1"
+
+if [ "${CS_GPU:-0}" = "1" ]; then
+  echo "Installing the GPU libraries (onnxruntime-gpu, faster-whisper, cuBLAS, cuDNN)…"
+  # kokoro-onnx brought the CPU onnxruntime: the GPU build replaces it. faster-whisper's CUDA libraries come as wheels.
+  "$PY" -m pip uninstall --yes --quiet onnxruntime 2>/dev/null || true
+  pip "${PIN[@]}" "onnxruntime-gpu" "faster-whisper>=1.1" "nvidia-cublas-cu12" "nvidia-cudnn-cu12==9.*"
+else
+  pip "${PIN[@]}" "faster-whisper>=1.1"
+fi
 
 mkdir -p "$DIR/models" "$DIR/hf"
 echo "Downloading the voice separation model (htdemucs, one time)…"

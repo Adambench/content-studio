@@ -120,7 +120,7 @@ versionCode from the tag (`v1.2.3` → 10203).
 8. **Streamlined video pipeline** — in progress, see *Phase 8 build plan*
    - [x] Step 1 — Every video is a package; nav per kind; Inbox + search instead of the Library (2026-10-16)
    - [ ] Step 2 — Feedback loop in the package (timestamped notes → Claude edits → re-render → before/after)
-   - [ ] Step 3 — Compute workers on the home PCs
+   - [x] Step 3 — Compute workers on the home PCs (2026-10-16; protocol tried with a real worker process on CPU, not on a GPU)
    - [x] Step 4 — Skills and the creative arsenal (2026-10-16; no new skills installed, see the step)
    - [x] Step 5 — Creative directions (personal/business) and varied clip edits (clipping) (2026-10-16; the pitch untried against a real Claude login)
    - [x] Step 6 — One-button finder for clipping pages (2026-10-16; only tried against stand-ins, see the step)
@@ -140,6 +140,7 @@ versionCode from the tag (`v1.2.3` → 10203).
   be in the text).
 - After a clip is posted and submitted: campaign → Submissions → *Check now*; if nothing matches, the submissions page
   doesn't show post links → adjust `syncSubmissions`.
+- Compute: on each home PC run `scripts/setup-worker.sh --server … --code …` (code from Settings → Compute); check `journalctl --user -u content-studio-worker`, that Settings → Compute shows the GPU and four tools, and *Run a test* says it ran there. Then measure each tool's speed on both cards against the laptop (the plan's step 3 asks for it): Whisper, Demucs, matte, speaker scan. The CUDA builds for Pascal (cu126 wheels, cuDNN 9 for faster-whisper) are untried.
 - Find clips: check `DISCOVER_URL` (`server/src/finder/discover.ts`) is the page that lists Content Rewards campaigns; run it once with a real creator and see that the viral search finds their clips (`ytsearch` for "<creator> clips").
 - Not run with a real chat yet: directions (`direction.pitch`), `view_render` and the package notes; `write_scene`/`view_overlay`, `write_format_video`, `write_ugc_video`, transitions;
   the weekly review with the playbook.
@@ -202,7 +203,7 @@ video's chat is `ClaudePanel` (`videoChat`, `usePieceThread`, `send` posts `/thr
 (`saveEditVersion`, `listEditVersions`), renders through `queueRender` (`server/src/studio/render.ts`); tools return
 frames as `{type:'image'}` content like `view_overlay`; the package summary is `GET /api/review/:id` (`buildClip`).
 
-**Step 3 — Compute workers.** A small worker (Node, systemd service) on each home PC, reached over Tailscale and
+**Step 3 — Compute workers (built; untried on the home PCs).** Done: a worker pairs like the phone (`POST /api/auth/pair` with `worker: true` → a session of kind `worker`, which may only call `/api/worker/*`), long-polls the laptop (`server/src/compute/workers.ts`, in-memory task queue, 90 s lease, a lost task is queued once more then run here), downloads the inputs, runs the tool's command and uploads the outputs (`worker/src/main.ts`, bundled by `worker/build.mjs`); the command line of each tool is defined once in `shared/compute.ts` (`commandFor`), so the laptop's own run and a worker's are the same command and a worker never runs anything the laptop sends as a command (tools: transcribe, separate, matte, speakers, plus a self-test `probe.py`); `runTool` (`server/src/compute/run.ts`) is used by every Whisper, Demucs, matte and speaker-scan call site and falls back to the laptop when no worker has the tool, is online, or its run fails; the scripts use CUDA when it's there (faster-whisper int8, torch, onnxruntime-gpu); Settings → Compute lists workers (online, GPU, tools, current task, matte ms per frame), adds one (pairing code + the command) and runs a test; `scripts/setup-worker.sh` (tools with CUDA builds, the bundle, pairing, a systemd user service). Tried: a worker process on this CPU-only box paired, polled, took a matte test (2 s of video, 11 s) and the laptop took it when the worker was away. Not done: the speed measurements on the two cards against the laptop (needs the PCs), HyperFrames renders and FFmpeg/NVENC encodes on workers, sending only a range of a source, resumable transfers, the moving of heavy jobs when the laptop is the only machine with the file. Original plan: A small worker (Node, systemd service) on each home PC, reached over Tailscale and
 paired like the phone (a device token). The laptop's job queue sends heavy jobs to a free worker that has the tool —
 Whisper (faster-whisper on CUDA, int8: Pascal has no fast fp16), Demucs (a PyTorch build that still supports sm_61),
 speaker scan, Kokoro, the person matte, FFmpeg cuts/encodes (NVENC), HyperFrames renders — uploading the inputs

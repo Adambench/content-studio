@@ -7,14 +7,15 @@
     "server",
     "web",
     "desktop",
-    "mobile"
+    "mobile",
+    "worker"
   ],
   "scripts": {
     "dev": "concurrently -k -n server,web,app -c blue,magenta,green \"DESKTOP_TOKEN=dev-desktop-token npm run dev -w server\" \"npm run dev -w web\" \"DESKTOP_TOKEN=dev-desktop-token DEV_URL=http://localhost:5173 npm run dev -w desktop\"",
     "dev:web": "concurrently -k -n server,web -c blue,magenta \"npm run dev -w server\" \"npm run dev -w web\"",
     "build": "npm run build -w web && npm run build -w server && npm run build -w desktop",
     "install-app": "npm run package -w desktop && npm run install-app -w desktop",
-    "typecheck": "npm run typecheck -w server && npm run typecheck -w web && npm run typecheck -w desktop && npm run typecheck -w mobile",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w web && npm run typecheck -w desktop && npm run typecheck -w mobile && npm run typecheck -w worker",
     "android": "npm run build:app -w web && npm run sync -w mobile"
   },
   "devDependencies": {

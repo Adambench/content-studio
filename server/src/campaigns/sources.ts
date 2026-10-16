@@ -20,6 +20,7 @@ import { enqueue, JobError } from '../jobs/queue';
 import { clipToolsInstalled, toolsEnv } from '../services/cliptools';
 import { whisperInstalled, type UploadedFile } from '../services/media';
 import { campaignDir, emitCampaign, getCampaignRow, getSource, listSources, pagesOf, updateSource, type SourceRow } from './campaigns';
+import { runTool } from '../compute/run';
 
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const VIDEO_PLATFORMS: SourceKind[] = ['youtube', 'twitch', 'kick'];
@@ -554,7 +555,7 @@ export async function transcribeSource({ sourceId }: { sourceId: string }) {
     const wav = join(config.tmpDir, `${sourceId}.wav`);
     try {
       await extractAudio(file, wav);
-      await run(config.whisperPython, [join(config.scriptsDir, 'transcribe.py'), wav, '--out', out, '--model', getSetting('whisperModel') ?? 'small'], { timeoutMs: 10 * 60 * 60 * 1000, track: sourceId });
+      await runTool('transcribe', { audio: wav, json: out }, { model: getSetting('whisperModel') ?? 'small' }, { timeoutMs: 10 * 60 * 60 * 1000, track: sourceId });
     } finally {
       await rm(wav, { force: true });
     }

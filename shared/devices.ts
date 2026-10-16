@@ -9,8 +9,9 @@ export const API_VERSION = 2;
 
 export type Health = { ok: true; api: number; version: string };
 
-/** Browsers and the desktop app sign in with a cookie; a paired device (the Android app) with a bearer token. */
-export type SessionKind = 'browser' | 'desktop' | 'device';
+/** Browsers and the desktop app sign in with a cookie; a paired device (the Android app) with a bearer token. A compute worker (a home PC, shared/compute.ts) pairs the same way
+ * but may only call /api/worker/. */
+export type SessionKind = 'browser' | 'desktop' | 'device' | 'worker';
 
 export type PairedDevice = {
   id: string;

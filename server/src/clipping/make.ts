@@ -9,14 +9,13 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { and, eq, inArray } from 'drizzle-orm';
 import { MOMENT_KIND_LABELS, clock, type FramesCheck, type MusicCheck } from '../../../shared/clipping';
-import { TIGHTEN_PRESETS, editDuration, normalizeEdit, speechRangesFromTranscript, tightenClips, type EditSpec } from '../../../shared/edit';
-import { builtinSfxId } from '../../../shared/sfx';
+import { TIGHTEN_PRESETS, editDuration, normalizeEdit, speechRangesFromTranscript, tightenClips } from '../../../shared/edit';
 import { emptyDraft, type Transcript } from '../../../shared/types';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
 import { waitForUsage } from '../claude/usage';
 import { getCampaignRow, getSource } from '../campaigns/campaigns';
-import { readSourceTranscript, run, sourceFile } from '../campaigns/sources';
+import { readSourceTranscript, sourceFile } from '../campaigns/sources';
 import { config } from '../config';
 import { db, schema } from '../db';
 import { requireBinary } from '../lib/bin';
@@ -24,7 +23,7 @@ import { emit } from '../lib/events';
 import { extractFrames, probe } from '../lib/ffmpeg';
 import { getSetting } from '../lib/settings';
 import { JobError } from '../jobs/queue';
-import { clipToolsInstalled, toolsEnv } from '../services/cliptools';
+import { clipToolsInstalled } from '../services/cliptools';
 import { adoptFile, deleteMedia, whisperInstalled } from '../services/media';
 import { createPiece, getWorkspace } from '../services/pieces';
 import { applyLook, lookTag, pickLook } from '../studio/clip-looks';
@@ -32,6 +31,7 @@ import { createEdit, saveEditVersion } from '../studio/edits';
 import { applyFocusSpans, focusSpans, scanSpeakers } from '../studio/reframe';
 import { cancelRender, queueRender } from '../studio/render';
 import { getMoment, momentExists, updateMoment } from './moments';
+import { runTool } from '../compute/run';
 
 const execFile = promisify(execFileCb);
 const MARGIN = 0.5;
@@ -202,7 +202,7 @@ export async function makeClip({ momentId }: { momentId: string }) {
     step('Separating the voice from any music');
     const voice = join(dir, 'voice.wav');
     const rest = join(dir, 'rest.wav');
-    await run(config.toolsPython, [join(config.scriptsDir, 'separate.py'), original, '--vocals', voice, '--rest', rest], { env: toolsEnv(), timeoutMs: 20 * 60_000, track: `clip:${momentId}` });
+    await runTool('separate', { audio: original, vocals: voice, rest }, {}, { timeoutMs: 20 * 60_000, track: `clip:${momentId}` });
 
     // 3. The voice's words, for the music check's pauses and the captions.
     step('Transcribing the voice');
@@ -211,7 +211,7 @@ export async function makeClip({ momentId }: { momentId: string }) {
       const wav = join(dir, 'voice16k.wav');
       const out = join(dir, 'transcript.json');
       await ffmpeg(['-i', voice, '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', wav]);
-      await run(config.whisperPython, [join(config.scriptsDir, 'transcribe.py'), wav, '--out', out, '--model', getSetting('whisperModel') ?? 'small'], { timeoutMs: 20 * 60_000, track: `clip:${momentId}` });
+      await runTool('transcribe', { audio: wav, json: out }, { model: getSetting('whisperModel') ?? 'small' }, { timeoutMs: 20 * 60_000, track: `clip:${momentId}` });
       transcript = JSON.parse(await readFile(out, 'utf8')) as Transcript;
     } else {
       const whole = await readSourceTranscript(s);

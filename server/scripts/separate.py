@@ -19,8 +19,9 @@ parser.add_argument("--vocals", required=True)
 parser.add_argument("--rest", required=True)
 args = parser.parse_args()
 
-# Half the cores: renders and Whisper share this laptop.
+# Half the cores: renders and Whisper share this laptop. A compute worker's GPU does it when torch can use it.
 torch.set_num_threads(max(1, (os.cpu_count() or 4) // 2))
+device = "cuda" if torch.cuda.is_available() else "cpu"
 model = get_model("htdemucs")
 model.eval()
 
@@ -40,8 +41,8 @@ wav = torch.from_numpy(np.ascontiguousarray(audio[:2]))
 ref = wav.mean(0)
 mean, std = ref.mean(), ref.std() + 1e-8
 with torch.no_grad():
-    stems = apply_model(model, ((wav - mean) / std)[None], device="cpu", shifts=1, split=True, overlap=0.25, progress=False)[0]
-stems = stems * std + mean
+    stems = apply_model(model, ((wav - mean) / std)[None], device=device, shifts=1, split=True, overlap=0.25, progress=False)[0]
+stems = stems.cpu() * std + mean
 voice = stems[model.sources.index("vocals")]
 rest = stems.sum(0) - voice
 

@@ -1,7 +1,5 @@
-import { execFile as execFileCb } from 'node:child_process';
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Transcript } from '../../../shared/types';
 import { onReviewFailed, runReview } from '../analytics/review';
@@ -36,8 +34,7 @@ import { enqueue, onJobFailed, registerJob } from './queue';
 import { onPitchFailed, pitchDirections } from '../studio/directions';
 import { onFinderFailed, runFinder } from '../finder/finder';
 import { applyEffect, onEffectFailed } from '../studio/effects';
-
-const execFile = promisify(execFileCb);
+import { runTool } from '../compute/run';
 
 function setMedia(id: string, values: Partial<typeof schema.media.$inferInsert>) {
   db.update(schema.media).set(values).where(eq(schema.media.id, id)).run();
@@ -79,10 +76,7 @@ async function transcribeMedia({ mediaId }: { mediaId: string }) {
   const wav = join(config.tmpDir, `${mediaId}.wav`);
   try {
     await extractAudio(mediaPath(row), wav);
-    await execFile(config.whisperPython, [join(config.scriptsDir, 'transcribe.py'), wav, '--out', transcriptPath(mediaId), '--model', getSetting('whisperModel') ?? 'small'], {
-      maxBuffer: 20 * 1024 * 1024,
-      timeout: 60 * 60 * 1000,
-    });
+    await runTool('transcribe', { audio: wav, json: transcriptPath(mediaId) }, { model: getSetting('whisperModel') ?? 'small' }, { timeoutMs: 60 * 60 * 1000 });
   } finally {
     await rm(wav, { force: true });
   }

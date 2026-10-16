@@ -6,6 +6,7 @@ import type { WeeklyReviewSetting } from '@shared/analytics';
 import { CLAUDE_MODELS } from '@shared/types';
 import { ConnectedSitesCard } from '@/components/ConnectedSites';
 import { PageHeader } from '@/components/PageHeader';
+import { ComputeCard } from '@/components/ComputeSettings';
 import { FirebaseSetup, PairedDevices, PairPhone, ThisPhone } from '@/components/PhoneSettings';
 import { PublishingCard } from '@/components/publish/PublishingSettings';
 import { UsageMeter } from '@/components/UsageMeter';
@@ -99,6 +100,8 @@ export function SettingsPage() {
           <RenderingCard />
 
           <ClipToolsCard />
+
+          {!isApp && <ComputeCard />}
 
           <PublishingCard />
 

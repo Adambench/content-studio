@@ -1,0 +1,78 @@
+// Compute workers: the home PCs that take the heavy jobs (Whisper, Demucs, the person matte, the speaker scan). A worker
+// pairs with the laptop like the phone, polls it for tasks over Tailscale, runs the tool's command from its own scripts,
+// and sends the output files back. The command line of each tool is defined here once, so the laptop's own run (the
+// fallback when no worker is free) and a worker's run are the same command. A worker never runs anything else: the
+// laptop sends a tool name and file names, never a command.
+
+export const COMPUTE_TOOLS = ['transcribe', 'separate', 'matte', 'speakers', 'probe'] as const;
+export type ComputeTool = (typeof COMPUTE_TOOLS)[number];
+
+/** Where things are on the machine that runs the tool (they differ between the laptop and a worker). */
+export type MachinePaths = {
+  /** The folder with transcribe.py, separate.py, matte.py, speakers.py, probe.py. */
+  scriptsDir: string;
+  /** Python for Demucs, the matte and the speaker scan. */
+  toolsPython: string;
+  /** Python for faster-whisper (the same as toolsPython on a worker). */
+  whisperPython: string;
+  matteModel: string;
+  yunetModel: string;
+  ffmpeg: string;
+};
+
+export type ToolInfo = {
+  label: string;
+  /** Input file names the task needs, and output file names it makes. */
+  inputs: string[];
+  outputs: string[];
+  /** The tool's stdout is its result (the speaker scan's JSON). */
+  stdout: boolean;
+};
+
+export const TOOL_INFO: Record<ComputeTool, ToolInfo> = {
+  transcribe: { label: 'Speech to text (Whisper)', inputs: ['audio'], outputs: ['json'], stdout: false },
+  separate: { label: 'Voice from music (Demucs)', inputs: ['audio'], outputs: ['vocals', 'rest'], stdout: false },
+  matte: { label: 'Person matte', inputs: ['video'], outputs: ['mask'], stdout: false },
+  speakers: { label: 'Speaker scan', inputs: ['video'], outputs: [], stdout: true },
+  probe: { label: 'Self-test', inputs: [], outputs: [], stdout: true },
+};
+
+export type ToolParams = { model?: string; fps?: number };
+
+/** The command for a tool: `files` maps each input and output name to a path on this machine. */
+export function commandFor(tool: ComputeTool, files: Record<string, string>, params: ToolParams, m: MachinePaths): { bin: string; args: string[] } {
+  const script = (name: string) => `${m.scriptsDir}/${name}`;
+  switch (tool) {
+    case 'transcribe':
+      return { bin: m.whisperPython, args: [script('transcribe.py'), files.audio, '--out', files.json, '--model', params.model ?? 'small'] };
+    case 'separate':
+      return { bin: m.toolsPython, args: [script('separate.py'), files.audio, '--vocals', files.vocals, '--rest', files.rest] };
+    case 'matte':
+      return { bin: m.toolsPython, args: [script('matte.py'), files.video, '--model', m.matteModel, '--out', files.mask, '--ffmpeg', m.ffmpeg] };
+    case 'speakers':
+      return { bin: m.toolsPython, args: [script('speakers.py'), files.video, '--model', m.yunetModel, '--fps', String(params.fps ?? 8)] };
+    case 'probe':
+      return { bin: m.toolsPython, args: [script('probe.py'), '--matte-model', m.matteModel, '--ffmpeg', m.ffmpeg] };
+  }
+}
+
+/** What a worker says about itself when it polls. */
+export type WorkerReport = { name: string; gpu: string; tools: ComputeTool[]; busy: boolean; speed?: { matteMsPerFrame: number | null; cuda: boolean } };
+
+export type WorkerInfo = {
+  id: string;
+  name: string;
+  gpu: string;
+  tools: ComputeTool[];
+  online: boolean;
+  lastSeenAt: number | null;
+  /** What it is doing now. */
+  task: { tool: ComputeTool; progress: string } | null;
+  /** From the self-test: seconds per matted frame, for comparing with the laptop. */
+  speed: { matteMsPerFrame: number | null; cuda: boolean } | null;
+};
+
+/** A task as the worker sees it. */
+export type WorkerTask = { id: string; tool: ComputeTool; params: ToolParams; inputs: { name: string; size: number }[]; outputs: string[]; timeoutMs: number };
+
+export const WORKER_ONLINE_MS = 45_000;

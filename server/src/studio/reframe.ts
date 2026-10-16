@@ -6,14 +6,14 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { eq } from 'drizzle-orm';
 import { join } from 'node:path';
 import { EDIT_FORMATS, newEditId, normalizeEdit, type EditClip, type EditFormat } from '../../../shared/edit';
-import { run } from '../campaigns/sources';
 import { config } from '../config';
 import { db, schema } from '../db';
 import { emit } from '../lib/events';
 import { JobError } from '../jobs/queue';
-import { clipToolsInstalled, toolsEnv, yunetModel } from '../services/cliptools';
+import { clipToolsInstalled } from '../services/cliptools';
 import { getMedia, mediaPath } from '../services/media';
 import { getEdit, saveEditVersion } from './edits';
+import { runTool } from '../compute/run';
 
 export type SpeakerScan = {
   width: number;
@@ -28,11 +28,7 @@ export type FocusSpan = { start: number; end: number; x: number; y: number; zoom
 /** Run the shot and speaker scan on a video (about a quarter of real time for 1080p). */
 export async function scanSpeakers(file: string, opts: { track?: string } = {}): Promise<SpeakerScan> {
   if (!clipToolsInstalled()) throw new JobError('Install the clip tools first (Settings → Clip tools): they find the faces.', { retry: false });
-  const out = await run(config.toolsPython, [join(config.scriptsDir, 'speakers.py'), file, '--model', yunetModel(), '--fps', '8'], {
-    env: toolsEnv(),
-    timeoutMs: 30 * 60_000,
-    track: opts.track,
-  });
+  const out = await runTool('speakers', { video: file }, { fps: 8 }, { timeoutMs: 30 * 60_000, track: opts.track });
   return JSON.parse(out.trim().split('\n').pop() ?? '{}') as SpeakerScan;
 }
 

@@ -1,5 +1,6 @@
 import { QueryClient, useQuery } from '@tanstack/react-query';
 import { api } from './api';
+import type { WorkerInfo } from '@shared/compute';
 import type { CampaignLeads, FinderRun } from '@shared/finder';
 import type { PairedDevice } from '@shared/devices';
 import type { CreatorInfo } from '@shared/publish';
@@ -73,6 +74,7 @@ export const keys = {
   submissionsSync: ['submissions-sync'] as const,
   research: (wid: string) => ['research', wid] as const,
   finder: (wid: string) => ['finder', wid] as const,
+  compute: ['compute'] as const,
 };
 
 export type AuthStatus = { setupRequired: boolean; authenticated: boolean; desktopManaged: boolean };
@@ -126,6 +128,9 @@ export const useResearch = (wid: string) =>
     enabled: !!wid,
     refetchInterval: (q) => (q.state.data?.running || q.state.data?.analyses.some((a) => a.analysisStatus === 'queued' || a.analysisStatus === 'running') ? 8000 : false),
   });
+
+/** Settings → Compute: the paired workers (home PCs) and what each is doing. */
+export const useWorkers = () => useQuery({ queryKey: keys.compute, queryFn: () => api<WorkerInfo[]>('/compute/workers'), refetchInterval: 15_000 });
 
 /** A clipping page's finder: its last run, whether it runs each morning, and campaigns found to add. Polls while it runs. */
 export const useFinder = (wid: string) =>

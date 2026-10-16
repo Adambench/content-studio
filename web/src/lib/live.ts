@@ -115,6 +115,9 @@ function apply(event: LiveEvent) {
         inv(keys.campaigns);
         inv(event.id ? keys.campaign(event.id) : ['campaign']);
         break;
+      case 'compute':
+        inv(keys.compute);
+        break;
       case 'finder':
         inv(wid ? keys.finder(wid) : ['finder']);
         
