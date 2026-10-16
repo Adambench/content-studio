@@ -1,6 +1,17 @@
-import { ChevronDown, Clapperboard, Image as ImageIcon, Shapes, Sparkles, Trash2, Type } from 'lucide-react';
+import { ChevronDown, Clapperboard, Image as ImageIcon, Shapes, Sparkles, Trash2, Type, WandSparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { editDuration, GRAPHIC_INFO, GRAPHICS, newEditId, OVERLAY_ANIMATIONS, type EditOverlay, type GraphicOverlay, type GraphicTemplate, type OverlayAnimation } from '@shared/edit';
+import {
+  editDuration,
+  GRAPHIC_INFO,
+  GRAPHICS,
+  newEditId,
+  OVERLAY_ANIMATIONS,
+  type EditOverlay,
+  type GraphicOverlay,
+  type GraphicTemplate,
+  type OverlayAnimation,
+  type SceneOverlay,
+} from '@shared/edit';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -18,10 +29,11 @@ const ANIMATION_LABELS: Record<OverlayAnimation, string> = { pop: 'Pop in', fade
 export function overlayName(o: EditOverlay, mediaName: (id: string) => string | undefined) {
   if (o.type === 'text') return o.text;
   if (o.type === 'graphic') return `${GRAPHIC_INFO[o.template].label}${o.text ? `: ${o.text.replace(/\*/g, '')}` : ''}`;
+  if (o.type === 'scene') return `Scene: ${o.name}`;
   return mediaName(o.mediaId) ?? 'Missing file';
 }
 
-const OVERLAY_ICONS = { text: Type, image: ImageIcon, broll: Clapperboard, graphic: Shapes } as const;
+export const OVERLAY_ICONS = { text: Type, image: ImageIcon, broll: Clapperboard, graphic: Shapes, scene: WandSparkles } as const;
 
 export function OverlaysPanel() {
   const { spec, update, time, seek, selection, select, media, footage, assets, piece } = useStudio();
@@ -142,7 +154,9 @@ function OverlayEditor({ overlay }: { overlay: EditOverlay }) {
   return (
     <section className="space-y-4 rounded-lg border p-3" aria-label="Selected overlay">
       <div className="flex items-center gap-2">
-        <h3 className="mr-auto text-sm font-medium">{overlay.type === 'text' ? 'Text' : overlay.type === 'image' ? 'Image' : overlay.type === 'broll' ? 'B-roll' : GRAPHIC_INFO[overlay.template].label}</h3>
+        <h3 className="mr-auto truncate text-sm font-medium">
+          {overlay.type === 'text' ? 'Text' : overlay.type === 'image' ? 'Image' : overlay.type === 'broll' ? 'B-roll' : overlay.type === 'graphic' ? GRAPHIC_INFO[overlay.template].label : overlay.name}
+        </h3>
         <Button
           size="icon-sm"
           variant="ghost"
@@ -205,6 +219,7 @@ function OverlayEditor({ overlay }: { overlay: EditOverlay }) {
       )}
 
       {overlay.type === 'graphic' && <GraphicFields overlay={overlay} set={set} />}
+      {overlay.type === 'scene' && <SceneFields overlay={overlay} set={set} />}
 
       {(overlay.type === 'text' || overlay.type === 'image') && (
         <Field label="Animation">
@@ -295,5 +310,35 @@ function GraphicFields({ overlay, set }: { overlay: GraphicOverlay; set: (patch:
         </div>
       )}
     </>
+  );
+}
+
+/** A scene Claude designed: its words can be fixed here; the design is Claude's to change (ask in the panel). */
+function SceneFields({ overlay, set }: { overlay: SceneOverlay; set: (patch: Partial<SceneOverlay>) => void }) {
+  const texts = overlay.elements.filter((e) => e.kind === 'text');
+  return (
+    <>
+      <p className="text-xs text-muted-foreground">
+        A motion graphic Claude designed ({overlay.elements.length} parts, {overlay.tweens.length} moves). Fix its words here; ask Claude to change the design or the motion.
+      </p>
+      {texts.map((e) => (
+        <SceneText
+          key={e.id}
+          label={e.id}
+          value={e.text ?? ''}
+          onChange={(text) => set({ elements: overlay.elements.map((x) => (x.id === e.id ? { ...x, text } : x)) })}
+        />
+      ))}
+    </>
+  );
+}
+
+function SceneText({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const [text, setText] = useState(value);
+  useEffect(() => setText(value), [value]);
+  return (
+    <Field label={label}>
+      <Input value={text} onChange={(e) => setText(e.target.value)} onBlur={() => text !== value && onChange(text)} className="h-8" />
+    </Field>
   );
 }

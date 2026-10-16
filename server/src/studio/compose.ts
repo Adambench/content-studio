@@ -18,6 +18,7 @@ import {
 } from '../../../shared/edit';
 import { builtinSfx } from '../../../shared/sfx';
 import { composeGraphic, graphicsCss, STAT_HELPER } from './graphics';
+import { composeScene, sceneCss } from './scene';
 import { accent, attrJson, esc, js, n, px } from './html';
 import type { AssetType, MediaKind, Transcript } from '../../../shared/types';
 
@@ -81,6 +82,7 @@ const MASTER_FX = { version: 1, nodes: [{ type: 'truepeak', id: 'm1', label: 'De
 
 
 const GRAPHICS_CSS_MARK = '/* graphics */';
+const SCENE_CSS_MARK = '/* scenes */';
 
 export function composeEdit(input: ComposeInput) {
   const { spec, media } = input;
@@ -182,6 +184,14 @@ export function composeEdit(input: ComposeInput) {
       tl.push(...g.tweens);
       if (o.template === 'stat') helpers.add(STAT_HELPER);
       if (!css.includes(GRAPHICS_CSS_MARK)) css.push(GRAPHICS_CSS_MARK, graphicsCss(graphicCtx));
+      return;
+    }
+    if (o.type === 'scene') {
+      const sceneCtx = { ...graphicCtx, fileUrl: input.fileUrl };
+      const sc = composeScene({ ...o, start, end: start + len }, i, sceneCtx);
+      body.push(`<div id="o${i}" class="clip layer sc" ${timing} style="z-index:35">${sc.html}</div>`);
+      tl.push(...sc.tweens);
+      if (!css.includes(SCENE_CSS_MARK)) css.push(SCENE_CSS_MARK, sceneCss(sceneCtx));
       return;
     }
     if (o.type === 'broll') {

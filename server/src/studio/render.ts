@@ -164,7 +164,9 @@ export async function renderJob({ renderId }: { renderId: string }) {
     }
 
     // Everything else is used as-is: fonts, logos, the nasheed, sound effects.
-    const fileIds = new Set([...spec.overlays.flatMap((o) => (o.type === 'image' ? [o.mediaId] : [])), ...[...spec.audio.sfx, ...transitionSounds(spec), ...graphicSounds(spec)].map((s) => s.mediaId)]);
+    const fileIds = new Set([
+      ...spec.overlays.flatMap((o) => (o.type === 'image' ? [o.mediaId] : o.type === 'scene' ? o.elements.flatMap((e) => (e.mediaId ? [e.mediaId] : [])) : [])),
+      ...[...spec.audio.sfx, ...transitionSounds(spec), ...graphicSounds(spec)].map((s) => s.mediaId)]);
     for (const id of [spec.audio.nasheed?.mediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) fileIds.add(id);
     const fileNames = new Map<string, string>();
     for (const id of fileIds) {
@@ -282,7 +284,7 @@ function friendlyError(message: string) {
 }
 
 /** Fork the render worker and relay its progress; resolves when the video file is written. */
-function runWorker(request: WorkerRequest, chrome: string, onProgress: (value: number, stage: string) => void, onLog: (tail: string) => void, signal: AbortSignal) {
+export function runWorker(request: WorkerRequest, chrome: string, onProgress: (value: number, stage: string) => void, onLog: (tail: string) => void, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     const ffmpeg = findBinary('ffmpeg');
     const ffprobe = findBinary('ffprobe');

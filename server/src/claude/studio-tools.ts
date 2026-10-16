@@ -14,6 +14,7 @@ import {
   TRANSITIONS,
   clipStarts,
   editDuration,
+  newEditId,
   normalizeEdit,
   timelineWords,
   type EditSpec,
@@ -23,6 +24,8 @@ import { ASSET_TYPES } from '../../../shared/types';
 import { db, schema } from '../db';
 import { createEdit, findEditForPiece, listEditVersions, listRenders, saveEditVersion, specMedia, specTranscripts } from '../studio/edits';
 import { queueRender } from '../studio/render';
+import { previewOverlay } from '../studio/preview';
+import { normalizeScene, SCENE_FONTS, SCENE_MAX_ELEMENTS, SCENE_MAX_SECONDS, SCENE_MAX_TWEENS } from '../../../shared/scene';
 import { clipToolsInstalled } from '../services/cliptools';
 import { enqueue, hasPendingJob } from '../jobs/queue';
 import { tightenEdit } from '../studio/tighten';
@@ -50,7 +53,7 @@ const clipShape = z.object({
 
 const overlayShape = z.object({
   id: z.string().optional(),
-  type: z.enum(['text', 'image', 'broll', 'graphic']),
+  type: z.enum(['text', 'image', 'broll', 'graphic', 'scene']).describe('scene: only to keep or retime a scene you wrote with write_scene (id, start, end); its design stays as it is'),
   start: z.number().min(0).describe('Seconds on the finished video'),
   end: z.number(),
   template: z
@@ -87,6 +90,10 @@ export function studioToolLabel(name: string, input: Record<string, any>): strin
       return 'Started a render';
     case 'follow_speaker':
       return 'Started reframing on the speaker';
+    case 'write_scene':
+      return input.name ? `Designed a scene: ${input.name}` : 'Designed a scene';
+    case 'view_overlay':
+      return 'Looked at a motion graphic';
     case 'list_assets':
       return 'Browsed brand assets';
     default:
@@ -204,11 +211,18 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
       safe(async ({ pieceId, message, format, clips, overlays, captions, audio, grade, watermark }) => {
         const edit = editFor(pieceId) ?? createEdit(pieceId, 'claude');
         const spec = normalizeEdit(edit.working);
+        // Scenes come back as id + times: their design is only changed by write_scene.
+        const kept = overlays?.map((o) => {
+          if (o.type !== 'scene') return o;
+          const scene = spec.overlays.find((x) => x.id === o.id && x.type === 'scene');
+          if (!scene) throw new ToolError(`There’s no scene with id ${o.id ?? '(none)'}: write new scenes with write_scene.`);
+          return { ...scene, start: o.start, end: o.end };
+        });
         const next: EditSpec = {
           ...spec,
           format: format ?? spec.format,
           clips: (clips as EditSpec['clips'] | undefined) ?? spec.clips,
-          overlays: (overlays as unknown as EditSpec['overlays'] | undefined) ?? spec.overlays,
+          overlays: (kept as unknown as EditSpec['overlays'] | undefined) ?? spec.overlays,
           captions: { ...spec.captions, ...(captions?.preset && captions.preset !== spec.captions.preset ? CAPTION_PRESET_DEFAULTS[captions.preset] : {}), ...captions },
           // The nasheed stays the creator's (saveEditVersion keeps it too).
           audio: { ...spec.audio, ...(audio as Partial<EditSpec['audio']>), nasheed: spec.audio.nasheed },
@@ -251,6 +265,91 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         if (!clipToolsInstalled()) throw new ToolError('The clip tools aren’t installed (Settings → Clip tools).');
         if (!hasPendingJob('edit.reframe', 'editId', edit.id)) enqueue('edit.reframe', { editId: edit.id, author: 'claude' }, { maxAttempts: 1 });
         return ok('Started: a new version is saved when it’s done (about a minute). Check it with get_edit afterwards.');
+      }),
+    ),
+
+    tool(
+      'write_scene',
+      'Design a custom motion graphic (a scene) on a piece’s video, or rewrite one (pass its sceneId): when no motion-graphics template fits. ' +
+        'A scene is data, not code: elements (box, text, image, path) styled with plain CSS, and GSAP tweens as JSON. ' +
+        `The frame is 1080 px wide (1920 tall in 9:16); top-level elements are absolutely positioned on it. Fonts: ${SCENE_FONTS.join(', ')} (Brand = the creator’s brand font, if set). ` +
+        'Styles may not load anything (no url(), no var()); colours as #hex or rgba(). Text marks accent words with *stars* (the brand’s accent colour). ' +
+        'Tweens animate transforms (x, y, xPercent, yPercent, scale, rotation, skewX), opacity/autoAlpha, colours, borderRadius, filter, clipPath and strokeDashoffset (a path with draw: true goes from 1 to 0); ' +
+        'use from for an explicit start state (fromTo), finite repeats only, and eases like power3.out or back.out(1.7). Times are seconds from the scene’s start. ' +
+        'Anything not allowed is dropped and listed in the reply. Look at it with view_overlay afterwards and fix what doesn’t read well.',
+      {
+        pieceId: z.string(),
+        sceneId: z.string().optional().describe('Rewrite this scene instead of adding one'),
+        name: z.string().describe('What it is, e.g. "Before/after split"'),
+        start: z.number().min(0).describe('Seconds on the finished video'),
+        end: z.number().describe(`At most ${SCENE_MAX_SECONDS} s after start`),
+        background: z.string().optional().describe('none (the video shows, default), dim (the video darkened), or a solid #rrggbb'),
+        elements: z
+          .array(
+            z.object({
+              id: z.string().describe('lowercase-with-dashes, unique'),
+              kind: z.enum(['box', 'text', 'image', 'path']),
+              text: z.string().optional().describe('text: the words (*accent*, \\n for a new line)'),
+              split: z.enum(['words', 'chars']).optional().describe('text: so tweens can target "<id>.words" / "<id>.chars" with a stagger'),
+              mediaId: z.string().optional().describe('image: a library image (list_assets, or the piece’s footage)'),
+              d: z.string().optional().describe('path: SVG path data in frame pixels'),
+              draw: z.boolean().optional().describe('path: start undrawn (animate strokeDashoffset 1 → 0)'),
+              parent: z.string().optional().describe('The id of a box this sits inside (listed before it)'),
+              style: z.record(z.string(), z.union([z.string(), z.number()])).optional().describe('CSS, e.g. { left: 90, top: 400, width: 900, "font-size": 96, color: "#ffffff" }; numbers are px'),
+            }),
+          )
+          .min(1)
+          .max(SCENE_MAX_ELEMENTS),
+        tweens: z
+          .array(
+            z.object({
+              targets: z.string().describe('Element ids, comma-separated; "<id>.words" / "<id>.chars" for split text'),
+              at: z.number().min(0),
+              duration: z.number().min(0),
+              from: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+              to: z.record(z.string(), z.union([z.string(), z.number()])),
+              ease: z.string().optional(),
+              stagger: z.number().optional(),
+              repeat: z.number().int().min(0).max(20).optional(),
+              yoyo: z.boolean().optional(),
+            }),
+          )
+          .max(SCENE_MAX_TWEENS),
+      },
+      safe(async ({ pieceId, sceneId, name, start, end, background, elements, tweens }) => {
+        const edit = editFor(pieceId) ?? createEdit(pieceId, 'claude');
+        const spec = normalizeEdit(edit.working);
+        if (sceneId && !spec.overlays.some((o) => o.id === sceneId && o.type === 'scene')) throw new ToolError(`There’s no scene with id ${sceneId} on this edit.`);
+        if (end <= start) throw new ToolError('end must be after start.');
+        const problems: string[] = [];
+        const scene = normalizeScene({ name, background, elements, tweens }, Math.min(end - start, SCENE_MAX_SECONDS), problems);
+        if (!scene.elements.length) throw new ToolError(`Nothing could be kept: ${problems.join('; ')}`);
+        const id = sceneId ?? newEditId();
+        const overlay = { id, type: 'scene' as const, start, end: Math.min(end, start + SCENE_MAX_SECONDS), ...scene };
+        const next: EditSpec = { ...spec, overlays: [...spec.overlays.filter((o) => o.id !== id), overlay].sort((a, b) => a.start - b.start) };
+        const { version } = saveEditVersion(edit.id, { author: 'claude', message: `${sceneId ? 'Reworked' : 'Added'} the scene “${scene.name}”`, spec: next });
+        return ok(
+          `Saved v${version.number}: scene ${id}, ${scene.elements.length} element(s), ${scene.tweens.length} tween(s).` +
+            (problems.length ? ` Dropped: ${problems.slice(0, 20).join('; ')}.` : '') +
+            ' Check it with view_overlay.',
+        );
+      }),
+    ),
+
+    tool(
+      'view_overlay',
+      'See stills of one overlay (a scene you wrote, or a motion graphic) as it will render, over the footage under it — to check layout, legibility and timing. Takes about half a minute.',
+      { pieceId: z.string(), overlayId: z.string(), atSeconds: z.array(z.number().min(0)).max(6).optional().describe('Seconds into the overlay; default four spread across it') },
+      safe(async ({ pieceId, overlayId, atSeconds }) => {
+        const edit = editFor(pieceId);
+        if (!edit) throw new ToolError('This piece has no video edit yet.');
+        const { times, images } = await previewOverlay(edit.id, overlayId, atSeconds);
+        return {
+          content: [
+            { type: 'text', text: `Stills at ${times.map((t) => `${t.toFixed(2)} s`).join(', ')} into the overlay (no captions or other overlays shown).` },
+            ...images.map((img) => ({ type: 'image' as const, data: img.toString('base64'), mimeType: 'image/jpeg' })),
+          ],
+        };
       }),
     ),
 

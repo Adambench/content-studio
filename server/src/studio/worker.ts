@@ -2,7 +2,8 @@
 // stay out of the server. Reports progress over IPC; SIGTERM (or the server going away) cancels.
 import { createRenderJob, executeRenderJob } from '@hyperframes/producer';
 
-export type WorkerRequest = { projectDir: string; output: string };
+/** `fps` defaults to the edit's 30; previews of a scene use fewer. */
+export type WorkerRequest = { projectDir: string; output: string; fps?: number };
 export type WorkerMessage =
   | { type: 'progress'; progress: number; stage: string }
   | { type: 'done'; warnings: string[] }
@@ -15,7 +16,7 @@ process.on('disconnect', () => abort.abort());
 const send = (m: WorkerMessage) => process.send?.(m);
 
 try {
-  const job = createRenderJob({ fps: 30, quality: 'standard', crf: 17, format: 'mp4', hdrMode: 'force-sdr', strictness: 'best-effort', useGpu: true });
+  const job = createRenderJob({ fps: request.fps ?? 30, quality: 'standard', crf: 17, format: 'mp4', hdrMode: 'force-sdr', strictness: 'best-effort', useGpu: true });
   let last = 0;
   await executeRenderJob(
     job,

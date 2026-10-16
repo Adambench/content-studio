@@ -69,6 +69,7 @@ export function validateSpec(workspaceId: string, input: EditSpec, strict: boole
   const ids = new Set<string>();
   spec.clips.forEach((c) => ids.add(c.mediaId));
   spec.overlays.forEach((o) => (o.type === 'image' || o.type === 'broll') && ids.add(o.mediaId));
+  spec.overlays.forEach((o) => o.type === 'scene' && o.elements.forEach((e) => e.mediaId && ids.add(e.mediaId)));
   spec.audio.sfx.forEach((s) => !isBuiltinSfx(s.mediaId) && ids.add(s.mediaId));
   for (const id of [spec.audio.nasheed?.mediaId, spec.grade.lutMediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) ids.add(id);
   const rows = ids.size ? db.select().from(schema.media).where(inArray(schema.media.id, [...ids])).all() : [];
@@ -91,6 +92,10 @@ export function validateSpec(workspaceId: string, input: EditSpec, strict: boole
   });
   spec.overlays = spec.overlays.filter(
     (o) => (o.type === 'image' ? check(o.mediaId, 'Image overlay', (m) => m.kind === 'image') : o.type === 'broll' ? check(o.mediaId, 'B-roll', picture) : true),
+  );
+  // A scene's pictures: only images from this workspace's library.
+  spec.overlays = spec.overlays.map((o) =>
+    o.type === 'scene' ? { ...o, elements: o.elements.filter((e) => !e.mediaId || check(e.mediaId, `Scene “${o.name}”, element ${e.id}`, (m) => m.kind === 'image')) } : o,
   );
   spec.audio.sfx = spec.audio.sfx.filter((s) => {
     if (!isBuiltinSfx(s.mediaId)) return check(s.mediaId, 'Sound effect', (m) => m.assetType === 'sfx' && m.kind === 'audio');
@@ -193,6 +198,7 @@ export function ensureProxies(spec: EditSpec) {
 export function specMedia(spec: EditSpec) {
   const ids = new Set(pictureMediaIds(spec));
   spec.overlays.forEach((o) => o.type === 'image' && ids.add(o.mediaId));
+  spec.overlays.forEach((o) => o.type === 'scene' && o.elements.forEach((e) => e.mediaId && ids.add(e.mediaId)));
   spec.audio.sfx.forEach((s) => !isBuiltinSfx(s.mediaId) && ids.add(s.mediaId));
   for (const id of [spec.audio.nasheed?.mediaId, spec.grade.lutMediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) ids.add(id);
   return ids.size ? db.select().from(schema.media).where(inArray(schema.media.id, [...ids])).all() : [];

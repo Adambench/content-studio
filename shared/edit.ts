@@ -1,6 +1,7 @@
 // The video studio's edit document, shared by the server (compile + render), the web editor and Claude's tools.
 // An edit is plain JSON; the server compiles it to a HyperFrames composition for preview and rendering.
 
+import { normalizeScene, SCENE_MAX_SECONDS, type SceneSpec } from './scene';
 import { builtinSfxId } from './sfx';
 import type { Transcript } from './types';
 
@@ -166,7 +167,10 @@ export type GraphicOverlay = OverlayBase & {
   sound: boolean;
 };
 
-export type EditOverlay = TextOverlay | ImageOverlay | BrollOverlay | GraphicOverlay;
+/** A motion graphic Claude designed (shared/scene.ts): boxes, text, shapes and images with GSAP tweens, as data. */
+export type SceneOverlay = OverlayBase & { type: 'scene' } & SceneSpec;
+
+export type EditOverlay = TextOverlay | ImageOverlay | BrollOverlay | GraphicOverlay | SceneOverlay;
 
 /** A phrase split into words, with the ones inside *stars* marked as accent. */
 export function graphicWords(text: string) {
@@ -447,6 +451,10 @@ function normalizeOverlay(input: Loose): EditOverlay | null {
         position: oneOf(input.position, ['top', 'center', 'bottom'] as const, GRAPHIC_INFO[template].position ?? 'center'),
         sound: typeof input.sound === 'boolean' ? input.sound : true,
       };
+    }
+    case 'scene': {
+      const end = Math.min(base.end, base.start + SCENE_MAX_SECONDS);
+      return { ...base, end, type: 'scene', ...normalizeScene(input, end - base.start) };
     }
     case 'broll':
       if (typeof input.mediaId !== 'string') return null;
