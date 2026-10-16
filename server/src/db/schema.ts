@@ -4,6 +4,7 @@ import type { PostStats, ReviewBody, ReviewStatus } from '../../../shared/analyt
 import type { FramesCheck, MomentCaptions, MomentKind, MomentStatus, MusicCheck, StandaloneScores } from '../../../shared/clipping';
 import type { CampaignOrigin, CampaignPlatform, CampaignStatus, HalalVerdict, Payout, RuleItem, SourceKind, SourceStatus, SubmissionStatus } from '../../../shared/campaigns';
 import type { EditSpec, EditTemplate } from '../../../shared/edit';
+import type { PieceDirections } from '../../../shared/direction';
 import type { AnalysisStatus, ItemPlatform, ResearchAnalysis, ResearchBriefBody, ResearchSettings, ResearchSource } from '../../../shared/research';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
 import type { SessionKind } from '../../../shared/devices';
@@ -69,6 +70,8 @@ export const pieces = sqliteTable(
     activeBranchId: text('active_branch_id'),
     /** A campaign the piece is filmed for (a UGC video); clips made from moments are linked through `moments`. */
     campaignId: text('campaign_id').references((): AnySQLiteColumn => campaigns.id, { onDelete: 'set null' }),
+    /** Creative directions Claude pitched for the video (personal and business pages) and the one picked. */
+    directions: text('directions', { mode: 'json' }).$type<PieceDirections | null>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

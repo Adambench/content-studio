@@ -27,6 +27,7 @@ import { JobError } from '../jobs/queue';
 import { clipToolsInstalled, toolsEnv } from '../services/cliptools';
 import { adoptFile, deleteMedia, whisperInstalled } from '../services/media';
 import { createPiece, getWorkspace } from '../services/pieces';
+import { applyLook, lookTag, pickLook } from '../studio/clip-looks';
 import { createEdit, saveEditVersion } from '../studio/edits';
 import { applyFocusSpans, focusSpans, scanSpeakers } from '../studio/reframe';
 import { cancelRender, queueRender } from '../studio/render';
@@ -305,23 +306,10 @@ export async function makeClip({ momentId }: { momentId: string }) {
     let clips = tightenClips([base], { [media.id]: speechRangesFromTranscript(transcript, true) }, TIGHTEN_PRESETS.tight);
     if (!clips.length) clips = [base];
     clips = applyFocusSpans(clips, media.id, spans);
-    const next: EditSpec = { ...spec, clips, overlays: [...spec.overlays], audio: { ...spec.audio, sfx: [...spec.audio.sfx] } };
-    const total = editDuration(next);
-    if (m.hookCard) {
-      const end = Math.min(2.5, total);
-      next.overlays.push({ id: crypto.randomUUID().slice(0, 8), type: 'text', text: m.hookCard, style: 'title', position: 'top', animation: 'pop', start: 0, end });
-      next.audio.sfx.push({ id: crypto.randomUUID().slice(0, 8), mediaId: builtinSfxId('pop'), at: 0.05, volume: 0.6 });
-    }
-    // One soft whoosh on the first jump cut after the hook: sparing, under the voice.
-    let t = 0;
-    for (const x of clips.slice(0, -1)) {
-      t += x.out - x.in;
-      if (t > 2.6 && t < total - 1) {
-        next.audio.sfx.push({ id: crypto.randomUUID().slice(0, 8), mediaId: builtinSfxId('whoosh-fast'), at: Math.max(0, Math.round((t - 0.15) * 100) / 100), volume: 0.3 });
-        break;
-      }
-    }
-    saveEditVersion(edit.id, { author: 'claude', message: `Clip of ${at}: tightened, hook card, captions`, spec: next });
+    const look = pickLook(ws.id);
+    const total = editDuration({ ...spec, clips });
+    const next = applyLook({ ...spec, clips }, look, m.hookCard, total);
+    saveEditVersion(edit.id, { author: 'claude', message: `Clip of ${at}: tightened, hook card, captions${lookTag(look)}`, spec: next });
 
     // 8. Render; finishing moves it to Review.
     queueRender(edit.id, 'claude');

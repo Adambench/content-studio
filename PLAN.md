@@ -122,7 +122,7 @@ versionCode from the tag (`v1.2.3` → 10203).
    - [ ] Step 2 — Feedback loop in the package (timestamped notes → Claude edits → re-render → before/after)
    - [ ] Step 3 — Compute workers on the home PCs
    - [x] Step 4 — Skills and the creative arsenal (2026-10-16; no new skills installed, see the step)
-   - [ ] Step 5 — Creative directions (personal/business) and varied clip edits (clipping)
+   - [x] Step 5 — Creative directions (personal/business) and varied clip edits (clipping) (2026-10-16; the pitch untried against a real Claude login)
    - [ ] Step 6 — One-button finder for clipping pages
    - [ ] Step 7 — Effects library, local only
 
@@ -214,7 +214,7 @@ storytelling), keep licences in mind (personal use only where unlicensed). Allow
 chat. `shared/arsenal.ts` + `get_arsenal`; the prompts tell Claude to consider the arsenal for every video and say
 which pieces it chose and why.
 
-**Step 5 — Directions and variety.** Personal/business: `direction.pitch` (one Sonnet call with the playbook and the
+**Step 5 — Directions and variety (built).** Done: clipping — `studio/clip-looks.ts` gives each made clip one of 5 looks (hook card style, punch-ins, first-cut move), the one the page's last 6 clips used least, noted in the version message (`· look: id`), no model call; personal/business — `pieces.directions`, `shared/direction.ts`, job `direction.pitch` (`studio/directions.ts`, Sonnet, playbook + arsenal + the page's recent picks), `POST /api/pieces/:id/directions[/choose]`, `DirectionPanel` on the package page; picking sends the direction to the video's chat to write the script and build the edit. Not done: the pitch isn't offered automatically when a video is created. Original plan: Personal/business: `direction.pitch` (one Sonnet call with the playbook and the
 arsenal) → 2–3 directions on the package; picking one writes the script/edit plan. Clipping: `clip.make` chooses an
 edit direction per clip from the arsenal (hook card style, captions, graphics, transitions, effects) and varies it
 across the page's recent clips.

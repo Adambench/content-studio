@@ -6,6 +6,7 @@ import type { ReviewClip } from '@shared/clipping';
 import { LIMITS, PLATFORM_LABELS, REVIEW_STAGE, type DraftContent, type Platform } from '@shared/types';
 import { MediaCard } from '@/components/MediaCard';
 import { MediaDialog } from '@/components/MediaDialog';
+import { DirectionPanel } from '@/components/package/DirectionPanel';
 import { ClipReview } from '@/components/package/ClipReview';
 import { StageStepper } from '@/components/package/StageStepper';
 import { VideoPanel } from '@/components/package/VideoPanel';
@@ -196,6 +197,7 @@ function Editor({ piece }: { piece: PieceDetail }) {
                 <ClipReview clip={summary.data} onDone={() => (after ? openClip(after) : navigate(`/w/${workspace.id}/board`))} />
               </section>
             )}
+            {workspace.kind !== 'clipping' && <DirectionPanel piece={piece} />}
             <section className="space-y-3" aria-label="Idea and script">
               <TagInput value={piece.tags} onChange={(t) => patchPiece({ tags: t })} suggestions={tags.data} />
               {branch && <BranchEditor key={branch.id} piece={piece} branch={branch} />}

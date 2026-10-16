@@ -9,6 +9,7 @@ import { badRequest, notFound } from '../lib/http';
 import { isLoose, queueInboxSort } from '../services/inbox';
 import { deleteMedia } from '../services/media';
 import { createBranch, createPiece, getBranch, getPiece, getPieceDetail, getWorkspace, restoreVersion, saveVersion, updateWorking } from '../services/pieces';
+import { chooseDirection, requestPitch } from '../studio/directions';
 
 const draftSchema = z.object({
   hook: z.string(),
@@ -111,6 +112,28 @@ export async function pieceRoutes(app: FastifyInstance) {
     db.update(schema.pieces).set({ ...body, updatedAt: now() }).where(eq(schema.pieces.id, piece.id)).run();
     emit({ type: 'changed', entity: 'pieces', workspaceId: piece.workspaceId, id: piece.id });
     return { ok: true };
+  });
+
+  // Creative directions (personal and business pages): pitch (again, with what to change), pick one.
+  app.post<{ Params: { id: string } }>('/api/pieces/:id/directions', async (req) => {
+    getPiece(req.params.id);
+    const body = z.object({ request: z.string().trim().max(600).optional() }).parse(req.body ?? {});
+    try {
+      requestPitch(req.params.id, body.request);
+    } catch (err) {
+      throw badRequest((err as Error).message);
+    }
+    return { ok: true };
+  });
+
+  app.post<{ Params: { id: string } }>('/api/pieces/:id/directions/choose', async (req) => {
+    getPiece(req.params.id);
+    const body = z.object({ optionId: z.string() }).parse(req.body);
+    try {
+      return { chosen: chooseDirection(req.params.id, body.optionId) };
+    } catch (err) {
+      throw badRequest((err as Error).message);
+    }
   });
 
   app.delete<{ Params: { id: string } }>('/api/pieces/:id', async (req) => {

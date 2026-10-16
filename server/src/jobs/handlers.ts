@@ -33,6 +33,7 @@ import { onReframeFailed, reframeEdit } from '../studio/reframe';
 import { buildFormat, onFormatBuildFailed } from '../studio/formats';
 import { onUgcScriptFailed, writeUgcScript } from '../campaigns/ugc';
 import { enqueue, onJobFailed, registerJob } from './queue';
+import { onPitchFailed, pitchDirections } from '../studio/directions';
 
 const execFile = promisify(execFileCb);
 
@@ -257,4 +258,7 @@ export function registerHandlers() {
   onJobFailed('research.brief', onBriefFailed);
   registerJob('research.analyse', analyseItem, 1);
   onJobFailed('research.analyse', onAnalyseFailed);
+  // Creative directions for a video (one Sonnet call).
+  registerJob('direction.pitch', pitchDirections, 1);
+  onJobFailed('direction.pitch', onPitchFailed);
 }
