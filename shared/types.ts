@@ -155,8 +155,11 @@ export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
 };
 
 export type TranscriptStatus = 'none' | 'queued' | 'running' | 'done' | 'error' | 'unavailable';
-/** `clip`: cut from a campaign's source video by clipping. */
-export type MediaSource = 'upload' | 'capture' | 'share' | 'render' | 'clip';
+/**
+ * `clip`: cut from a campaign's source video by clipping. `tts`: speech made on this computer for a format video.
+ * `generated`: a built-in moving background.
+ */
+export type MediaSource = 'upload' | 'capture' | 'share' | 'render' | 'clip' | 'tts' | 'generated';
 /** The browser-friendly copy of a clip that the video studio previews and renders from. */
 export type ProxyStatus = 'none' | 'queued' | 'running' | 'done' | 'error';
 export type RenderStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled';
@@ -204,5 +207,6 @@ export type LiveEvent =
     }
   | { type: 'edit'; editId: string; pieceId: string; by: 'claude' | 'you' }
   | { type: 'branch'; branchId: string; pieceId: string; by: 'claude' | 'you' }
-  | { type: 'job'; jobType: string; status: 'done' | 'error'; workspaceId?: string; message?: string }
+  /** `running` carries progress for jobs that report it (a format video's voice), with the edit it's for. */
+  | { type: 'job'; jobType: string; status: 'running' | 'done' | 'error'; workspaceId?: string; message?: string; editId?: string }
   | { type: 'notify'; title: string; body: string; url: string };

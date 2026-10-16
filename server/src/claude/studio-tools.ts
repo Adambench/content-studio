@@ -26,6 +26,8 @@ import { createEdit, findEditForPiece, listEditVersions, listRenders, saveEditVe
 import { queueRender } from '../studio/render';
 import { previewOverlay } from '../studio/preview';
 import { normalizeScene, SCENE_FONTS, SCENE_MAX_ELEMENTS, SCENE_MAX_SECONDS, SCENE_MAX_TWEENS } from '../../../shared/scene';
+import { CHARACTERS, normalizeRecipe, RECIPE_INFO, recipeNeedsBuild, VOICES } from '../../../shared/recipe';
+import { ttsInstalled } from '../services/tts';
 import { clipToolsInstalled } from '../services/cliptools';
 import { enqueue, hasPendingJob } from '../jobs/queue';
 import { tightenEdit } from '../studio/tighten';
@@ -94,6 +96,8 @@ export function studioToolLabel(name: string, input: Record<string, any>): strin
       return input.name ? `Designed a scene: ${input.name}` : 'Designed a scene';
     case 'view_overlay':
       return 'Looked at a motion graphic';
+    case 'write_format_video':
+      return input.kind ? `Wrote a ${RECIPE_INFO[input.kind as keyof typeof RECIPE_INFO]?.label.toLowerCase() ?? 'format'} video` : 'Wrote a format video';
     case 'list_assets':
       return 'Browsed brand assets';
     default:
@@ -350,6 +354,57 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
             ...images.map((img) => ({ type: 'image' as const, data: img.toString('base64'), mimeType: 'image/jpeg' })),
           ],
         };
+      }),
+    ),
+
+    tool(
+      'write_format_video',
+      'Make a piece’s video from words instead of footage, or rewrite one: story (a story read over background footage, its title on a post card), ' +
+        'chat (a text conversation that plays out message by message, each read aloud) or dialogue (two drawn characters talking, mouths moving with their voices). ' +
+        'The voices are made on this computer (local work, like a render) and the video is laid out around them; the creator previews, renders and posts it. ' +
+        'Write for the ear: short sentences, a hook in the first line, a payoff at the end, 20–60 s spoken (about 2.7 words a second). Never music. ' +
+        `Voices: ${VOICES.map((v) => `${v.id} (${v.who})`).join(', ')}. Characters: ${CHARACTERS.map((c) => `${c.id} (${c.hint})`).join(', ')}.`,
+      {
+        pieceId: z.string(),
+        kind: z.enum(['story', 'chat', 'dialogue']),
+        story: z.object({ title: z.string().describe('The hook, read first and shown on the post card'), text: z.string(), author: z.string().optional().describe('Shown on the card as who posted it'), voice: z.string().optional() }).optional(),
+        chat: z
+          .object({
+            contact: z.string().describe('The other person, as their name shows at the top'),
+            messages: z.array(z.object({ from: z.enum(['them', 'me']), text: z.string() })).min(2).max(60),
+            voices: z.object({ them: z.string(), me: z.string() }).optional(),
+          })
+          .optional(),
+        dialogue: z
+          .object({
+            cast: z.array(z.object({ name: z.string(), look: z.enum(CHARACTERS.map((c) => c.id) as [string, ...string[]]), voice: z.string() })).length(2),
+            lines: z.array(z.object({ who: z.union([z.literal(0), z.literal(1)]), text: z.string() })).min(2).max(80),
+          })
+          .optional(),
+        speed: z.number().min(0.8).max(1.3).optional().describe('Reading speed, 1.05 by default'),
+        backgrounds: z.array(z.string()).max(10).optional().describe('Library videos to play muted underneath (gameplay the creator recorded); leave out to keep what’s there'),
+      },
+      safe(async ({ pieceId, kind, story, chat, dialogue, speed, backgrounds }) => {
+        const words = kind === 'story' ? story : kind === 'chat' ? chat : dialogue;
+        if (!words) throw new ToolError(`Pass the ${kind} object with the words.`);
+        const edit = editFor(pieceId) ?? createEdit(pieceId, 'claude');
+        const spec = normalizeEdit(edit.working);
+        const before = spec.recipe?.kind === kind ? spec.recipe : null;
+        const recipe = normalizeRecipe({
+          ...(before ?? {}),
+          kind,
+          ...words,
+          ...(speed !== undefined && { speed }),
+          backgrounds: backgrounds ?? spec.recipe?.backgrounds ?? [],
+          builtFrom: before?.builtFrom ?? null,
+        });
+        if (!recipe) throw new ToolError('That recipe couldn’t be read.');
+        const { version } = saveEditVersion(edit.id, { author: 'claude', message: `Wrote the ${RECIPE_INFO[kind].label.toLowerCase()} video`, spec: { ...spec, recipe } });
+        const saved = normalizeEdit(version.spec).recipe!;
+        if (!recipeNeedsBuild(saved)) return ok(`Saved v${version.number}; the voice is already up to date.`);
+        if (!ttsInstalled()) return ok(`Saved v${version.number}. The voices need the clip tools (Settings → Clip tools) before the video can be made — tell the creator.`);
+        if (!hasPendingJob('format.build', 'editId', edit.id)) enqueue('format.build', { editId: edit.id, by: 'claude' }, { maxAttempts: 1 });
+        return ok(`Saved v${version.number}. Making the voice now (about half the spoken length); the edit is laid out when it's done — check it with get_edit, then the creator can preview and render.`);
       }),
     ),
 

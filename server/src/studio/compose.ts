@@ -9,6 +9,7 @@ import {
   speechSpans,
   timelineWords,
   graphicSounds,
+  recipeSounds,
   transitionSounds,
   transitionWindows,
   type CaptionPreset,
@@ -18,6 +19,7 @@ import {
 } from '../../../shared/edit';
 import { builtinSfx } from '../../../shared/sfx';
 import { composeGraphic, graphicsCss, STAT_HELPER } from './graphics';
+import { composeRecipe } from './recipe-layers';
 import { composeScene, sceneCss } from './scene';
 import { accent, attrJson, esc, js, n, px } from './html';
 import type { AssetType, MediaKind, Transcript } from '../../../shared/types';
@@ -227,6 +229,15 @@ export function composeEdit(input: ComposeInput) {
     tl.push(...animate(`#o${i} .oi`, o.animation, start, len));
   });
 
+  // ---------- format video (a story's card, a conversation, two characters) ----------
+  if (spec.recipe) {
+    const r = composeRecipe(spec, { W, H, color: spec.captions.highlight, font: fontStack, duration });
+    body.push(...r.html);
+    tl.push(...r.tweens);
+    r.helpers.forEach((h) => helpers.add(h));
+    if (r.css) css.push(r.css);
+  }
+
   // ---------- captions ----------
   const words = timelineWords(spec, input.transcripts);
   if (spec.captions.enabled && words.length) {
@@ -278,6 +289,13 @@ ${
 
   // ---------- sound ----------
   if (anyClipAudio) body.push(`<hf-audio-group id="voice" data-label="Voice" data-volume="${n(spec.audio.voiceVolume)}"${spec.audio.enhanceVoice ? ` data-fx-chain="${attrJson(VOICE_FX)}"` : ''}></hf-audio-group>`);
+  // Narration (a format video's voices, or the creator's recorded voice), from the start.
+  const vo = spec.audio.voiceover;
+  const voMedia = vo ? media.get(vo.mediaId) : undefined;
+  if (vo && voMedia?.kind === 'audio' && vo.volume > 0) {
+    const len = Math.min(duration, voMedia.durationMs ? voMedia.durationMs / 1000 : duration);
+    body.push(`<audio id="vo" src="${esc(input.fileUrl(voMedia.id))}"${app.media} data-start="0" data-duration="${n(len)}" data-track-index="8" data-volume="${n(vo.volume)}"></audio>`);
+  }
   // Never music: the one track an edit can have is a vocal-only nasheed, and only a nasheed asset plays.
   const track = spec.audio.nasheed;
   const nasheed = track ? media.get(track.mediaId) : undefined;
@@ -300,7 +318,7 @@ ${
       offset = 0;
     }
   }
-  [...spec.audio.sfx, ...transitionSounds(spec), ...graphicSounds(spec)].forEach((s, i) => {
+  [...spec.audio.sfx, ...transitionSounds(spec), ...graphicSounds(spec), ...recipeSounds(spec)].forEach((s, i) => {
     const builtin = builtinSfx(s.mediaId);
     const m = media.get(s.mediaId);
     if (s.at >= duration || (!builtin && m?.assetType !== 'sfx')) return;

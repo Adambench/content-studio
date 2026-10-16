@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
@@ -12,6 +13,9 @@ import { emit } from '../lib/events';
 import { badRequest, notFound } from '../lib/http';
 import { correctTranscript, getMedia } from '../services/media';
 import { clipToolsInstalled } from '../services/cliptools';
+import { speak, ttsInstalled } from '../services/tts';
+import { CHARACTERS, VOICES, type CharacterId } from '../../../shared/recipe';
+import { characterSvg } from '../studio/characters';
 import { enqueue, hasPendingJob } from '../jobs/queue';
 import { getPiece } from '../services/pieces';
 import { BUNDLED_FONTS, composeEdit } from '../studio/compose';
@@ -73,6 +77,29 @@ export async function studioRoutes(app: FastifyInstance) {
   });
 
   app.post<{ Params: { id: string } }>('/api/edits/:id/render', async (req) => queueRender(req.params.id, 'you'));
+
+  // A format video's voice: speak the recipe, time it, lay out the edit (a new version).
+  app.post<{ Params: { id: string } }>('/api/edits/:id/build', async (req) => {
+    const edit = getEdit(req.params.id);
+    if (!normalizeEdit(edit.working).recipe) throw badRequest('This edit isn’t a format video.');
+    if (!ttsInstalled()) throw badRequest('Install the clip tools first (Settings → Clip tools): the voices come with them.');
+    if (!hasPendingJob('format.build', 'editId', edit.id)) enqueue('format.build', { editId: edit.id, by: 'you' }, { maxAttempts: 1 });
+    return { ok: true };
+  });
+
+  // How a voice sounds: a short sample, made once and kept.
+  app.get<{ Params: { voice: string } }>('/api/tts/voices/:voice', async (req, reply) => {
+    const id = req.params.voice.replace(/\.wav$/, '');
+    if (!VOICES.some((v) => v.id === id)) throw notFound('No such voice');
+    if (!ttsInstalled()) throw badRequest('Install the clip tools first (Settings → Clip tools).');
+    const file = join(config.cacheDir, 'voices', `${id}.wav`);
+    if (!existsSync(file)) {
+      await mkdir(dirname(file), { recursive: true });
+      await speak([{ text: 'Here’s how I sound reading your script. Short lines work best.', voice: id, speed: 1.05, pause: 0.1 }], file);
+    }
+    reply.header('Cache-Control', 'private, max-age=86400');
+    return reply.type('audio/wav').sendFile(basename(file), dirname(file));
+  });
 
   // "Follow the speaker": find the shots and who's talking in the footage, then reframe on them (a new version).
   app.post<{ Params: { id: string } }>('/api/edits/:id/reframe', async (req) => {
@@ -167,6 +194,14 @@ export async function studioRoutes(app: FastifyInstance) {
     if (!builtinSfx(builtinSfxId(name)) || !existsSync(builtinSfxPath(name))) throw notFound();
     reply.header('Cache-Control', 'public, max-age=86400');
     return reply.type('audio/ogg').sendFile(`${name}.ogg`, dirname(builtinSfxPath(name)));
+  });
+
+  // The built-in characters, to pick from in the editor.
+  app.get<{ Params: { file: string } }>('/api/studio/characters/:file', async (req, reply) => {
+    const look = req.params.file.replace(/\.svg$/, '');
+    if (!CHARACTERS.some((c) => c.id === look)) throw notFound();
+    reply.header('Cache-Control', 'public, max-age=86400');
+    return reply.type('image/svg+xml').send(characterSvg(look as CharacterId).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '));
   });
 
   // Fix what Whisper heard, for captions and search.

@@ -116,6 +116,8 @@ export type SystemStatus = {
   whisper: boolean;
   whisperInstall: { state: 'idle' | 'installing' | 'done' | 'error'; message: string };
   clipTools: boolean;
+  /** The voices for format videos (Kokoro), part of the clip tools since they were added. */
+  tts?: boolean;
   clipToolsInstall: { state: 'idle' | 'installing' | 'done' | 'error'; message: string };
   renderer: boolean;
   rendererInstall: { state: 'idle' | 'installing' | 'done' | 'error'; message: string };

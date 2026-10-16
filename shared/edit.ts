@@ -1,6 +1,7 @@
 // The video studio's edit document, shared by the server (compile + render), the web editor and Claude's tools.
 // An edit is plain JSON; the server compiles it to a HyperFrames composition for preview and rendering.
 
+import { normalizeRecipe, type Recipe } from './recipe';
 import { normalizeScene, SCENE_MAX_SECONDS, type SceneSpec } from './scene';
 import { builtinSfxId } from './sfx';
 import type { Transcript } from './types';
@@ -206,6 +207,16 @@ export function graphicBeats(o: GraphicOverlay): number[] {
   return [];
 }
 
+/** A format video's own sounds: a pop as each text message lands (a swish for sent ones), a pop for a story's card. */
+export function recipeSounds(spec: Pick<EditSpec, 'recipe'>): SfxCue[] {
+  const r = spec.recipe;
+  if (!r) return [];
+  if (r.kind === 'chat')
+    return r.messages.filter((m) => m.end > m.at).map((m, k) => ({ id: `r-${k}`, mediaId: builtinSfxId(m.from === 'me' ? 'swish' : 'pop-high'), at: round(m.at), volume: 0.5 }));
+  if (r.kind === 'story' && r.titleEnd > 0.3) return [{ id: 'r-card', mediaId: builtinSfxId('pop'), at: 0, volume: 0.5 }];
+  return [];
+}
+
 /** The built-in sounds of graphics that have `sound` on. */
 export function graphicSounds(spec: Pick<EditSpec, 'overlays'>): SfxCue[] {
   const cues: SfxCue[] = [];
@@ -261,8 +272,15 @@ export type NasheedTrack = {
   duck: boolean;
 };
 
+/**
+ * Narration from the start of the video: speech made on this computer (a format video's voices) or a voice memo the
+ * creator recorded — never an uploaded track, so music can't come in this way. Its words become the captions.
+ */
+export type VoiceoverTrack = { mediaId: string; volume: number };
+
 export type EditAudio = {
   nasheed: NasheedTrack | null;
+  voiceover: VoiceoverTrack | null;
   /** Level of all clip sound. */
   voiceVolume: number;
   /** Rumble cut, gentle compression and presence on the clip sound. */
@@ -284,6 +302,8 @@ export type EditSpec = {
   audio: EditAudio;
   grade: EditGrade;
   watermark: Watermark;
+  /** A format video's words and voices (shared/recipe.ts); null for a filmed edit. */
+  recipe: Recipe | null;
 };
 
 /** The reusable look of a brand's videos, saved per workspace. Never a nasheed: that's agreed edit by edit. */
@@ -292,7 +312,7 @@ export type EditTemplate = {
   captions: CaptionSettings;
   grade: EditGrade;
   watermark: Watermark;
-  audio: Omit<EditAudio, 'sfx' | 'nasheed'>;
+  audio: Omit<EditAudio, 'sfx' | 'nasheed' | 'voiceover'>;
 };
 
 export const DUCK_LEVEL = 0.3;
@@ -315,9 +335,10 @@ export function emptyEdit(): EditSpec {
       fontMediaId: null,
     },
     overlays: [],
-    audio: { nasheed: null, voiceVolume: 1, enhanceVoice: false, normalize: true, sfx: [] },
+    audio: { nasheed: null, voiceover: null, voiceVolume: 1, enhanceVoice: false, normalize: true, sfx: [] },
     grade: { lutMediaId: null, intensity: 1 },
     watermark: { mediaId: null, corner: 'tr', opacity: 0.85, size: 0.16 },
+    recipe: null,
   };
 }
 
@@ -367,8 +388,10 @@ function normalizeNasheed(input: unknown): NasheedTrack | null {
 /** Older edits had a music track (musicMediaId…): it's dropped, never carried over. */
 function normalizeAudio(input: unknown, base = emptyEdit().audio): EditAudio {
   const a = obj(input);
+  const vo = obj(a.voiceover);
   return {
     nasheed: a.nasheed === undefined ? base.nasheed : normalizeNasheed(a.nasheed),
+    voiceover: a.voiceover === undefined ? base.voiceover : typeof vo.mediaId === 'string' && vo.mediaId ? { mediaId: vo.mediaId, volume: round(num(vo.volume, 1, 0, 2)) } : null,
     voiceVolume: round(num(a.voiceVolume, base.voiceVolume, 0, 2)),
     enhanceVoice: typeof a.enhanceVoice === 'boolean' ? a.enhanceVoice : base.enhanceVoice,
     normalize: typeof a.normalize === 'boolean' ? a.normalize : base.normalize,
@@ -488,22 +511,30 @@ export function normalizeEdit(input: unknown): EditSpec {
     audio: normalizeAudio(e.audio),
     grade: normalizeGrade(e.grade),
     watermark: normalizeWatermark(e.watermark),
+    recipe: normalizeRecipe(e.recipe),
   };
 }
 
 export function templateFromEdit(spec: EditSpec): EditTemplate {
-  const { sfx: _sfx, nasheed: _nasheed, ...audio } = spec.audio;
+  const { sfx: _sfx, nasheed: _nasheed, voiceover: _voiceover, ...audio } = spec.audio;
   return { format: spec.format, captions: spec.captions, grade: spec.grade, watermark: spec.watermark, audio };
 }
 
 export function normalizeTemplate(input: unknown): EditTemplate {
   const t = obj(input);
-  return templateFromEdit(normalizeEdit({ ...t, audio: { ...obj(t.audio), sfx: [], nasheed: null } }));
+  return templateFromEdit(normalizeEdit({ ...t, audio: { ...obj(t.audio), sfx: [], nasheed: null, voiceover: null } }));
 }
 
-/** Apply a brand template's look to an edit, keeping its footage, overlays, nasheed and sound effects. */
+/** Apply a brand template's look to an edit, keeping its footage, overlays, nasheed, voiceover and sound effects. */
 export function applyTemplate(spec: EditSpec, template: EditTemplate): EditSpec {
-  return normalizeEdit({ ...spec, format: template.format, captions: template.captions, grade: template.grade, watermark: template.watermark, audio: { ...template.audio, nasheed: spec.audio.nasheed, sfx: spec.audio.sfx } });
+  return normalizeEdit({
+    ...spec,
+    format: template.format,
+    captions: template.captions,
+    grade: template.grade,
+    watermark: template.watermark,
+    audio: { ...template.audio, nasheed: spec.audio.nasheed, voiceover: spec.audio.voiceover, sfx: spec.audio.sfx },
+  });
 }
 
 // ---------- timeline ----------
@@ -577,13 +608,32 @@ export type TimelineWord = { start: number; end: number; text: string; clipId: s
 
 const cleanWord = (w: string) => w.replace(/\s+/g, ' ').trim();
 
-/** Every transcribed word that survives the cuts, in output time. */
-export function timelineWords(spec: Pick<EditSpec, 'clips'>, transcripts: Record<string, Transcript | null | undefined>): TimelineWord[] {
+/** The voiceover's place in `timelineWords` (it isn't a clip). */
+export const VOICEOVER_CLIP = 'voiceover';
+
+/**
+ * Every transcribed word that survives the cuts, in output time: the main track's (muted clips say nothing) and the
+ * voiceover's. A story's title is on its post card, so its words aren't captioned.
+ */
+export function timelineWords(
+  spec: Pick<EditSpec, 'clips'> & { audio?: Pick<EditAudio, 'voiceover'>; recipe?: Recipe | null },
+  transcripts: Record<string, Transcript | null | undefined>,
+): TimelineWord[] {
   const starts = clipStarts(spec);
   const out: TimelineWord[] = [];
+  const vo = spec.audio?.voiceover;
+  const voT = vo ? transcripts[vo.mediaId] : null;
+  if (vo && voT) {
+    const from = spec.recipe?.kind === 'story' ? spec.recipe.titleEnd - 0.05 : 0;
+    for (const seg of voT.segments)
+      for (const w of seg.words ?? []) {
+        const text = cleanWord(w.word);
+        if (text && w.start >= from) out.push({ start: round(w.start), end: round(w.end), text, clipId: VOICEOVER_CLIP, mediaId: vo.mediaId, sourceStart: w.start });
+      }
+  }
   spec.clips.forEach((clip, i) => {
     const t = transcripts[clip.mediaId];
-    if (!t) return;
+    if (!t || clip.volume === 0) return;
     for (const seg of t.segments) {
       if (seg.end <= clip.in || seg.start >= clip.out) continue;
       for (const w of seg.words ?? []) {
@@ -603,7 +653,7 @@ export function timelineWords(spec: Pick<EditSpec, 'clips'>, transcripts: Record
       }
     }
   });
-  return out;
+  return out.sort((a, b) => a.start - b.start);
 }
 
 export type CaptionWord = { start: number; end: number; text: string };

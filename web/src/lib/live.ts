@@ -135,6 +135,8 @@ function apply(event: LiveEvent) {
     if (event.status === 'error' && event.jobType === 'analytics.review') toast.error('The review didn’t finish', { description: event.message?.slice(0, 200) });
     if (event.status === 'error' && event.jobType === 'campaign.read') toast.error('Couldn’t read the campaign', { description: event.message?.slice(0, 200) });
     if (event.status === 'done' && event.jobType === 'source.pick') toast.success(event.message ?? 'Moments found');
+    if (event.status === 'done' && event.jobType === 'format.build') toast.success('Voice made', { description: event.message });
+    if (event.status === 'error' && event.jobType === 'format.build') toast.error('Couldn’t make the voice', { description: event.message?.slice(0, 200) });
     if (event.status === 'done' && event.jobType === 'edit.reframe') toast.success(event.message ?? 'Reframed', { description: 'Saved as a new version: undo from History.' });
     if (event.status === 'error' && event.jobType === 'edit.reframe') toast.error('Couldn’t follow the speaker', { description: event.message?.slice(0, 200) });
     if (event.status === 'done' && event.jobType === 'research.analyse') toast.success(event.message ?? 'Analysis ready');

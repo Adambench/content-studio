@@ -68,10 +68,11 @@ export function validateSpec(workspaceId: string, input: EditSpec, strict: boole
   const spec = normalizeEdit(input);
   const ids = new Set<string>();
   spec.clips.forEach((c) => ids.add(c.mediaId));
+  spec.recipe?.backgrounds.forEach((id) => ids.add(id));
   spec.overlays.forEach((o) => (o.type === 'image' || o.type === 'broll') && ids.add(o.mediaId));
   spec.overlays.forEach((o) => o.type === 'scene' && o.elements.forEach((e) => e.mediaId && ids.add(e.mediaId)));
   spec.audio.sfx.forEach((s) => !isBuiltinSfx(s.mediaId) && ids.add(s.mediaId));
-  for (const id of [spec.audio.nasheed?.mediaId, spec.grade.lutMediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) ids.add(id);
+  for (const id of [spec.audio.nasheed?.mediaId, spec.audio.voiceover?.mediaId, spec.grade.lutMediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) ids.add(id);
   const rows = ids.size ? db.select().from(schema.media).where(inArray(schema.media.id, [...ids])).all() : [];
   const byId = new Map(rows.map((r) => [r.id, r]));
   const check = (id: string, what: string, ok: (m: MediaRow) => boolean): MediaRow | null => {
@@ -105,6 +106,18 @@ export function validateSpec(workspaceId: string, input: EditSpec, strict: boole
   });
   const nasheed = spec.audio.nasheed && byId.get(spec.audio.nasheed.mediaId);
   if (spec.audio.nasheed && (!nasheed || nasheed.workspaceId !== workspaceId || nasheed.assetType !== 'nasheed' || nasheed.kind !== 'audio')) spec.audio.nasheed = null;
+  // Narration is speech made here or a voice memo recorded here: never an uploaded track (that's how music would get in).
+  if (spec.audio.voiceover && !check(spec.audio.voiceover.mediaId, 'Voiceover', (m) => m.kind === 'audio' && !m.assetType && (m.source === 'tts' || m.source === 'capture'))) {
+    spec.audio.voiceover = null;
+  }
+  // A format's backgrounds are pictures from this library.
+  if (spec.recipe) {
+    const backgrounds = spec.recipe.backgrounds.filter((id) => {
+      const m = byId.get(id);
+      return !!m && m.workspaceId === workspaceId && picture(m);
+    });
+    spec.recipe = { ...spec.recipe, backgrounds };
+  }
   if (spec.grade.lutMediaId && !check(spec.grade.lutMediaId, 'Colour grade', (m) => m.assetType === 'lut' || /\.cube$/i.test(m.originalName))) spec.grade.lutMediaId = null;
   if (spec.watermark.mediaId && !check(spec.watermark.mediaId, 'Watermark', (m) => m.kind === 'image')) spec.watermark.mediaId = null;
   if (spec.captions.fontMediaId && !check(spec.captions.fontMediaId, 'Caption font', (m) => m.assetType === 'font' || /\.(ttf|otf|woff2?)$/i.test(m.originalName))) {
@@ -200,13 +213,14 @@ export function specMedia(spec: EditSpec) {
   spec.overlays.forEach((o) => o.type === 'image' && ids.add(o.mediaId));
   spec.overlays.forEach((o) => o.type === 'scene' && o.elements.forEach((e) => e.mediaId && ids.add(e.mediaId)));
   spec.audio.sfx.forEach((s) => !isBuiltinSfx(s.mediaId) && ids.add(s.mediaId));
-  for (const id of [spec.audio.nasheed?.mediaId, spec.grade.lutMediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) ids.add(id);
+  for (const id of [spec.audio.nasheed?.mediaId, spec.audio.voiceover?.mediaId, spec.grade.lutMediaId, spec.watermark.mediaId, spec.captions.fontMediaId]) if (id) ids.add(id);
   return ids.size ? db.select().from(schema.media).where(inArray(schema.media.id, [...ids])).all() : [];
 }
 
-/** Transcripts of the main-track footage, for captions, ducking the nasheed and tightening. */
+/** Transcripts of the main-track footage and the voiceover, for captions, ducking the nasheed and tightening. */
 export async function specTranscripts(spec: EditSpec, rows: MediaRow[]) {
   const ids = new Set(spec.clips.map((c) => c.mediaId));
+  if (spec.audio.voiceover) ids.add(spec.audio.voiceover.mediaId);
   const out: Record<string, Transcript | null> = {};
   for (const m of rows) if (ids.has(m.id)) out[m.id] = m.transcriptStatus === 'done' ? await readTranscript(m.id) : null;
   return out;

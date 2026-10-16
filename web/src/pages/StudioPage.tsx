@@ -15,6 +15,7 @@ import { RenderButton, RendersPanel } from '@/components/studio/RendersPanel';
 import { SoundPanel } from '@/components/studio/SoundPanel';
 import { Timeline } from '@/components/studio/Timeline';
 import { useWorkspaceContext } from '@/components/WorkspaceLayout';
+import { ScriptPanel } from '@/components/studio/ScriptPanel';
 import { Button } from '@/components/ui/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,7 +28,7 @@ import type { EditDetail, Media, PieceDetail } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
-type Tab = 'clips' | 'captions' | 'text' | 'sound' | 'look' | 'renders';
+type Tab = 'script' | 'clips' | 'captions' | 'text' | 'sound' | 'look' | 'renders';
 const TAB_FOR: Record<NonNullable<Selection>['kind'], Tab> = { clip: 'clips', overlay: 'text', sfx: 'sound' };
 const same = (a: EditSpec, b: EditSpec) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -129,7 +130,8 @@ function Studio({ edit, piece }: { edit: EditDetail; piece: PieceDetail | undefi
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [time, setTime] = useState(0);
   const [selection, setSelection] = useState<Selection>(null);
-  const [tab, setTab] = useState<Tab>('clips');
+  // A format video opens on its words.
+  const [tab, setTab] = useState<Tab>(edit.working.recipe ? 'script' : 'clips');
   const [historyOpen, setHistoryOpen] = useState(false);
   const player = useRef<PlayerHandle>(null);
   const footage = useMedia(workspace.id, { scope: 'footage' });
@@ -249,7 +251,7 @@ function Studio({ edit, piece }: { edit: EditDetail; piece: PieceDetail | undefi
   const box = EDIT_FORMATS[spec.format];
   const total = editDuration(spec);
 
-  const ctx: StudioState = { edit, piece, spec, update, serverAction, time, seek, selection, select, media, footage: footage.data ?? [], assets: assets.data ?? [] };
+  const ctx: StudioState = { edit, piece, spec, update, serverAction, time, seek, selection, select, media, footage: footage.data ?? [], assets: assets.data ?? [], showTab: setTab };
 
   return (
     <StudioContext.Provider value={ctx}>
@@ -312,6 +314,11 @@ function Studio({ edit, piece }: { edit: EditDetail; piece: PieceDetail | undefi
           <div className="lg:min-h-0 lg:w-[min(26rem,48%)] lg:shrink-0 lg:overflow-y-auto lg:border-l">
             <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="gap-0">
               <TabsList className="sticky top-0 z-10 w-full justify-start overflow-x-auto rounded-none border-b bg-background px-2 [scrollbar-width:none]">
+                {spec.recipe && (
+                  <TabsTrigger value="script" className="flex-none">
+                    Script
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="clips" className="flex-none">
                   Clips
                 </TabsTrigger>
@@ -332,6 +339,9 @@ function Studio({ edit, piece }: { edit: EditDetail; piece: PieceDetail | undefi
                 </TabsTrigger>
               </TabsList>
               <div className="p-4">
+                <TabsContent value="script">
+                  <ScriptPanel />
+                </TabsContent>
                 <TabsContent value="clips">
                   <ClipsPanel />
                 </TabsContent>

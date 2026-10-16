@@ -39,7 +39,7 @@ export function getMedia(id: string) {
 type MediaOptions = {
   pieceId?: string | null;
   assetType?: AssetType | null;
-  source?: 'upload' | 'capture' | 'share' | 'clip';
+  source?: 'upload' | 'capture' | 'share' | 'clip' | 'tts' | 'generated';
   /** Already transcribed (a clip's cut): saved with it, so it isn't transcribed again. */
   transcript?: Transcript;
 };

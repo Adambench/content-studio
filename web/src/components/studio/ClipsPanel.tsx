@@ -21,7 +21,10 @@ import {
   type EditClip,
   type TransitionType,
 } from '@shared/edit';
+import { RECIPE_INFO, type RecipeKind } from '@shared/recipe';
 import { builtinSfx, builtinSfxId } from '@shared/sfx';
+import { useWorkspaceContext } from '@/components/WorkspaceLayout';
+import { exampleRecipe } from './ScriptPanel';
 import { MediaIcon } from '@/components/MediaCard';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -49,7 +52,8 @@ export const clipFromMedia = (m: Media): EditClip => ({
 });
 
 export function ClipsPanel() {
-  const { edit, spec, update, serverAction, time, seek, selection, select, media, footage } = useStudio();
+  const { edit, spec, update, serverAction, time, seek, selection, select, media, footage, showTab } = useStudio();
+  const { workspace } = useWorkspaceContext();
   const [picking, setPicking] = useState(false);
   const [tightening, setTightening] = useState(false);
   const starts = clipStarts(spec);
@@ -163,6 +167,31 @@ export function ClipsPanel() {
         </DndContext>
       ) : (
         <PanelEmpty>No clips yet. Add the footage you filmed — it plays back to back, and you can trim, reorder and tighten it.</PanelEmpty>
+      )}
+
+      {!spec.recipe && !spec.clips.length && (
+        <div className="space-y-2 rounded-lg border p-3">
+          <p className="text-sm font-medium">Or make it from words</p>
+          <p className="text-xs text-muted-foreground">No filming: write it (or ask Claude), and voices made on this computer read it over background footage.</p>
+          <div className="grid gap-2">
+            {(Object.keys(RECIPE_INFO) as RecipeKind[]).map((kind) => (
+              <Button
+                key={kind}
+                variant="outline"
+                className="h-auto justify-start py-2 text-left whitespace-normal"
+                onClick={() => {
+                  update((s) => ({ ...s, recipe: exampleRecipe(kind, workspace.name) }));
+                  showTab('script');
+                }}
+              >
+                <div>
+                  <p>{RECIPE_INFO[kind].label}</p>
+                  <p className="text-xs font-normal text-muted-foreground">{RECIPE_INFO[kind].hint}</p>
+                </div>
+              </Button>
+            ))}
+          </div>
+        </div>
       )}
 
       {selected && <ClipEditor key={selected.id} clip={selected} start={starts[spec.clips.indexOf(selected)]} />}

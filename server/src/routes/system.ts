@@ -18,6 +18,7 @@ import { openSse } from '../lib/sse';
 import { appVersion } from '../lib/version';
 import { findBinary } from '../lib/bin';
 import { clipToolsInstalled, clipToolsInstallStatus, installClipTools } from '../services/cliptools';
+import { ttsInstalled } from '../services/tts';
 import { whisperInstalled } from '../services/media';
 import { installWhisper, whisperInstallStatus } from '../services/whisper';
 import { ensureRenderer, rendererInstalled, rendererInstallStatus } from '../studio/browser';
@@ -77,6 +78,7 @@ export async function systemRoutes(app: FastifyInstance) {
     whisper: whisperInstalled(),
     whisperInstall: whisperInstallStatus(),
     clipTools: clipToolsInstalled(),
+    tts: ttsInstalled(),
     clipToolsInstall: clipToolsInstallStatus(),
     renderer: rendererInstalled(),
     rendererInstall: rendererInstallStatus(),
