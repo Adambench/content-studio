@@ -334,10 +334,11 @@ Phone (PWA) ── Tailscale Funnel ──────────┘     ├─
 8. **Streamlined video pipeline** — planned 2026-10-16; see *Phase 8 build plan*
    - [ ] Step 1 — Every video is a package; nav per kind; Inbox + search instead of the Library
    - [ ] Step 2 — Feedback loop in the package (timestamped notes → Claude edits → re-render → before/after)
-   - [ ] Step 3 — Skills and the creative arsenal
-   - [ ] Step 4 — Creative directions (personal/business) and varied clip edits (clipping)
-   - [ ] Step 5 — One-button finder for clipping pages
-   - [ ] Step 6 — Effects library, local only
+   - [ ] Step 3 — Compute workers on the home PCs
+   - [ ] Step 4 — Skills and the creative arsenal
+   - [ ] Step 5 — Creative directions (personal/business) and varied clip edits (clipping)
+   - [ ] Step 6 — One-button finder for clipping pages
+   - [ ] Step 7 — Effects library, local only
 
 ## Formats decisions (2026-10-16)
 
@@ -781,6 +782,7 @@ Claude using every useful skill so videos differ from other pages (considered ev
 | Arsenal | A catalog (`shared/arsenal.ts`) of everything a video can use — effects, transitions, graphics, scenes, caption looks, formats, sound moves — with when each fits. Direction pitches and clip edits choose from it (and from the skills) and avoid repeating what the page's last videos used, so videos differ |
 | Skills | The chat loads every installed knowledge skill; more are surveyed and installed (`find-skills`). Background prompts paste the parts they need |
 | Effects | Free and local only, rebuilt in code (HyperFrames + FFmpeg): orbit, couch wall, UI world, frame break, digital zoom, phone mockup, checklist, headline wall, zoom-through cut, chart grow, pull-back reveal, green screen, paper cut, doodle boil, vertigo, cover story, glass type; plus paper collage, hand-drawn and film looks. Cut-outs of a person by a local matting model. No paid image/video generation. onetake isn't used (non-commercial licence); Clawd is Anthropic's mascot, so the cartoon style uses my own characters |
+| Compute | Two home PCs on Linux (GTX 1070 + i7-7800X + 32 GB; GTX 1050 Ti + i5-10400F + 16 GB) take the heavy jobs; the laptop app stays the brain (data, UI, Claude, signed-in sites) and its CPU is the fallback. Moving the server to an always-on PC can come later |
 | Brand assets | Not on clipping pages: a page's look (captions, fonts, accent, sounds) is in its settings → Style. On personal and business pages *Brand* sits at the bottom of the nav |
 
 Nav, in working order (Today stays the home across pages; Settings at the bottom):
@@ -805,22 +807,30 @@ box later); a note goes to the package's Claude thread with the time and a frame
 tools), the package re-renders by itself when it's in Review, and shows before/after with the version. Approve /
 reject / schedule live in the package.
 
-**Step 3 — Skills and the arsenal.** Survey and install more skills (video styles, direction, ads/UGC scripting,
+**Step 3 — Compute workers.** A small worker (Node, systemd service) on each home PC, reached over Tailscale and
+paired like the phone (a device token). The laptop's job queue sends heavy jobs to a free worker that has the tool —
+Whisper (faster-whisper on CUDA, int8: Pascal has no fast fp16), Demucs (a PyTorch build that still supports sm_61),
+speaker scan, Kokoro, the person matte, FFmpeg cuts/encodes (NVENC), HyperFrames renders — uploading the inputs
+(or a range of a source), streaming progress and fetching the outputs; resumable, and a lost worker's job goes back
+to the queue (laptop CPU last). Settings → Compute: workers, their GPU, what they can run, an install script
+(`scripts/setup-worker.sh`), a test job. Measure each tool's speed on both cards against the laptop first.
+
+**Step 4 — Skills and the arsenal.** Survey and install more skills (video styles, direction, ads/UGC scripting,
 storytelling), keep licences in mind (personal use only where unlicensed). Allow-list every knowledge skill in the
 chat. `shared/arsenal.ts` + `get_arsenal`; the prompts tell Claude to consider the arsenal for every video and say
 which pieces it chose and why.
 
-**Step 4 — Directions and variety.** Personal/business: `direction.pitch` (one Sonnet call with the playbook and the
+**Step 5 — Directions and variety.** Personal/business: `direction.pitch` (one Sonnet call with the playbook and the
 arsenal) → 2–3 directions on the package; picking one writes the script/edit plan. Clipping: `clip.make` chooses an
 edit direction per clip from the arsenal (hook card style, captions, graphics, transitions, effects) and varies it
 across the page's recent clips.
 
-**Step 5 — Finder.** Campaign discovery (the signed-in window reads Content Rewards' campaign list; rank and screen;
+**Step 6 — Finder.** Campaign discovery (the signed-in window reads Content Rewards' campaign list; rank and screen;
 Today/Find shows them to join), creator sources (channels from the brief, yt-dlp listings, ranked), viral-moment
 matching (YouTube Shorts / TikTok searches for the creator's clips, outliers by views, their transcript found in the
 source), auto research (channels suggested and added), the *Find clips* button with one progress view. Daily.
 
-**Step 6 — Effects library.** The effects above as templates/scenes/edit effects with previews in the editor and in
+**Step 7 — Effects library.** The effects above as templates/scenes/edit effects with previews in the editor and in
 the arsenal; a local person matte (u2net human seg via onnxruntime or HyperFrames' `remove-background`) cached per
 clip for frame break, green screen, vertigo, cover story and couch wall.
 
