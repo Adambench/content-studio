@@ -10,7 +10,7 @@ import { api, apiFetch, errorMessage } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { keys, queryClient, useMessages, usePieceThread, useSettings, useThreads } from '@/lib/queries';
 import type { Thread } from '@/lib/types';
-import { activeThread, composerPrefill, useStore } from '@/lib/ui-state';
+import { activeThread, composerPrefill, outgoingMessage, useStore } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
 import { AssistantParts } from './ChatParts';
 import { UsageMeter } from './UsageMeter';
@@ -46,6 +46,7 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const prefill = useStore(composerPrefill);
+  const outgoing = useStore(outgoingMessage);
 
   useEffect(() => setModel(''), [threadId]);
 
@@ -58,6 +59,13 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
 
   const shown = messages.data?.messages ?? [];
   const busy = !!pending || !!messages.data?.thread.running;
+
+  // A note pinned to a moment of this video goes out as soon as its chat is ready (and Claude is free).
+  useEffect(() => {
+    if (!outgoing || !piece || outgoing.pieceId !== piece.id || !videoChat || !threadId || busy) return;
+    outgoingMessage.set(null);
+    void send(outgoing.text);
+  });
 
   // Keep the newest message in view while Claude writes.
   useEffect(() => {

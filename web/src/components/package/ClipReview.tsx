@@ -29,13 +29,15 @@ function Note({ children, tone = 'amber' }: { children: React.ReactNode; tone?: 
 }
 
 /** The latest finished video, or how its render is going. */
-export function ClipPlayer({ clip, empty }: { clip: Pick<ReviewClip, 'render' | 'rendering'>; empty?: React.ReactNode }) {
-  if (clip.render)
+export function ClipPlayer({ clip, empty, videoRef, show }: { clip: Pick<ReviewClip, 'render' | 'rendering'>; empty?: React.ReactNode; videoRef?: React.Ref<HTMLVideoElement>; show?: { mediaId: string; hasThumb: boolean } }) {
+  const shown = show ?? clip.render;
+  if (shown)
     return (
       <video
-        key={clip.render.mediaId}
-        src={mediaFileUrl(clip.render.mediaId)}
-        poster={clip.render.hasThumb ? mediaThumbUrl(clip.render.mediaId) : undefined}
+        ref={videoRef}
+        key={shown.mediaId}
+        src={mediaFileUrl(shown.mediaId)}
+        poster={shown.hasThumb ? mediaThumbUrl(shown.mediaId) : undefined}
         controls
         playsInline
         preload="metadata"

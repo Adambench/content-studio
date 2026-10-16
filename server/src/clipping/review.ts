@@ -27,12 +27,14 @@ function buildClip(piece: typeof schema.pieces.$inferSelect): ReviewClip {
   const ws = getWorkspace(piece.workspaceId);
   const branch = piece.activeBranchId ? db.select().from(schema.branches).where(eq(schema.branches.id, piece.activeBranchId)).get() : undefined;
   const draft = normalizeDraft(branch?.working);
-  const renderMedia = db
+  const [renderMedia, previousMedia] = db
     .select()
     .from(schema.media)
     .where(and(eq(schema.media.pieceId, piece.id), eq(schema.media.source, 'render'), eq(schema.media.kind, 'video')))
     .orderBy(desc(schema.media.createdAt))
-    .get();
+    .limit(2)
+    .all();
+  const versionOf = (mediaId: string | undefined) => (mediaId ? (db.select({ n: schema.renders.versionNumber }).from(schema.renders).where(eq(schema.renders.mediaId, mediaId)).get()?.n ?? null) : null);
   const lastRender = db.select().from(schema.renders).where(eq(schema.renders.pieceId, piece.id)).orderBy(desc(schema.renders.createdAt)).get();
   const momentRow = db.select().from(schema.moments).where(eq(schema.moments.pieceId, piece.id)).get();
   // A clip's campaign through its moment; a filmed (UGC) video's through its own link.
@@ -62,6 +64,8 @@ function buildClip(piece: typeof schema.pieces.$inferSelect): ReviewClip {
     stage: piece.stage,
     updatedAt: piece.updatedAt,
     render: renderMedia ? { mediaId: renderMedia.id, durationMs: renderMedia.durationMs, width: renderMedia.width, height: renderMedia.height, hasThumb: renderMedia.hasThumb } : null,
+    renderVersion: versionOf(renderMedia?.id),
+    previousRender: previousMedia ? { mediaId: previousMedia.id, hasThumb: previousMedia.hasThumb, version: versionOf(previousMedia.id) } : null,
     rendering,
     moment: momentRow ? toMoment(momentRow, piece.stage) : null,
     campaign: campaign && { id: campaign.id, title: campaign.title, brand: campaign.brand, link: campaign.link, platforms: campaign.platforms },

@@ -89,6 +89,7 @@ When the creator states a lasting preference ("never use emojis", "always end wi
     `## Right now
 Today is ${new Date().toDateString()}.
 ${context.piece?.own ? `This chat belongs to one video, “${context.piece.title}” (id ${context.piece.id}): its package holds the idea, script, footage, edit, renders, captions and posts. Everything said here is about that video unless the creator says otherwise; feedback like "cut this" or "at 0:07…" means its edit.
+A message that starts "Note at m:ss" is the creator's feedback pinned to that moment of the video they are watching (the render named in the note). Look first (view_render a little before, at and after that time), then change the edit with update_edit or tighten_edit (times on the render are times on the edit's timeline), and answer in a line or two saying what you changed. A clip waiting in Review renders again by itself after you change it, so don't call render_edit there; never approve, reject or schedule.
 ` : ''}${
   context.piece
     ? context.piece.view === 'video'

@@ -191,11 +191,11 @@ Claude thread (`chat_threads.piece_id`), docked beside it. Inbox (`media.piece_i
 suggestions; search across packages, files and transcripts. Nav per kind as above; Library and the global Review page
 go (Review → the Clips board's Review column and Today); Brand assets hidden on clipping pages.
 
-**Step 2 — Feedback in the package.** The player takes notes pinned to a time ("0:07 — cut this pause", or a drawn
+**Step 2 — Feedback in the package (built; untried against a real Claude login).** The player takes notes pinned to a time ("0:07 — cut this pause", or a drawn
 box later); a note goes to the package's Claude thread with the time and a frame. Claude changes the edit (studio
 tools), the package re-renders by itself when it's in Review, and shows before/after with the version. Approve /
 reject / schedule live in the package.
-Where things are: the player is `web/src/components/package/VideoPanel.tsx` (`ClipPlayer` in `ClipReview.tsx`); the
+Built: the notes box under the player pins the player's time and sends "Note at m:ss…" to the package chat (`sendToVideoChat`); Claude looks with `view_render`, edits, and `runChat` queues a render when a Review clip's edit head changed; Before/Now toggle from `ReviewClip.previousRender`. Drawn boxes not done. Where things are: the player is `web/src/components/package/VideoPanel.tsx` (`ClipPlayer` in `ClipReview.tsx`); the
 video's chat is `ClaudePanel` (`videoChat`, `usePieceThread`, `send` posts `/threads/:id/messages` with
 `contextPieceId`); edits change through `update_edit` / `tighten_edit` in `server/src/claude/studio-tools.ts`
 (`saveEditVersion`, `listEditVersions`), renders through `queueRender` (`server/src/studio/render.ts`); tools return

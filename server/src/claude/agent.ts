@@ -4,6 +4,9 @@ import type { ChatPart, ChatStreamEvent } from '../../../shared/types';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { HttpError, notFound } from '../lib/http';
+import { REVIEW_STAGE } from '../../../shared/types';
+import { findEditForPiece, listEditVersions } from '../studio/edits';
+import { queueRender } from '../studio/render';
 import { getWorkspace } from '../services/pieces';
 import { baseOptions, resolveModel } from './options';
 import { skillOptions } from './plugin';
@@ -59,6 +62,13 @@ export async function runChat(input: {
   const abort = new AbortController();
   running.set(thread.id, abort);
   input.onEvent({ type: 'start', messageId: assistantId, model });
+
+  // A video in Review shows what the creator approves: when this turn changed its edit, render it again.
+  const editHead = () => {
+    const edit = contextPiece ? findEditForPiece(contextPiece.id) : undefined;
+    return edit ? { edit, version: listEditVersions(edit.id)[0] } : undefined;
+  };
+  const headBefore = editHead()?.version?.id;
 
   const { server, toolNames } = buildTools(ws.id);
   const { tools: skillTools, ...skills } = skillOptions();
@@ -159,6 +169,19 @@ export async function runChat(input: {
     }
   };
 
+  const rerenderForReview = () => {
+    if (!contextPiece || abort.signal.aborted) return;
+    const now_ = editHead();
+    if (!now_?.version || now_.version.id === headBefore || now_.version.author !== 'claude') return;
+    const stage = db.select({ stage: schema.pieces.stage }).from(schema.pieces).where(eq(schema.pieces.id, contextPiece.id)).get()?.stage;
+    if (stage !== REVIEW_STAGE) return;
+    try {
+      queueRender(now_.edit.id, 'claude');
+    } catch {
+      /* already rendering, or nothing to render */
+    }
+  };
+
   try {
     try {
       for await (const m of attempt(thread.sdkSessionId ?? undefined)) handle(m);
@@ -182,6 +205,7 @@ export async function runChat(input: {
     for (const p of parts) if (p.type === 'tool' && p.status === 'running') p.status = abort.signal.aborted ? 'error' : 'done';
     persist();
     running.delete(thread.id);
+    rerenderForReview();
     db.update(schema.chatThreads).set({ updatedAt: now() }).where(eq(schema.chatThreads.id, thread.id)).run();
     emit({ type: 'changed', entity: 'threads', workspaceId: ws.id, id: thread.id });
     input.onEvent({ type: 'done', messageId: assistantId });

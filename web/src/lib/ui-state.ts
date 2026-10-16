@@ -39,6 +39,9 @@ export const activeThread = createStore<Record<string, string>>({}, 'cs.activeTh
 /** Text to drop into the Claude composer (e.g. "Ask Claude about this clip"). */
 export const composerPrefill = createStore<{ text: string; nonce: number } | null>(null);
 
+/** A message for the open video's Claude chat to send right away (a note pinned to a moment). */
+export const outgoingMessage = createStore<{ pieceId: string; text: string } | null>(null);
+
 /** Whether the last request reached the server (the Android app shows a banner when it can't). */
 export const serverReachable = createStore(true);
 
@@ -50,4 +53,10 @@ export function openClaude(prefill?: string) {
   if (window.matchMedia('(min-width: 1024px)').matches) claudeDesktopOpen.set(true);
   else claudeMobileOpen.set(true);
   if (prefill) composerPrefill.set({ text: prefill, nonce: Date.now() });
+}
+
+/** Send a note to a video's own chat and show the chat. */
+export function sendToVideoChat(pieceId: string, text: string) {
+  outgoingMessage.set({ pieceId, text });
+  openClaude();
 }

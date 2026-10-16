@@ -1,3 +1,5 @@
+import { readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import { z } from 'zod';
@@ -21,7 +23,10 @@ import {
 } from '../../../shared/edit';
 import { BUILTIN_SFX, builtinSfxId, SFX_GROUPS } from '../../../shared/sfx';
 import { ASSET_TYPES } from '../../../shared/types';
-import { db, schema } from '../db';
+import { config } from '../config';
+import { db, newId, schema } from '../db';
+import { extractFrames } from '../lib/ffmpeg';
+import { formatTime, mediaPath } from '../services/media';
 import { createEdit, findEditForPiece, listEditVersions, listRenders, saveEditVersion, specMedia, specTranscripts } from '../studio/edits';
 import { queueRender } from '../studio/render';
 import { previewOverlay } from '../studio/preview';
@@ -90,6 +95,8 @@ export function studioToolLabel(name: string, input: Record<string, any>): strin
       return 'Cut the pauses';
     case 'render_edit':
       return 'Started a render';
+    case 'view_render':
+      return 'Watched the rendered video';
     case 'follow_speaker':
       return 'Started reframing on the speaker';
     case 'write_scene':
@@ -417,6 +424,40 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         if (!edit) throw new ToolError('This piece has no video edit yet.');
         const r = queueRender(edit.id, 'claude');
         return ok(`Render of v${r.versionNumber} queued. The creator can watch its progress in the video editor.`);
+      }),
+    ),
+
+    tool(
+      'view_render',
+      'See frames of a piece’s latest finished render, the video the creator is watching. Times are seconds into that video, which are also seconds on the edit’s timeline. ' +
+        'Use it for the creator’s notes pinned to a moment ("0:07 — cut this pause"): look at the frame before changing anything. Note which edit version the render shows (the reply says).',
+      { pieceId: z.string(), atSeconds: z.array(z.number().min(0)).min(1).max(6).describe('Seconds into the video; for a note, a little before it, at it and a little after') },
+      safe(async ({ pieceId, atSeconds }) => {
+        ownPiece(pieceId);
+        const m = db
+          .select()
+          .from(schema.media)
+          .where(and(eq(schema.media.pieceId, pieceId), eq(schema.media.workspaceId, workspaceId), eq(schema.media.source, 'render'), eq(schema.media.kind, 'video')))
+          .orderBy(desc(schema.media.createdAt))
+          .get();
+        if (!m) throw new ToolError('This piece has no finished render yet.');
+        const version = db.select({ n: schema.renders.versionNumber }).from(schema.renders).where(eq(schema.renders.mediaId, m.id)).get()?.n;
+        const duration = (m.durationMs ?? 0) / 1000;
+        const times = atSeconds.map((t) => Math.min(t, Math.max(0, duration - 0.1)));
+        const prefix = join(config.framesDir, newId());
+        const files = await extractFrames(mediaPath(m), times, (i) => `${prefix}-${i}.jpg`);
+        try {
+          const images = await Promise.all(files.map((f) => readFile(f)));
+          const head = findEditForPiece(pieceId) && listEditVersions(findEditForPiece(pieceId)!.id)[0]?.number;
+          return {
+            content: [
+              { type: 'text' as const, text: `Frames at ${times.map(formatTime).join(', ')} of the render of edit v${version ?? '?'} (${formatTime(duration)} long${head && version && head > version ? `; the edit is at v${head} now` : ''}).` },
+              ...images.map((img) => ({ type: 'image' as const, data: img.toString('base64'), mimeType: 'image/jpeg' })),
+            ],
+          };
+        } finally {
+          await Promise.all(files.map((f) => rm(f, { force: true })));
+        }
       }),
     ),
 

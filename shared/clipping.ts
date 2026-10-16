@@ -183,6 +183,10 @@ export type ReviewClip = {
   updatedAt: number;
   /** The latest finished render: what gets approved. */
   render: { mediaId: string; durationMs: number | null; width: number | null; height: number | null; hasThumb: boolean } | null;
+  /** The edit version the latest render shows. */
+  renderVersion: number | null;
+  /** The render before it, for before/after after Claude changes the edit. */
+  previousRender: { mediaId: string; hasThumb: boolean; version: number | null } | null;
   /** A render still going (or the last one, when it failed). */
   rendering: { status: string; progress: number; stage: string; error: string | null } | null;
   moment: Moment | null;
