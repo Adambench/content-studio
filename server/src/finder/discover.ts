@@ -49,12 +49,13 @@ export async function discoverCampaigns() {
   if (!desktopAvailable()) throw new Error('Reading Content Rewards needs the desktop app (it uses the signed-in window).');
   const page = await readPage(DISCOVER_URL, { scrolls: 6 });
   const out = await parsePage<Read>(page, { system: playbook('halal'), what: INSTRUCTIONS, schema: SCHEMA });
-  const have = new Set(db.select({ link: schema.campaigns.link }).from(schema.campaigns).all().map((c) => c.link));
+  const key = (link: string) => canonicalLink(link).replace(/[?#].*$/, '');
+  const have = new Set(db.select({ link: schema.campaigns.link }).from(schema.campaigns).all().flatMap((c) => (c.link ? [key(c.link)] : [])));
   const seen = new Set<string>();
   const items: CampaignLead[] = [];
   for (const c of out.campaigns ?? []) {
     if (!isCampaignLink(c.link) || c.accepting === false) continue;
-    const link = canonicalLink(c.link).replace(/[?#].*$/, '');
+    const link = key(c.link);
     if (have.has(link) || seen.has(link) || c.halal === 'reject') continue;
     seen.add(link);
     const lead = { link, title: c.title, brand: c.brand, ratePer1k: c.ratePer1k, budgetLeft: c.budgetLeft, category: c.category, halal: c.halal, halalNote: c.halalNote };

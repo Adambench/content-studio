@@ -28,6 +28,8 @@ type SettingsShape = {
   submissionsSync: import('../campaigns/submissions').SubmissionsSync;
   /** Channels and playlists each campaign lists videos from (by campaign id), so the finder can list them again. */
   sourceListings: Record<string, string[]>;
+  /** Videos deleted from each campaign (canonical links, by campaign id), so a fresh listing doesn't add them back. */
+  removedSources: Record<string, string[]>;
   /** The finder's last run on each clipping page (by workspace id). */
   finderRuns: Record<string, import('../../../shared/finder').FinderRun>;
   /** Whether each clipping page's finder runs by itself each morning (default on). */

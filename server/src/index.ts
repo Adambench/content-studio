@@ -19,7 +19,7 @@ import { HttpError } from './lib/http';
 import { initPush } from './lib/push';
 import { startScheduler, stopScheduler } from './publish/scheduler';
 import { analyticsRoutes } from './routes/analytics';
-import { authRoutes, cookieSecret, isAuthenticated, mayCall } from './routes/auth';
+import { authRoutes, cookieSecret, isAuthenticated, isWorker } from './routes/auth';
 import { computeRoutes } from './routes/compute';
 import { campaignRoutes, submissionRoutes } from './routes/campaigns';
 import { researchRoutes } from './routes/research';
@@ -85,8 +85,11 @@ app.addHook('onRequest', async (req, reply) => {
 const PUBLIC_API = ['/api/auth/', '/api/health', '/api/share-target', '/api/oauth/', '/api/public/'];
 app.addHook('onRequest', async (req, reply) => {
   if (!req.url.startsWith('/api/') || PUBLIC_API.some((p) => req.url.startsWith(p))) return;
+  if (req.url.startsWith('/api/worker/')) {
+    if (!isWorker(req)) return reply.code(403).send({ error: 'Only a paired compute worker can call this.' });
+    return;
+  }
   if (!isAuthenticated(req)) return reply.code(401).send({ error: 'Sign in first.' });
-  if (!mayCall(req)) return reply.code(403).send({ error: 'A compute worker can only call its own endpoints.' });
 });
 
 app.setErrorHandler((err, req, reply) => {

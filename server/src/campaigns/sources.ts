@@ -120,7 +120,9 @@ export async function ytInfo(url: string, extra: string[] = []): Promise<YtInfo>
 
 /** The videos of a yt-dlp listing, added to the campaign as "not downloaded" (views and dates kept for ranking). */
 function addListed(campaignId: string, info: YtInfo) {
-  const videos = (info.entries ?? []).filter((e) => e?.id && e._type !== 'playlist' && !/Tab$/.test(e.ie_key ?? '') && (e.webpage_url || e.url));
+  // Videos the creator deleted from this campaign don't come back with the next listing.
+  const removed = new Set(getSetting('removedSources')?.[campaignId] ?? []);
+  const videos = (info.entries ?? []).filter((e) => e?.id && e._type !== 'playlist' && !/Tab$/.test(e.ie_key ?? '') && (e.webpage_url || e.url) && !removed.has(canonicalLink(e.webpage_url ?? e.url!)));
   return videos.map((e) =>
     insertSource(campaignId, {
       kind: sourceKindOf(e.webpage_url ?? e.url!),
@@ -291,7 +293,14 @@ export async function startSource(sourceId: string) {
     // A channel link on Kick (or a /live page) opens the stream that's on now, which would never finish downloading.
     if (info.is_live || info.live_status === 'is_live' || info.live_status === 'is_upcoming')
       throw badRequest('That’s a live stream. Add the link of a past broadcast (its VOD) once it has ended.');
-    queueDownload(s, { title: info.title ?? s.title, durationMs: info.duration ? Math.round(info.duration * 1000) : s.durationMs });
+    queueDownload(s, {
+      title: info.title ?? s.title,
+      durationMs: info.duration ? Math.round(info.duration * 1000) : s.durationMs,
+      // Who made it (for the viral search), how it did and when.
+      creator: s.creator ?? info.channel ?? info.uploader ?? null,
+      views: typeof info.view_count === 'number' ? info.view_count : s.views,
+      uploadedAt: s.uploadedAt ?? uploadedAtOf(info),
+    });
     return [getSource(s.id)];
   }
   queueDownload(s);
@@ -352,6 +361,11 @@ export async function deleteSource(id: string) {
   const s = getSource(id);
   stopSource(id);
   db.delete(schema.campaignSources).where(eq(schema.campaignSources.id, id)).run();
+  if (s.link) {
+    const all = getSetting('removedSources') ?? {};
+    const links = all[s.campaignId] ?? [];
+    if (!links.includes(s.link)) setSetting('removedSources', { ...all, [s.campaignId]: [...links, s.link].slice(-500) });
+  }
   const dir = campaignDir(s.campaignId);
   const files = await readdir(dir).catch(() => [] as string[]);
   await Promise.all(files.filter((f) => f.startsWith(id)).map((f) => rm(join(dir, f), { recursive: true, force: true })));

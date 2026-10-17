@@ -2,6 +2,7 @@
 // online the task waits in a queue for it to poll, otherwise (or when the worker is lost, or its run fails) the same
 // command runs here on the laptop. Workers are paired devices of kind 'worker'; everything they may call is under
 // /api/worker/. Tasks live in memory: a restart of the laptop's server makes its callers' jobs run again.
+import { pipeline, Transform } from 'node:stream';
 import { createReadStream, existsSync } from 'node:fs';
 import { rename, rm, stat } from 'node:fs/promises';
 import { eq } from 'drizzle-orm';
@@ -124,26 +125,49 @@ function owned(workerId: string, taskId: string) {
   return t && t.workerId === workerId && t.status === 'running' ? t : null;
 }
 
-export function inputStream(workerId: string, taskId: string, name: string) {
+/**
+ * The worker is still at it: its lease on the task runs on, and it counts as online even though it isn't polling
+ * while it works (Settings shows it, and new work still waits for it).
+ */
+export function keepAlive(workerId: string, taskId: string) {
   const t = owned(workerId, taskId);
+  if (!t) return null;
+  t.leaseUntil = now() + LEASE_MS;
+  const w = workers.get(workerId);
+  if (w) w.lastPoll = now();
+  return t;
+}
+
+/** Passes a transfer through, renewing the task's lease as it goes. */
+export const aliveWhileFlowing = (workerId: string, taskId: string) =>
+  new Transform({
+    transform(chunk, _enc, done) {
+      keepAlive(workerId, taskId);
+      done(null, chunk);
+    },
+  });
+
+export function inputStream(workerId: string, taskId: string, name: string) {
+  const t = keepAlive(workerId, taskId);
   const path = t && TOOL_INFO[t.tool].inputs.includes(name) ? t.files[name] : null;
   if (!t || !path || !existsSync(path)) return null;
-  t.leaseUntil = now() + LEASE_MS;
-  return createReadStream(path);
+  // A big file can take longer than the lease to send.
+  const out = aliveWhileFlowing(workerId, taskId);
+  // A read error ends the response instead of leaving it hanging.
+  pipeline(createReadStream(path), out, () => {});
+  return out;
 }
 
 /** Where an output file is written (a part file beside it until the worker says it is done). */
 export function outputPath(workerId: string, taskId: string, name: string) {
-  const t = owned(workerId, taskId);
+  const t = keepAlive(workerId, taskId);
   if (!t || !TOOL_INFO[t.tool].outputs.includes(name)) return null;
-  t.leaseUntil = now() + LEASE_MS;
   return `${t.files[name]}.part`;
 }
 
 export function progress(workerId: string, taskId: string, text: string) {
-  const t = owned(workerId, taskId);
+  const t = keepAlive(workerId, taskId);
   if (!t) return false;
-  t.leaseUntil = now() + LEASE_MS;
   t.progress = text.slice(0, 200);
   t.onProgress?.(t.progress);
   return true;

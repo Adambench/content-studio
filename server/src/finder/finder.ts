@@ -11,8 +11,9 @@ import { HttpError } from '../lib/http';
 import { getSetting, setSetting } from '../lib/settings';
 import { enqueue, hasPendingJob } from '../jobs/queue';
 import { getWorkspace } from '../services/pieces';
-import { relistChannel, rememberedListings, isListingLink, queueScan, readSourceTranscript, startSource } from '../campaigns/sources';
-import { discoverCampaigns } from './discover';
+import { existsSync } from 'node:fs';
+import { relistChannel, rememberedListings, isListingLink, queueScan, readSourceTranscript, sourceScanPath, startSource } from '../campaigns/sources';
+import { campaignLeads, discoverCampaigns } from './discover';
 import { findViralHints } from './viral';
 
 /** Videos started per campaign per run, and how many may be in progress at once (disk and CPU stay bounded). */
@@ -65,7 +66,7 @@ async function findVideos(campaigns: { id: string; title: string }[]) {
   let started = 0;
   let listed = 0;
   for (const c of campaigns) {
-    for (const link of rememberedListings(c.id).slice(0, 3)) listed += (await relistChannel(c.id, link).catch(() => [])).length;
+    for (const link of rememberedListings(c.id).slice(-3)) listed += (await relistChannel(c.id, link).catch(() => [])).length;
     const rows = db.select().from(schema.campaignSources).where(eq(schema.campaignSources.campaignId, c.id)).all();
     // A channel link added but never listed.
     for (const r of rows.filter((r) => r.status === 'found' && r.link && isListingLink(r.link)).slice(0, 3)) await startSource(r.id).catch(() => []);
@@ -98,7 +99,8 @@ async function waitingSources(campaigns: { id: string }[]) {
     .from(schema.campaignSources)
     .where(and(inArray(schema.campaignSources.campaignId, campaigns.map((c) => c.id)), eq(schema.campaignSources.status, 'ready')))
     .all()
-    .filter((s) => s.fileName && momentCount(s.id) === 0);
+    // A source already scanned that had nothing standing alone isn't scanned (and its viral search run) again.
+    .filter((s) => s.fileName && momentCount(s.id) === 0 && !existsSync(sourceScanPath(s)));
 }
 
 /** The `finder.run` job. */
@@ -118,6 +120,9 @@ export async function runFinder({ workspaceId }: { workspaceId: string }) {
   };
 
   await guarded('campaigns', async () => {
+    // The campaign list is the same for every clipping page: read it at most every few hours (the signed-in window has a daily cap).
+    const last = campaignLeads();
+    if (Date.now() - last.at < 4 * 3600_000) return `${last.items.length} campaign${last.items.length === 1 ? '' : 's'} to look at (checked ${Math.round((Date.now() - last.at) / 60_000)} min ago)`;
     const n = await discoverCampaigns();
     return n ? `${n} new campaign${n === 1 ? '' : 's'} to look at` : 'Nothing new';
   });

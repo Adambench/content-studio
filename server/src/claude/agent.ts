@@ -6,7 +6,7 @@ import { emit } from '../lib/events';
 import { HttpError, notFound } from '../lib/http';
 import { REVIEW_STAGE } from '../../../shared/types';
 import { findEditForPiece, listEditVersions } from '../studio/edits';
-import { queueRender } from '../studio/render';
+import { rerenderLatest } from '../studio/render';
 import { getWorkspace } from '../services/pieces';
 import { baseOptions, resolveModel } from './options';
 import { skillOptions } from './plugin';
@@ -175,11 +175,7 @@ export async function runChat(input: {
     if (!now_?.version || now_.version.id === headBefore || now_.version.author !== 'claude') return;
     const stage = db.select({ stage: schema.pieces.stage }).from(schema.pieces).where(eq(schema.pieces.id, contextPiece.id)).get()?.stage;
     if (stage !== REVIEW_STAGE) return;
-    try {
-      queueRender(now_.edit.id, 'claude');
-    } catch {
-      /* already rendering, or nothing to render */
-    }
+    rerenderLatest(now_.edit.id, 'claude');
   };
 
   try {

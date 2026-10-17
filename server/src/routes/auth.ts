@@ -124,13 +124,14 @@ export function requestSession(req: FastifyRequest): Session | null {
   return session;
 }
 
-export const isAuthenticated = (req: FastifyRequest) => !!requestSession(req);
-
-/** A compute worker may only call its own endpoints (and the health check). */
-export function mayCall(req: FastifyRequest) {
+/** Signed in as the creator (browser, desktop or phone). A compute worker's token never counts: it only reaches /api/worker/. */
+export const isAuthenticated = (req: FastifyRequest) => {
   const session = requestSession(req);
-  return !!session && (session.kind !== 'worker' || req.url.startsWith('/api/worker/'));
-}
+  return !!session && session.kind !== 'worker';
+};
+
+/** A compute worker's own endpoints take only worker tokens. */
+export const isWorker = (req: FastifyRequest) => requestSession(req)?.kind === 'worker';
 
 // ---------- pairing the Android app ----------
 

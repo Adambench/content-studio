@@ -6,7 +6,7 @@ import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { COMPUTE_TOOLS } from '../../../shared/compute';
-import { forgetWorker, finish, inputStream, listWorkers, outputPath, poll, progress } from '../compute/workers';
+import { forgetWorker, finish, inputStream, listWorkers, outputPath, aliveWhileFlowing, poll, progress } from '../compute/workers';
 import { runToolOn } from '../compute/run';
 import { config } from '../config';
 import { db, newId, schema } from '../db';
@@ -96,9 +96,11 @@ export async function computeRoutes(app: FastifyInstance) {
   });
 
   app.put<{ Params: { id: string; name: string } }>('/api/worker/tasks/:id/outputs/:name', async (req) => {
-    const path = outputPath(worker(req).id, req.params.id, req.params.name);
+    const id = worker(req).id;
+    const path = outputPath(id, req.params.id, req.params.name);
     if (!path) throw new HttpError(404, 'No such output.');
-    await pipeline(req.body as NodeJS.ReadableStream, createWriteStream(path));
+    // A big upload can take longer than the lease.
+    await pipeline(req.body as NodeJS.ReadableStream, aliveWhileFlowing(id, req.params.id), createWriteStream(path));
     return { ok: true };
   });
 

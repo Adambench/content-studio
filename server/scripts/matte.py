@@ -43,22 +43,31 @@ def matte(frame_bgr):
     lo, hi = float(pred.min()), float(pred.max())
     # Nobody in the picture: the network still stretches noise to the full range, so a weak peak means an empty mask.
     if hi < 0.35:
-        return np.zeros((height, width), dtype=np.uint8)
+        return np.zeros((mask_h, mask_w), dtype=np.uint8)
     pred = (pred - lo) / max(hi - lo, 1e-6)
-    return cv2.resize((pred * 255).astype(np.uint8), (width, height), interpolation=cv2.INTER_LINEAR)
+    return cv2.resize((pred * 255).astype(np.uint8), (mask_w, mask_h), interpolation=cv2.INTER_LINEAR)
 
 
+# The size of the frames as decoded (a phone video's rotation can swap what the container says), rounded down to even
+# numbers for the encoder; the effect scales the mask to the video anyway.
+ok, first = cap.read()
+if not ok:
+    sys.exit("could not read the video")
+height, width = first.shape[:2]
+mask_w, mask_h = max(2, width - width % 2), max(2, height - height % 2)
 encoder = subprocess.Popen(
-    [args.ffmpeg, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "gray", "-s", f"{width}x{height}", "-r", f"{out_fps:.4f}", "-i", "-",
+    [args.ffmpeg, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "gray", "-s", f"{mask_w}x{mask_h}", "-r", f"{out_fps:.4f}", "-i", "-",
      "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-pix_fmt", "yuv420p", "-movflags", "+faststart", args.out],
     stdin=subprocess.PIPE,
 )
 previous = None
 index = 0
+frame = first
 while True:
-    ok, frame = cap.read()
-    if not ok:
-        break
+    if index > 0:
+        ok, frame = cap.read()
+        if not ok:
+            break
     if index % every == 0:
         mask = matte(frame)
         if previous is not None:
