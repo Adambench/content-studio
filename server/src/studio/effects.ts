@@ -16,10 +16,10 @@ import { probe } from '../lib/ffmpeg';
 import { emit } from '../lib/events';
 import { JobError, enqueue } from '../jobs/queue';
 import { clipToolsInstalled, matteModel } from '../services/cliptools';
-import { adoptFile, getMedia, mediaPath } from '../services/media';
+import { adoptFile, getMedia, mediaPath, readTranscript } from '../services/media';
 import { getPiece } from '../services/pieces';
 import { findEditForPiece, saveEditVersion } from './edits';
-import { queueRender } from './render';
+import { rerenderLatest } from './render';
 import { runTool } from '../compute/run';
 
 const execFile = promisify(execFileCb);
@@ -78,7 +78,13 @@ export async function applyEffect(job: EffectJob) {
       { maxBuffer: 20 * 1024 * 1024, timeout: 30 * 60_000 },
     );
     const label = MATTE_EFFECT_INFO[job.effect].label;
-    const made = await adoptFile(piece.workspaceId, out, `${source.originalName.replace(/\.[^.]+$/, '')} (${label.toLowerCase()}).mp4`, 'video/mp4', { pieceId: job.pieceId, source: 'generated' });
+    // Same length, same sound: the source's words (with the creator's corrections) carry over, so captions stay.
+    const transcript = source.transcriptStatus === 'done' ? await readTranscript(source.id) : null;
+    const made = await adoptFile(piece.workspaceId, out, `${source.originalName.replace(/\.[^.]+$/, '')} (${label.toLowerCase()}).mp4`, 'video/mp4', {
+      pieceId: job.pieceId,
+      source: 'generated',
+      ...(transcript && { transcript }),
+    });
     const probed = await probe(mediaPath(made));
     db.update(schema.media).set({ durationMs: probed.durationMs, width: probed.width, height: probed.height }).where(eq(schema.media.id, made.id)).run();
 
@@ -91,7 +97,7 @@ export async function applyEffect(job: EffectJob) {
     saveEditVersion(edit.id, { author: 'claude', message: `Effect: ${label.toLowerCase()}`, spec });
     emit({ type: 'changed', entity: 'edits', workspaceId: piece.workspaceId, id: edit.id });
     // A clip waiting in Review shows the result by itself, like any change Claude makes there.
-    if (getPiece(job.pieceId).stage === REVIEW_STAGE) await Promise.resolve(queueRender(edit.id, 'claude')).catch(() => {});
+    if (getPiece(job.pieceId).stage === REVIEW_STAGE) rerenderLatest(edit.id, 'claude');
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }

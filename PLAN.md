@@ -131,7 +131,9 @@ versionCode from the tag (`v1.2.3` → 10203).
 - Phase 0 on the platforms' sites, then connect real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
   Listen to the first clips from a source with background music (the music check was only tried on stand-ins).
-- Listen to the built-in SFX and the voices; drop any I don't like.
+- Listen to the built-in SFX (86 now; the 55 added on 2026-10-17 were only checked by measurement) and the voices; drop
+  any I don't like (`server/scripts/make-sfx.py`, `shared/sfx.ts`).
+- Release a new Android build (API version 3): until then the phone app says it's out of date.
 - A format video and a UGC video for real.
 - Research: each page's *What it watches* (or *Find channels for me*), *Run now* once; sign in to TikTok.
 - Settings → Connected sites: sign in to Whop (contentrewards.com), TikTok, Instagram; check each says “Signed in”.
@@ -229,3 +231,23 @@ source), auto research (channels suggested and added), the *Find clips* button w
 **Step 7 — Effects library (first set built).** Done: three new motion-graphic templates (Checklist, Bar chart that grows to the numbers, Headline wall; rendered and looked at); a local person matte (`server/scripts/matte.py`, U²-Net human segmentation via onnxruntime, cached per video as a grey mask video, model downloaded by `setup-tools.sh` — people who installed the clip tools earlier run Install again) and two effects built on it, made with FFmpeg into a new video file the edit's clips swap to: *New background* (blur, dim, colour, picture — the green-screen look) and *Glowing outline* (`shared/effects.ts`, `studio/effects.ts`, job `media.effect`, Claude's `apply_effect`; tried on a real portrait, ~0.25 s per frame on this CPU, so a minute of video takes ~4 min until the home workers). The arsenal lists them. Not done (still planned in the arsenal): orbit, frame break, vertigo, cover story / text behind the person (needs the text drawn as its own layer: FFmpeg's drawtext can't read the bundled woff2 fonts), couch wall, UI world, digital zoom, phone mockup, pull-back reveal, paper cut, doodle boil, glass type, collage/hand-drawn/film looks; no editor UI for the matte effects yet (Claude's tool only). Original plan: The effects above as templates/scenes/edit effects with previews in the editor and in
 the arsenal; a local person matte (u2net human seg via onnxruntime or HyperFrames' `remove-background`) cached per
 clip for frame break, green screen, vertigo, cover story and couch wall.
+
+**Creative range (2026-10-17, built).** Everything the editor and Claude can reach was widened, all as named choices in
+the edit (`shared/looks.ts`, `shared/fonts.ts`) that the arsenal lists and `update_edit` documents: 28 transitions
+(`server/src/studio/transitions.ts`: dips to black/white, zoom in/out, whips, pushes, drop, spin, 3D flip and cube,
+squeeze, stretch, fall away, iris, wipe, diagonal, blinds, shutter, light leak, burn, impact shake, bounce), 20 caption
+presets (`studio/captions.ts`: one word, highlight box, marker, reveal, bounce, impact, neon, outline, retro 3D, glitch,
+comic, handwritten, editorial, typewriter, minimal, arcade…) and a caption font picker over 13 bundled fonts (10 new,
+OFL + Permanent Marker under Apache 2.0), 16 ways for text and images to come in, 8 b-roll layouts (bottom half, side by
+side, circle, inside a phone, tilted photo card…), 12 camera moves per clip (push/pull, pans, drift, snap zoom, impact
+shake, handheld, dutch tilt, pulse), 16 colour looks for the video or one clip (CSS filters on each picture; a
+backdrop-filter layer measured 80 % slower to render, the element filter 33 %), film textures (grain, vignette,
+scanlines, light leak, cinema bars, frame; grain and leak cost ~30 % render time each), 29 motion-graphic templates (17
+new: versus, timeline, countdown, steps, pros/cons, percent ring, star rating, price drop, comment, notification, search
+bar, highlighter, blur reveal, question, definition, news ticker, circle it), 86 built-in sounds (55 new, synthesised,
+non-melodic, pitch-checked; `make-sfx.py --new`), 3 more clip looks for made clips (drift, snap zooms, impact), and
+scenes that can use far more CSS (gradients, gradient text, masks, blend modes, 3D) and GSAP's plugins (TextPlugin,
+count-ups, motion paths, MorphSVG, DrawSVG, Physics2D, CustomWiggle eases, steps/slow eases, stagger from centre/edges).
+The chat also loads `embedded-captions`, `talking-head-recut` and `hyperframes-registry` as idea catalogues. All of it
+rendered through HyperFrames and looked at (contact sheets of every transition, preset, look, layout and animation).
+API version 3 (an older phone app would drop the new fields when saving an edit).

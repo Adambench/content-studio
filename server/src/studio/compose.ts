@@ -12,11 +12,13 @@ import {
   recipeSounds,
   transitionSounds,
   transitionWindows,
-  type CaptionPreset,
+  type BrollOverlay,
   type EditSpec,
-  type OverlayAnimation,
-  type TransitionWindow,
 } from '../../../shared/edit';
+import { BUNDLED_FONTS } from '../../../shared/fonts';
+import { captionCss, captionHtml, CAPTION_STYLE, captionTweens } from './captions';
+import { animateIn, filterCss, lookStyle, motionState, motionStyle, motionTweens, splitChars, textureLayers } from './motion';
+import { LEAK_LAYER, OUTGOING_ON_TOP, transitionTweens, WHITE_LAYER } from './transitions';
 import { builtinSfx } from '../../../shared/sfx';
 import { composeGraphic, graphicsCss, STAT_HELPER } from './graphics';
 import { composeRecipe } from './recipe-layers';
@@ -33,9 +35,10 @@ import type { AssetType, MediaKind, Transcript } from '../../../shared/types';
 export type ComposeMedia = { id: string; kind: MediaKind; assetType: AssetType | null; width: number | null; height: number | null; durationMs: number | null };
 /**
  * Where a moving picture comes from, and the moment in that file the clip starts. `duration` is how long the file is
- * when that isn't the media's own length (a segment cut for the render). Null while it's being prepared.
+ * when that isn't the media's own length (a segment cut for the render); `silent` when the file has no sound at all
+ * (a screen recording). Null while it's being prepared.
  */
-export type ComposeSource = { src: string; mediaStart: number; duration?: number } | null;
+export type ComposeSource = { src: string; mediaStart: number; duration?: number; silent?: boolean } | null;
 
 export type ComposeInput = {
   spec: EditSpec;
@@ -56,21 +59,10 @@ export type ComposeInput = {
   forApp?: boolean;
 };
 
-/** Caption and title fonts that ship with the app (SIL Open Font License). */
-export const BUNDLED_FONTS = [
-  { family: 'Montserrat', weight: '100 900', files: ['montserrat-latin-wght-normal.woff2', 'montserrat-latin-ext-wght-normal.woff2'] },
-  { family: 'Inter', weight: '100 900', files: ['inter-latin-wght-normal.woff2', 'inter-latin-ext-wght-normal.woff2'] },
-  { family: 'Anton', weight: '400', files: ['anton-latin-400-normal.woff2', 'anton-latin-ext-400-normal.woff2'] },
-];
+/** Caption and title fonts that ship with the app (shared/fonts.ts). */
+export { BUNDLED_FONTS };
 const LATIN = 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD';
 const LATIN_EXT = 'U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF';
-
-const CAPTION_STYLE: Record<CaptionPreset, { family: string; weight: number; size: number; line: number }> = {
-  bold: { family: 'Montserrat', weight: 900, size: 78, line: 1.08 },
-  karaoke: { family: 'Montserrat', weight: 800, size: 70, line: 1.1 },
-  clean: { family: 'Inter', weight: 700, size: 56, line: 1.25 },
-  subtitle: { family: 'Inter', weight: 600, size: 50, line: 1.3 },
-};
 
 const VOICE_FX = {
   version: 1,
@@ -116,16 +108,19 @@ export function composeEdit(input: ComposeInput) {
     const { w, h } = sizeOf(clip.mediaId);
     const g = fillGeometry(w, h, W, H, clip.focusX, clip.focusY, clip.zoom);
     const box = `left:${px(g.left)};top:${px(g.top)};width:${px(g.width)};height:${px(g.height)}`;
+    // Camera moves turn about the middle of the frame.
+    const origin = `transform-origin:${px(-g.left + W / 2)} ${px(-g.top + H / 2)}${lookStyle(clip.filter ?? spec.grade.filter)}`;
+    if (clip.motion !== 'none') tl.push(...motionTweens(`#c${i}`, clip.motion, start, len, W, H));
     if (m.kind === 'image') {
-      body.push(`<img id="c${i}" class="clip pic" src="${esc(source.src)}" alt="" ${timing} style="${box};transform-origin:${n(clip.focusX * 100)}% ${n(clip.focusY * 100)}%">`);
+      body.push(`<img id="c${i}" class="clip pic" src="${esc(source.src)}" alt="" ${timing} style="${box};${clip.motion === 'none' ? `transform-origin:${n(clip.focusX * 100)}% ${n(clip.focusY * 100)}%${lookStyle(clip.filter ?? spec.grade.filter)}` : origin}">`);
       // A slow push-in keeps photos alive.
-      tl.push(`tl.fromTo('#c${i}', { scale: 1 }, { scale: 1.07, duration: ${n(len)}, ease: 'none' }, ${n(start)});`);
+      if (clip.motion === 'none') tl.push(`tl.fromTo('#c${i}', { scale: 1 }, { scale: 1.07, duration: ${n(len)}, ease: 'none' }, ${n(start)});`);
       return;
     }
-    const audible = clip.volume > 0 && spec.audio.voiceVolume > 0;
+    const audible = clip.volume > 0 && spec.audio.voiceVolume > 0 && !source.silent;
     anyClipAudio ||= audible;
     const sound = audible ? `data-has-audio="true" data-volume="${n(clip.volume)}" data-audio-group="voice"` : 'muted';
-    body.push(`<video id="c${i}" class="pic" src="${esc(source.src)}"${app.video} ${timing} data-media-start="${n(source.mediaStart)}" ${sound} playsinline preload="auto" style="${box}"></video>`);
+    body.push(`<video id="c${i}" class="pic" src="${esc(source.src)}"${app.video} ${timing} data-media-start="${n(source.mediaStart)}" ${sound} playsinline preload="auto" style="${box};${origin}"></video>`);
   });
   if (!spec.clips.length && input.preview) {
     body.push(`<div id="c0" class="clip ph" data-start="0" data-duration="${n(duration)}" data-track-index="0"><span>Add footage to start editing</span></div>`);
@@ -139,6 +134,8 @@ export function composeEdit(input: ComposeInput) {
     const pics: string[] = [];
     // A photo's slow push-in: where it is at that moment (the outgoing one has finished it).
     const scales = { a: 1, b: 1 };
+    // Where the frame sits inside each copy, for transitions that cut shapes out of it.
+    const frames = { a: { x: 0, y: 0 }, b: { x: 0, y: 0 } };
     for (const [side, i] of [['a', w.index - 1], ['b', w.index]] as const) {
       const clip = spec.clips[i];
       const m = media.get(clip.mediaId);
@@ -146,13 +143,17 @@ export function composeEdit(input: ComposeInput) {
       if (!m || !source) break;
       const { w: sw, h: sh } = sizeOf(clip.mediaId);
       const g = fillGeometry(sw, sh, W, H, clip.focusX, clip.focusY, clip.zoom);
+      frames[side] = { x: -g.left, y: -g.top };
       // Only the frame's part of the picture shows, so pushes and slides don't reveal what the crop leaves out.
       const inset = [-g.top, g.width + g.left - W, g.height + g.top - H, -g.left].map(px).join(' ');
-      const style = `left:${px(g.left)};top:${px(g.top)};width:${px(g.width)};height:${px(g.height)};clip-path:inset(${inset});transform-origin:${n(clip.focusX * 100)}% ${n(clip.focusY * 100)}%;z-index:${side === 'a' ? 6 : 7}`;
+      const z = side === 'a' ? (OUTGOING_ON_TOP.includes(w.type) ? 8 : 6) : 7;
+      // Held where the clip's camera move has it at the cut (its end for the outgoing shot, its start for the next).
+      const held = motionStyle(motionState(clip.motion, side === 'a' ? 1 : 0, W, H)) + lookStyle(clip.filter ?? spec.grade.filter);
+      const style = `left:${px(g.left)};top:${px(g.top)};width:${px(g.width)};height:${px(g.height)};clip-path:inset(${inset});transform-origin:${px(-g.left + W / 2)} ${px(-g.top + H / 2)};z-index:${z}${held}`;
       const timing = `data-start="${n(w.start)}" data-duration="${n(w.end - w.start)}" data-track-index="5"`;
       const id = `t${side}${w.index}`;
       if (m.kind === 'image') {
-        if (side === 'a') scales.a = 1.07;
+        if (side === 'a' && clip.motion === 'none') scales.a = 1.07;
         pics.push(`<img id="${id}" class="clip pic" src="${esc(source.src)}" alt="" ${timing} style="${style};transform:scale(${scales[side]})">`);
         continue;
       }
@@ -165,9 +166,24 @@ export function composeEdit(input: ComposeInput) {
     }
     if (pics.length < 2) continue;
     body.push(`<div id="tk${w.index}" class="clip layer" data-start="${n(w.start)}" data-duration="${n(w.end - w.start)}" data-track-index="5" style="background:#000;z-index:5"></div>`, ...pics);
-    if (w.type === 'flash') body.push(`<div id="tw${w.index}" class="clip layer" data-start="${n(w.start)}" data-duration="${n(w.end - w.start)}" data-track-index="5" style="background:#fff;opacity:0;z-index:8"></div>`);
-    tl.push(...transitionTweens(w, W, H, scales));
+    const layer = `class="clip layer" data-start="${n(w.start)}" data-duration="${n(w.end - w.start)}" data-track-index="5"`;
+    if (WHITE_LAYER.includes(w.type)) body.push(`<div id="tw${w.index}" ${layer} style="background:#fff;opacity:0;z-index:9"></div>`);
+    if (LEAK_LAYER.includes(w.type))
+      body.push(
+        `<div id="tl${w.index}" ${layer} style="z-index:9;overflow:hidden;mix-blend-mode:screen"><div id="tx${w.index}" style="position:absolute;left:${px(-W * 1.4)};top:${px(-H * 0.15)};width:${px(W * 1.4)};height:${px(H * 1.3)};opacity:0;background:radial-gradient(ellipse 45% 35% at 40% 40%, rgba(255,170,70,.95), transparent 70%),radial-gradient(ellipse 35% 30% at 65% 65%, rgba(255,80,120,.75), transparent 70%),radial-gradient(ellipse 30% 45% at 55% 20%, rgba(255,235,150,.8), transparent 70%)"></div></div>`,
+      );
+    const lookOf = (i: number) => {
+      const css = filterCss(spec.clips[i].filter ?? spec.grade.filter);
+      return css === 'none' ? '' : css;
+    };
+    tl.push(...transitionTweens(w, W, H, scales, frames.a, frames.b, { a: lookOf(w.index - 1), b: lookOf(w.index) }));
   }
+
+  // ---------- film textures ----------
+  // (Colour looks are a filter on each picture: clips, the transitions' copies and b-roll.)
+  const textures = textureLayers(spec.grade.textures, duration, W, H, spec.captions.highlight);
+  body.push(...textures.html);
+  tl.push(...textures.tweens);
 
   // ---------- overlays ----------
   const fontStack = (family: string) => (spec.captions.fontMediaId ? `'Brand', '${family}', sans-serif` : `'${family}', sans-serif`);
@@ -193,6 +209,7 @@ export function composeEdit(input: ComposeInput) {
       const sc = composeScene({ ...o, start, end: start + len }, i, sceneCtx);
       body.push(`<div id="o${i}" class="clip layer sc" ${timing} style="z-index:35">${sc.html}</div>`);
       tl.push(...sc.tweens);
+      sc.helpers.forEach((h) => helpers.add(h));
       if (!css.includes(SCENE_CSS_MARK)) css.push(SCENE_CSS_MARK, sceneCss(sceneCtx));
       return;
     }
@@ -203,16 +220,22 @@ export function composeEdit(input: ComposeInput) {
         if (input.preview) body.push(`<div id="o${i}" class="clip ph broll" ${timing}><span>Preparing b-roll…</span></div>`);
         return;
       }
-      const box = o.layout === 'full' ? { x: 0, y: 0, w: W, h: H } : o.layout === 'top' ? { x: 0, y: 0, w: W, h: H / 2 } : { x: W * 0.52, y: H * 0.07, w: W * 0.42, h: W * 0.42 * 1.25 };
+      const box = brollBox(o.layout, W, H);
       const { w, h } = sizeOf(o.mediaId);
       const g = fillGeometry(w, h, box.w, box.h, o.focusX, o.focusY, 1);
       // Clip to the layout's box; the picture itself is sized to fill it.
       const inset = [-g.top, g.width + g.left - box.w, g.height + g.top - box.h, -g.left].map(px).join(' ');
-      const round = o.layout === 'pip' ? ' round 28px' : '';
-      const style = `left:${px(box.x + g.left)};top:${px(box.y + g.top)};width:${px(g.width)};height:${px(g.height)};clip-path:inset(${inset}${round});z-index:10`;
+      const round = box.radius ? ` round ${px(box.radius)}` : '';
+      // Windows pop in about their own middle; a card sits tilted.
+      const origin = `transform-origin:${px(box.w / 2 - g.left)} ${px(box.h / 2 - g.top)}`;
+      const style = `left:${px(box.x + g.left)};top:${px(box.y + g.top)};width:${px(g.width)};height:${px(g.height)};clip-path:inset(${inset}${round});z-index:10;${origin}${box.tilt ? `;rotate:${box.tilt}deg` : ''}${lookStyle(spec.grade.filter)}`;
+      const frame = brollFrame(o.layout, box, i, timing);
+      if (frame) body.push(frame);
       if (m.kind === 'image') body.push(`<img id="o${i}" class="clip pic" src="${esc(source.src)}" alt="" ${timing} style="${style}">`);
       else body.push(`<video id="o${i}" class="pic" src="${esc(source.src)}"${app.video} ${timing} data-media-start="${n(source.mediaStart)}" muted playsinline preload="auto" style="${style}"></video>`);
-      tl.push(`tl.fromTo('#o${i}', { opacity: 0 }, { opacity: 1, duration: 0.15 }, ${n(start)});`);
+      const targets = js(frame ? `#o${i}, #of${i} .bf` : `#o${i}`);
+      if (['full', 'top', 'bottom', 'split'].includes(o.layout)) tl.push(`tl.fromTo(${targets}, { opacity: 0 }, { opacity: 1, duration: 0.15 }, ${n(start)});`);
+      else tl.push(`tl.fromTo(${targets}, { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.3, ease: 'back.out(1.8)' }, ${n(start)});`);
       return;
     }
     if (o.type === 'image') {
@@ -221,12 +244,15 @@ export function composeEdit(input: ComposeInput) {
       body.push(
         `<div id="o${i}" class="clip layer" ${timing} style="z-index:20"><div class="anchor" style="left:${px(o.x * W - width / 2)};top:${px(o.y * H - (width * h) / w / 2)};width:${px(width)}"><img class="oi" src="${esc(input.fileUrl(o.mediaId))}" alt=""></div></div>`,
       );
-      tl.push(...animate(`#o${i} .oi`, o.animation, start, len));
+      tl.push(...animateIn(`#o${i} .oi`, o.animation, start, len));
       return;
     }
     const y = o.position === 'top' ? 0.15 : o.position === 'center' ? 0.5 : 0.8;
-    body.push(`<div id="o${i}" class="clip layer t-${o.style}" ${timing}><div class="line" style="top:${px(y * H)}"><div class="oi">${accent(esc(o.text)).replace(/\n/g, '<br>')}</div></div></div>`);
-    tl.push(...animate(`#o${i} .oi`, o.animation, start, len));
+    let text = accent(esc(o.text)).replace(/\n/g, '<br>');
+    const chars = o.animation === 'typewriter' ? [...o.text.replace(/[*\s]/g, '')].length : 0;
+    if (chars) text = splitChars(text);
+    body.push(`<div id="o${i}" class="clip layer t-${o.style}" ${timing}><div class="line" style="top:${px(y * H)}"><div class="oi">${text}</div></div></div>`);
+    tl.push(...animateIn(`#o${i} .oi`, o.animation, start, len, chars));
   });
 
   // ---------- format video (a story's card, a conversation, two characters) ----------
@@ -242,38 +268,12 @@ export function composeEdit(input: ComposeInput) {
   const words = timelineWords(spec, input.transcripts);
   if (spec.captions.enabled && words.length) {
     const c = spec.captions;
-    const style = CAPTION_STYLE[c.preset];
     const pages = captionPages(words, c, duration);
     pages.forEach((p, i) => {
-      const spans = p.words.map((w, j) => `<span class="w" id="p${i}w${j}">${esc(c.preset === 'bold' ? w.text.replace(/[,.;:]+$/, '') : w.text)}</span>`).join(' ');
-      body.push(`<div id="p${i}" class="clip layer cap" data-start="${n(p.start)}" data-duration="${n(p.end - p.start)}" data-track-index="3"><div class="line"><div class="ci">${spans}</div></div></div>`);
-      if (c.preset === 'bold') tl.push(`tl.fromTo('#p${i} .ci', { scale: 0.86 }, { scale: 1, duration: 0.14, ease: 'back.out(3)' }, ${n(p.start)});`);
-      if (c.preset === 'clean') tl.push(`tl.fromTo('#p${i} .ci', { opacity: 0 }, { opacity: 1, duration: 0.1 }, ${n(p.start)});`);
-      if (c.preset === 'bold' || c.preset === 'karaoke') {
-        p.words.forEach((w, j) => {
-          const on = c.preset === 'bold' ? { color: c.highlight, scale: 1.1 } : { color: c.highlight, opacity: 1 };
-          const off = c.preset === 'bold' ? { color: c.color, scale: 1 } : { color: c.color, opacity: 1 };
-          tl.push(`tl.set('#p${i}w${j}', ${js(on)}, ${n(w.start)});`);
-          const next = p.words[j + 1];
-          if (next) tl.push(`tl.set('#p${i}w${j}', ${js(off)}, ${n(next.start)});`);
-        });
-      }
+      body.push(`<div id="p${i}" class="clip layer cap" data-start="${n(p.start)}" data-duration="${n(p.end - p.start)}" data-track-index="3"><div class="line"><div class="ci">${captionHtml(c.preset, p, i)}</div></div></div>`);
+      tl.push(...captionTweens(c.preset, c, p, i));
     });
-    css.push(`
-.cap { z-index: 40; }
-.cap .line { top: ${px(c.position * H)}; }
-.cap .ci { font-family: ${fontStack(style.family)}; font-weight: ${style.weight}; font-size: ${px(style.size * c.size)}; line-height: ${style.line}; color: ${c.color};
-  text-transform: ${c.uppercase ? 'uppercase' : 'none'}; max-width: ${c.preset === 'subtitle' ? 88 : 84}%; }
-.cap .w { display: inline-block; margin: 0 ${c.preset === 'bold' || c.preset === 'karaoke' ? '0.07em' : '0'}; }
-${
-  c.preset === 'bold'
-    ? `.cap .w { -webkit-text-stroke: 0.16em #000; paint-order: stroke fill; text-shadow: 0 0.05em 0.14em rgba(0,0,0,.55); }`
-    : c.preset === 'karaoke'
-      ? `.cap .w { opacity: .5; -webkit-text-stroke: 0.12em #000; paint-order: stroke fill; }`
-      : c.preset === 'clean'
-        ? `.cap .ci { background: rgba(0,0,0,.62); padding: .22em .55em; border-radius: .38em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }`
-        : `.cap .ci { text-shadow: 0 2px 4px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.6); }`
-}`);
+    css.push(captionCss(c.preset, c, fontStack(c.font ?? CAPTION_STYLE[c.preset].family), H));
   }
 
   // ---------- watermark ----------
@@ -373,6 +373,8 @@ ${body.join('\n')}
 </div>
 <script>
 window.__timelines = window.__timelines || {};
+// GSAP's plugins (all loaded from the app's own copy): eases, typing, paths, shapes, physics.
+gsap.registerPlugin(...[window.CustomEase, window.CustomWiggle, window.CustomBounce, window.TextPlugin, window.MotionPathPlugin, window.MorphSVGPlugin, window.DrawSVGPlugin, window.Physics2DPlugin].filter(Boolean));
 const tl = gsap.timeline({ paused: true });
 ${[...helpers].join('\n')}
 ${tl.join('\n')}
@@ -394,94 +396,47 @@ document.querySelectorAll('video').forEach((v) => v.addEventListener('loadeddata
   return { html, duration };
 }
 
-/**
- * GSAP for one transition: `#ta<i>` is the outgoing shot, `#tb<i>` the incoming one (on top), `#tw<i>` the white of a
- * flash. Everything is seek-safe: fromTo with explicit start states, no randomness.
- */
-function transitionTweens(w: TransitionWindow, W: number, H: number, scales: { a: number; b: number }) {
-  const a = js(`#ta${w.index}`);
-  const b = js(`#tb${w.index}`);
-  const both = js(`#ta${w.index}, #tb${w.index}`);
-  const s = n(w.start);
-  const m = n(w.at);
-  const half = w.at - w.start;
-  const d = n(w.end - w.start);
-  const h = n(half);
-  const { a: sa, b: sb } = scales;
-  // The incoming shot shows from the cut on (for the transitions that hand over at the middle).
-  const showB = `tl.fromTo(${b}, { opacity: 0 }, { opacity: 1, duration: 0.001 }, ${m});`;
-  switch (w.type) {
-    case 'fade':
-      return [`tl.fromTo(${b}, { opacity: 0 }, { opacity: 1, duration: ${d}, ease: 'sine.inOut' }, ${s});`];
-    case 'dip':
-      return [`tl.fromTo(${a}, { opacity: 1 }, { opacity: 0, duration: ${h}, ease: 'power1.in' }, ${s});`, `tl.fromTo(${b}, { opacity: 0 }, { opacity: 1, duration: ${h}, ease: 'power1.out' }, ${m});`];
-    case 'flash': {
-      const white = js(`#tw${w.index}`);
-      return [
-        `tl.fromTo(${white}, { opacity: 0 }, { opacity: 0.95, duration: ${h}, ease: 'power2.in' }, ${s});`,
-        `tl.fromTo(${a}, { filter: 'brightness(1)' }, { filter: 'brightness(2.4)', duration: ${h}, ease: 'power2.in' }, ${s});`,
-        showB,
-        `tl.fromTo(${b}, { filter: 'brightness(2.4)' }, { filter: 'brightness(1)', duration: ${h}, ease: 'power2.out' }, ${m});`,
-        `tl.to(${white}, { opacity: 0, duration: ${h}, ease: 'power2.out' }, ${m});`,
-      ];
+/** Where a b-roll layout puts the picture, its corner rounding and tilt. */
+function brollBox(layout: BrollOverlay['layout'], W: number, H: number) {
+  switch (layout) {
+    case 'full':
+      return { x: 0, y: 0, w: W, h: H, radius: 0, tilt: 0 };
+    case 'top':
+      return { x: 0, y: 0, w: W, h: H / 2, radius: 0, tilt: 0 };
+    case 'bottom':
+      return { x: 0, y: H / 2, w: W, h: H / 2, radius: 0, tilt: 0 };
+    case 'split':
+      return { x: 0, y: 0, w: W / 2, h: H, radius: 0, tilt: 0 };
+    case 'pip':
+      return { x: W * 0.52, y: H * 0.07, w: W * 0.42, h: W * 0.42 * 1.25, radius: 28, tilt: 0 };
+    case 'circle': {
+      const size = W * 0.38;
+      return { x: W * 0.56, y: H * 0.07, w: size, h: size, radius: size / 2, tilt: 0 };
     }
-    case 'zoom':
-      return [
-        `tl.fromTo(${a}, { scale: ${sa}, filter: 'blur(0px)' }, { scale: ${n(sa * 1.6)}, filter: 'blur(14px)', duration: ${h}, ease: 'power3.in' }, ${s});`,
-        showB,
-        `tl.fromTo(${b}, { scale: ${n(sb * 1.5)}, filter: 'blur(14px)' }, { scale: ${sb}, filter: 'blur(0px)', duration: ${h}, ease: 'power3.out' }, ${m});`,
-      ];
-    case 'whip':
-      return [
-        `tl.fromTo(${a}, { x: 0 }, { x: ${-W}, duration: ${d}, ease: 'power4.inOut' }, ${s});`,
-        `tl.fromTo(${b}, { x: ${W} }, { x: 0, duration: ${d}, ease: 'power4.inOut' }, ${s});`,
-        `tl.fromTo(${both}, { filter: 'blur(0px)' }, { filter: 'blur(18px)', duration: ${h}, ease: 'power2.in' }, ${s});`,
-        `tl.to(${both}, { filter: 'blur(0px)', duration: ${h}, ease: 'power2.out' }, ${m});`,
-      ];
-    case 'slide':
-      return [
-        `tl.fromTo(${a}, { y: 0 }, { y: ${-H}, duration: ${d}, ease: 'power3.inOut' }, ${s});`,
-        `tl.fromTo(${b}, { y: ${H} }, { y: 0, duration: ${d}, ease: 'power3.inOut' }, ${s});`,
-        `tl.fromTo(${both}, { filter: 'blur(0px)' }, { filter: 'blur(6px)', duration: ${h}, ease: 'power2.in' }, ${s});`,
-        `tl.to(${both}, { filter: 'blur(0px)', duration: ${h}, ease: 'power2.out' }, ${m});`,
-      ];
-    case 'blur':
-      return [
-        `tl.fromTo(${a}, { filter: 'blur(0px)' }, { filter: 'blur(26px)', duration: ${n(half * 1.3)}, ease: 'sine.in' }, ${s});`,
-        `tl.fromTo(${b}, { opacity: 0, filter: 'blur(26px)' }, { opacity: 1, filter: 'blur(0px)', duration: ${n(half * 1.4)}, ease: 'sine.out' }, ${n(w.end - half * 1.4)});`,
-      ];
-    case 'glitch': {
-      // A fixed stutter: the shots jump sideways, skew and shift colour, the incoming one taking over halfway.
-      const steps = [
-        { x: -46, skew: 8, hue: 90, on: 'a' },
-        { x: 34, skew: -6, hue: -60, on: 'a' },
-        { x: -18, skew: 12, hue: 160, on: 'b' },
-        { x: 52, skew: -10, hue: -120, on: 'a' },
-        { x: -30, skew: 5, hue: 40, on: 'b' },
-        { x: 14, skew: -3, hue: 0, on: 'b' },
-      ];
-      const step = (w.end - w.start) / (steps.length + 1);
-      const out = [`tl.fromTo(${b}, { opacity: 0 }, { opacity: 0, duration: 0.001 }, ${s});`];
-      steps.forEach((st, k) => {
-        const t = n(w.start + step * (k + 0.5));
-        const target = st.on === 'a' ? a : b;
-        out.push(`tl.set(${b}, { opacity: ${st.on === 'b' ? 1 : 0} }, ${t});`);
-        out.push(`tl.set(${target}, { x: ${st.x}, skewX: ${st.skew}, filter: 'hue-rotate(${st.hue}deg) contrast(1.6) saturate(1.8)' }, ${t});`);
-      });
-      out.push(`tl.set(${b}, { opacity: 1, x: 0, skewX: 0, filter: 'none' }, ${n(w.end - step / 2)});`);
-      return out;
+    case 'phone': {
+      const w = W * 0.56;
+      const h = Math.min(H * 0.72, w * 2.05);
+      return { x: (W - w) / 2, y: (H - h) / 2, w, h, radius: w * 0.09, tilt: 0 };
+    }
+    case 'card': {
+      const w = W * 0.72;
+      const h = Math.min(H * 0.55, w * 1.15);
+      return { x: (W - w) / 2, y: H * 0.42 - h / 2, w, h, radius: 6, tilt: -4 };
     }
   }
 }
 
-function animate(target: string, kind: OverlayAnimation, start: number, len: number) {
-  const out: string[] = [];
-  const t = js(target);
-  if (kind === 'pop') out.push(`tl.fromTo(${t}, { scale: 0.6, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.28, ease: 'back.out(2.2)' }, ${n(start)});`);
-  if (kind === 'fade') out.push(`tl.fromTo(${t}, { opacity: 0 }, { opacity: 1, duration: 0.3 }, ${n(start)});`);
-  if (kind === 'slide') out.push(`tl.fromTo(${t}, { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: 'power3.out' }, ${n(start)});`);
-  if (kind !== 'none' && len > 0.6) out.push(`tl.to(${t}, { opacity: 0, duration: 0.2 }, ${n(start + len - 0.2)});`);
-  return out;
+/** The phone's body or the card's white border, behind (card) or over (phone) the picture. */
+function brollFrame(layout: BrollOverlay['layout'], box: ReturnType<typeof brollBox>, i: number, timing: string) {
+  if (layout === 'phone') {
+    const bezel = box.w * 0.035;
+    return `<div id="of${i}" class="clip layer" ${timing} style="z-index:11"><div class="bf" style="position:absolute;left:${px(box.x - bezel)};top:${px(box.y - bezel)};width:${px(box.w + bezel * 2)};height:${px(box.h + bezel * 2)};border:${px(bezel)} solid #0b0b0d;border-radius:${px(box.radius + bezel)};box-sizing:border-box;box-shadow:0 30px 80px rgba(0,0,0,.55), inset 0 0 0 2px #2a2a2e;transform-origin:50% 50%"><div style="position:absolute;left:50%;top:${px(bezel * 0.6)};width:${px(box.w * 0.3)};height:${px(bezel * 1.1)};margin-left:${px(-box.w * 0.15)};background:#0b0b0d;border-radius:${px(bezel)}"></div></div></div>`;
+  }
+  if (layout === 'card') {
+    const pad = box.w * 0.04;
+    return `<div id="of${i}" class="clip layer" ${timing} style="z-index:9"><div class="bf" style="position:absolute;left:${px(box.x - pad)};top:${px(box.y - pad)};width:${px(box.w + pad * 2)};height:${px(box.h + pad * 3.2)};background:#fafaf7;border-radius:8px;box-shadow:0 24px 60px rgba(0,0,0,.5);transform-origin:${px(box.w / 2 + pad)} ${px(box.h / 2 + pad)};rotate:${box.tilt}deg"></div></div>`;
+  }
+  return null;
 }
 
 /** Nasheed volume lane (clip-relative time) that dips under speech. */

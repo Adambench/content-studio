@@ -91,7 +91,7 @@ function backgroundClips(sources: { id: string; seconds: number | null; image: b
     const room = src.image || !src.seconds ? 0 : Math.max(0, src.seconds - len);
     const start = room > 1 ? (hash % Math.floor(room * 10)) / 10 : 0;
     hash = (hash * 1103515245 + 12345) >>> 0;
-    clips.push({ id: newId().slice(0, 10), mediaId: src.id, in: start, out: Math.round((start + len) * 1000) / 1000, focusX: 0.5, focusY: 0.5, zoom: 1, volume: 0, transition: null });
+    clips.push({ id: newId().slice(0, 10), mediaId: src.id, in: start, out: Math.round((start + len) * 1000) / 1000, focusX: 0.5, focusY: 0.5, zoom: 1, volume: 0, transition: null, motion: 'none', filter: null });
     left -= len;
   }
   return clips;

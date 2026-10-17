@@ -11,7 +11,7 @@ import { getMedia, mediaPath } from '../services/media';
 import { ensureRenderer } from './browser';
 import { BUNDLED_FONTS, composeEdit, type ComposeMedia } from './compose';
 import { getEdit } from './edits';
-import { gsapPath, runWorker } from './render';
+import { GSAP_FILES, gsapFilePath, runWorker } from './render';
 
 const PREVIEW_FPS = 10;
 
@@ -62,7 +62,7 @@ async function run(editId: string, overlayId: string, times?: number[]) {
       files.set(id, name);
     }
     for (const f of BUNDLED_FONTS.flatMap((f) => f.files)) await copyFile(join(config.assetsDir, 'fonts', f), join(dir, 'fonts', f));
-    await copyFile(gsapPath(), join(dir, 'gsap.min.js'));
+    for (const f of GSAP_FILES) await copyFile(gsapFilePath(f), join(dir, f));
     const { html } = composeEdit({
       spec: { ...mini, captions: { ...mini.captions, fontMediaId: spec.captions.fontMediaId } },
       media,
@@ -71,7 +71,7 @@ async function run(editId: string, overlayId: string, times?: number[]) {
       brollSource: () => null,
       fileUrl: (id) => `media/${files.get(id) ?? id}`,
       fontUrl: (file) => `fonts/${file}`,
-      scripts: ['gsap.min.js'],
+      scripts: GSAP_FILES,
       preview: false,
     });
     // Silence, so the render has no sound effects to mix (they'd only slow it down).

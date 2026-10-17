@@ -12,6 +12,7 @@ import {
   type OverlayAnimation,
   type SceneOverlay,
 } from '@shared/edit';
+import { BROLL_LAYOUT_INFO, BROLL_LAYOUTS, OVERLAY_ANIMATION_INFO } from '@shared/looks';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -23,7 +24,7 @@ import { useStudio } from './context';
 import { ChoiceSelect, Field, PanelEmpty, preciseClock, SecondsField, SliderField } from './controls';
 import { MediaPicker } from './MediaPicker';
 
-const ANIMATION_LABELS: Record<OverlayAnimation, string> = { pop: 'Pop in', fade: 'Fade in', slide: 'Slide up', none: 'None' };
+const ANIMATION_LABELS = Object.fromEntries(OVERLAY_ANIMATIONS.map((a) => [a, OVERLAY_ANIMATION_INFO[a].label])) as Record<OverlayAnimation, string>;
 
 /** What a row in the list says about an overlay. */
 export function overlayName(o: EditOverlay, mediaName: (id: string) => string | undefined) {
@@ -210,7 +211,7 @@ function OverlayEditor({ overlay }: { overlay: EditOverlay }) {
           <p className="truncate text-xs text-muted-foreground">{media.get(overlay.mediaId)?.originalName}</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Layout">
-              <ChoiceSelect label="Layout" value={overlay.layout} onChange={(layout) => set({ layout })} options={[{ value: 'full', label: 'Full screen' }, { value: 'top', label: 'Top half' }, { value: 'pip', label: 'Picture in picture' }]} />
+              <ChoiceSelect label="Layout" value={overlay.layout} onChange={(layout) => set({ layout })} options={BROLL_LAYOUTS.map((l) => ({ value: l, label: BROLL_LAYOUT_INFO[l].label }))} />
             </Field>
             {media.get(overlay.mediaId)?.kind === 'video' && <SecondsField label="Start in clip at" value={overlay.in} onChange={(v) => set({ in: v })} max={(media.get(overlay.mediaId)?.durationMs ?? 0) / 1000 || undefined} />}
           </div>
@@ -230,6 +231,9 @@ function OverlayEditor({ overlay }: { overlay: EditOverlay }) {
   );
 }
 
+
+/** Templates whose main words are a sentence or more, edited in a text box rather than a one-line field. */
+const LONG_TEXT = new Set<GraphicTemplate>(['quote', 'kinetic', 'comment', 'question', 'highlight', 'reveal', 'versus']);
 
 /** A template's own words and settings; each template uses only some of them (GRAPHIC_INFO). */
 function GraphicFields({ overlay, set }: { overlay: GraphicOverlay; set: (patch: Partial<GraphicOverlay>) => void }) {
@@ -252,7 +256,7 @@ function GraphicFields({ overlay, set }: { overlay: GraphicOverlay; set: (patch:
       )}
       {info.fields.text && (
         <Field label={info.fields.text}>
-          {overlay.template === 'quote' || overlay.template === 'kinetic' ? (
+          {LONG_TEXT.has(overlay.template) ? (
             <Textarea value={text} onChange={(e) => setText(e.target.value)} onBlur={() => text !== overlay.text && set({ text: text.trim() })} rows={2} />
           ) : (
             <Input value={text} onChange={(e) => setText(e.target.value)} onBlur={() => text !== overlay.text && set({ text: text.trim() })} className="h-8" />

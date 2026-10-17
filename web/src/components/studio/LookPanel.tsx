@@ -3,9 +3,12 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { applyTemplate, EDIT_FORMATS, templateFromEdit, type EditFormat, type Watermark } from '@shared/edit';
+import { FILTER_LOOK_INFO, FILTER_LOOKS, TEXTURE_INFO, type FilterLook, type Textures } from '@shared/looks';
 import { useWorkspaceContext } from '@/components/WorkspaceLayout';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { api, errorMessage } from '@/lib/api';
 import { keys, queryClient } from '@/lib/queries';
 import { cn } from '@/lib/utils';
@@ -19,6 +22,8 @@ export function LookPanel() {
   const luts = assets.filter((m) => m.assetType === 'lut');
   const logos = assets.filter((m) => m.kind === 'image');
   const setWatermark = (patch: Partial<Watermark>) => update((s) => ({ ...s, watermark: { ...s.watermark, ...patch } }));
+  const setTextures = (patch: Partial<Textures>) => update((s) => ({ ...s, grade: { ...s.grade, textures: { ...s.grade.textures, ...patch } } }));
+  const tx = spec.grade.textures;
 
   async function saveTemplate() {
     try {
@@ -50,6 +55,41 @@ export function LookPanel() {
               </button>
             );
           })}
+        </div>
+      </section>
+
+      <section className="space-y-3 border-t pt-4">
+        <h3 className="text-sm font-medium">Colour look</h3>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {FILTER_LOOKS.map((look) => (
+            <button
+              key={look}
+              type="button"
+              title={FILTER_LOOK_INFO[look].hint}
+              onClick={() => update((s) => ({ ...s, grade: { ...s.grade, filter: look as FilterLook } }))}
+              className={cn('overflow-hidden rounded-lg border text-left hover:bg-accent/60', spec.grade.filter === look && 'border-brand/60 bg-brand-soft')}
+            >
+              <span className="block h-8 bg-[linear-gradient(135deg,#f59e0b,#ef4444_35%,#3b82f6_70%,#10b981)]" style={{ filter: FILTER_LOOK_INFO[look].css }} />
+              <span className="block px-2 py-1 text-xs font-medium">{FILTER_LOOK_INFO[look].label}</span>
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">{FILTER_LOOK_INFO[spec.grade.filter].hint}. A clip can have its own look (Clips tab).</p>
+      </section>
+
+      <section className="space-y-4 border-t pt-4">
+        <h3 className="text-sm font-medium">Textures</h3>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {(['grain', 'vignette', 'scanlines', 'leak'] as const).map((k) => (
+            <SliderField key={k} label={TEXTURE_INFO[k].label} value={tx[k]} min={0} max={1} format={(v) => (v === 0 ? 'Off' : `${Math.round(v * 100)}%`)} onChange={(v) => setTextures({ [k]: v })} />
+          ))}
+          <SliderField label={TEXTURE_INFO.border.label} value={tx.border} min={0} max={0.06} step={0.005} format={(v) => (v === 0 ? 'Off' : `${Math.round(v * 1080)} px`)} onChange={(border) => setTextures({ border })} />
+          <div className="flex items-center justify-between gap-3 self-end pb-1">
+            <Label htmlFor="look-letterbox" className="text-xs">
+              {TEXTURE_INFO.letterbox.label}
+            </Label>
+            <Switch id="look-letterbox" checked={tx.letterbox} onCheckedChange={(letterbox) => setTextures({ letterbox })} />
+          </div>
         </div>
       </section>
 

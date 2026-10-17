@@ -46,6 +46,11 @@ const CHAT_SKILLS = [
   'gsap-performance',
   'hyperframes-keyframes',
   'hyperframes-core',
+  // Ideas to borrow, not tools to run: caption looks (a catalogue of 35 styles), overlay packaging for talking heads,
+  // and the registry's named looks (glitch, film grain, charts, maps…) to rebuild with the studio's own pieces.
+  'embedded-captions',
+  'talking-head-recut',
+  'hyperframes-registry',
 ];
 
 const manifest = join(config.pluginDir, '.claude-plugin/plugin.json');

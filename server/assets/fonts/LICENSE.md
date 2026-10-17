@@ -1,12 +1,24 @@
 # Bundled fonts
 
-Caption and title fonts for the video studio, subset to Latin and Latin Extended (from Fontsource).
+Caption, title and scene fonts for the video studio, subset to Latin and Latin Extended (from Fontsource).
 
 - Montserrat — Copyright 2011 The Montserrat Project Authors (https://github.com/JulietaUla/Montserrat)
 - Inter — Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
 - Anton — Copyright 2020 The Anton Project Authors (https://github.com/googlefonts/AntonFont)
+- Bebas Neue — Copyright 2019 The Bebas Neue Project Authors (https://github.com/dharmatype/Bebas-Neue)
+- Oswald — Copyright 2016 The Oswald Project Authors (https://github.com/googlefonts/OswaldFont)
+- Playfair Display — Copyright 2017 The Playfair Display Project Authors (https://github.com/clauseggers/Playfair-Display), with Reserved Font Name "Playfair Display"
+- DM Serif Display — Copyright 2014-2017 Adobe Systems Incorporated, with Reserved Font Name 'Source'; Copyright 2019 Google LLC
+- Caveat — Copyright 2014 The Caveat Project Authors (https://github.com/googlefonts/caveat)
+- Bangers — Copyright 2010 The Bangers Project Authors (https://github.com/googlefonts/bangers)
+- Fredoka — Copyright 2016 The Fredoka Project Authors (https://github.com/hafontia/Fredoka-One)
+- JetBrains Mono — Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+- Press Start 2P — Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with Reserved Font Name "Press Start 2P"
+- Permanent Marker (Latin only) — Copyright Font Diner, licensed under the Apache License, Version 2.0
+  (https://www.apache.org/licenses/LICENSE-2.0)
 
-All three are licensed under the SIL Open Font License, Version 1.1:
+All except Permanent Marker are licensed under the SIL Open Font License, Version 1.1:
+
 
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
 -----------------------------------------------------------

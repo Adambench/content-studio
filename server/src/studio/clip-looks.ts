@@ -1,5 +1,6 @@
 import { desc, eq, like, and } from 'drizzle-orm';
 import { TRANSITION_INFO, type EditClip, type EditOverlay, type EditSpec, type OverlayAnimation, type TransitionType } from '../../../shared/edit';
+import type { ClipMotion } from '../../../shared/looks';
 import { builtinSfxId } from '../../../shared/sfx';
 import { db, schema } from '../db';
 
@@ -13,8 +14,10 @@ export type ClipLook = {
   label: string;
   /** The hook card: big text at the top, or a full-screen word slam. */
   hook: { kind: 'title'; animation: OverlayAnimation; position: 'top' | 'center'; sound: string } | { kind: 'slam' };
-  /** Punch the picture in on every other clip (the jump cuts the tightening makes). */
+  /** Punch the picture in on every other clip (the jump cuts the tightening makes), on top of any reframing zoom. */
   punchIn: number | null;
+  /** A camera move on every other clip. */
+  motion?: ClipMotion;
   /** The first cut after the hook: a transition (with its sound) or a plain whoosh. */
   firstCut: { transition: TransitionType } | { sound: string; volume: number } | null;
 };
@@ -25,6 +28,9 @@ export const CLIP_LOOKS: ClipLook[] = [
   { id: 'word-slam', label: 'Word slam', hook: { kind: 'slam' }, punchIn: null, firstCut: { sound: 'whoosh-soft', volume: 0.3 } },
   { id: 'whip', label: 'Whip pan', hook: { kind: 'title', animation: 'slide', position: 'top', sound: 'swish' }, punchIn: null, firstCut: { transition: 'whip' } },
   { id: 'soft', label: 'Soft', hook: { kind: 'title', animation: 'fade', position: 'center', sound: 'pop' }, punchIn: 1.08, firstCut: { transition: 'blur' } },
+  { id: 'drift', label: 'Drift', hook: { kind: 'title', animation: 'drop', position: 'top', sound: 'thud' }, punchIn: null, motion: 'drift', firstCut: { transition: 'push' } },
+  { id: 'snap', label: 'Snap zooms', hook: { kind: 'title', animation: 'zoom', position: 'top', sound: 'hit' }, punchIn: null, motion: 'punch', firstCut: { transition: 'flash' } },
+  { id: 'impact', label: 'Impact', hook: { kind: 'title', animation: 'shake', position: 'center', sound: 'slam' }, punchIn: 1.1, firstCut: { transition: 'shake' } },
 ];
 
 const TAG = /· look: ([a-z-]+)$/;
@@ -68,7 +74,9 @@ export function applyLook(spec: EditSpec, look: ClipLook, hookCard: string, tota
       next.audio.sfx.push({ id: rid(), mediaId: builtinSfxId(look.hook.sound), at: 0.05, volume: 0.6 });
     }
   }
-  if (look.punchIn) next.clips.forEach((c: EditClip, i) => (c.zoom = i % 2 ? look.punchIn! : Math.max(1, c.zoom)));
+  // Every other clip punches in from however it's framed already (a reframed wide shot keeps its framing).
+  if (look.punchIn) next.clips.forEach((c: EditClip, i) => i % 2 && (c.zoom = Math.min(3, Math.round(c.zoom * look.punchIn! * 1000) / 1000)));
+  if (look.motion) next.clips.forEach((c: EditClip, i) => i % 2 && (c.motion = look.motion!));
   // The first jump cut after the hook: sparing, under the voice.
   let t = 0;
   for (let i = 0; i < next.clips.length - 1; i++) {

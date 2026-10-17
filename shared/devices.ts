@@ -3,9 +3,10 @@
 /**
  * Bumped when the API changes in a way an older app can't work with (or the other way round). `/api/health` reports
  * it and the app compares it with its own. 2: edits have a nasheed track instead of music (an older app saving an edit
- * would drop it) and the music asset type is gone.
+ * would drop it) and the music asset type is gone. 3: edits have camera moves, colour looks, textures, caption fonts and
+ * many more transitions, caption presets, graphics, layouts and animations (an older app saving an edit would drop them).
  */
-export const API_VERSION = 2;
+export const API_VERSION = 3;
 
 export type Health = { ok: true; api: number; version: string };
 

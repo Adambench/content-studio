@@ -21,6 +21,7 @@ import {
   type EditClip,
   type TransitionType,
 } from '@shared/edit';
+import { CLIP_MOTION_INFO, CLIP_MOTIONS, FILTER_LOOK_INFO, FILTER_LOOKS, type FilterLook } from '@shared/looks';
 import { RECIPE_INFO, type RecipeKind } from '@shared/recipe';
 import { builtinSfx, builtinSfxId } from '@shared/sfx';
 import { useWorkspaceContext } from '@/components/WorkspaceLayout';
@@ -36,7 +37,7 @@ import { api, errorMessage, mediaThumbUrl } from '@/lib/api';
 import type { Media } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useStudio } from './context';
-import { Field, PanelEmpty, preciseClock, SecondsField, SliderField } from './controls';
+import { ChoiceSelect, Field, PanelEmpty, preciseClock, SecondsField, SliderField } from './controls';
 import { MediaPicker } from './MediaPicker';
 
 export const clipFromMedia = (m: Media): EditClip => ({
@@ -49,6 +50,8 @@ export const clipFromMedia = (m: Media): EditClip => ({
   zoom: 1,
   volume: 1,
   transition: null,
+  motion: 'none',
+  filter: null,
 });
 
 export function ClipsPanel() {
@@ -296,6 +299,19 @@ function ClipEditor({ clip, start }: { clip: EditClip; start: number }) {
       {m && (mismatch || clip.zoom > 1) && <FocusPicker media={m} clip={clip} onChange={(focusX, focusY) => set({ focusX, focusY })} />}
 
       <SliderField label="Zoom" value={clip.zoom} min={1} max={2} step={0.01} format={(v) => `${v.toFixed(2)}×`} onChange={(zoom) => set({ zoom })} />
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Camera move" hint={CLIP_MOTION_INFO[clip.motion].hint}>
+          <ChoiceSelect label="Camera move" value={clip.motion} onChange={(motion) => set({ motion })} options={CLIP_MOTIONS.map((v) => ({ value: v, label: CLIP_MOTION_INFO[v].label }))} />
+        </Field>
+        <Field label="Colour look" hint={clip.filter ? FILTER_LOOK_INFO[clip.filter].hint : 'Same as the whole video (Look tab)'}>
+          <ChoiceSelect
+            label="Colour look"
+            value={clip.filter ?? VIDEO_LOOK}
+            onChange={(v) => set({ filter: v === VIDEO_LOOK ? null : (v as FilterLook) })}
+            options={[{ value: VIDEO_LOOK, label: 'The video’s look' }, ...FILTER_LOOKS.map((v) => ({ value: v, label: FILTER_LOOK_INFO[v].label }))]}
+          />
+        </Field>
+      </div>
       {m?.kind === 'video' && <SliderField label="Clip sound" value={clip.volume} min={0} max={2} step={0.05} format={(v) => (v === 0 ? 'Muted' : `${Math.round(v * 100)}%`)} onChange={(volume) => set({ volume })} />}
 
       {spec.clips[0]?.id !== clip.id && (
@@ -316,6 +332,7 @@ function ClipEditor({ clip, start }: { clip: EditClip; start: number }) {
 }
 
 const CUT = 'cut';
+const VIDEO_LOOK = 'video';
 
 /** How the clip comes in from the one before: a straight cut or a transition, its length and its sound. */
 function TransitionEditor({ value, onChange, onAll }: { value: ClipTransition | null; onChange: (t: ClipTransition | null) => void; onAll: () => void }) {

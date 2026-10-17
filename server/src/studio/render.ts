@@ -25,7 +25,20 @@ import { makeProxy, proxyPath } from './proxy';
 import type { WorkerMessage, WorkerRequest } from './worker';
 
 const require = createRequire(import.meta.url);
-export const gsapPath = () => require.resolve('gsap/dist/gsap.min.js');
+/** GSAP and the plugins compositions may use (scenes: eases, typing, motion paths, morphing, drawing, physics). */
+export const GSAP_FILES = [
+  'gsap.min.js',
+  'CustomEase.min.js',
+  'CustomWiggle.min.js',
+  'CustomBounce.min.js',
+  'EasePack.min.js',
+  'TextPlugin.min.js',
+  'MotionPathPlugin.min.js',
+  'MorphSVGPlugin.min.js',
+  'DrawSVGPlugin.min.js',
+  'Physics2DPlugin.min.js',
+];
+export const gsapFilePath = (file: string) => require.resolve(`gsap/dist/${file}`);
 export const runtimePath = () => require.resolve('@hyperframes/core/runtime');
 /** One of the app's own sound effects (shared/sfx.ts). */
 export const builtinSfxPath = (name: string) => join(config.assetsDir, 'sfx', `${name}.ogg`);
@@ -70,6 +83,32 @@ export function queueRender(editId: string, by: Author) {
   enqueue('video.render', { renderId: id }, { maxAttempts: 1 });
   emit({ type: 'changed', entity: 'renders', workspaceId: edit.workspaceId, id, pieceId: edit.pieceId });
   return getRender(id);
+}
+
+/** Edits whose newest version renders as soon as the render running now stops (it was of an older version). */
+const rerenderAfter = new Map<string, Author>();
+
+/**
+ * Render the edit as it is now, for Review: a render of an older version that's still waiting is dropped, and one
+ * that's running is stopped and followed by this one, so Review never ends up on a version that's out of date.
+ */
+export function rerenderLatest(editId: string, by: Author) {
+  const busy = db
+    .select()
+    .from(schema.renders)
+    .where(and(eq(schema.renders.editId, editId), inArray(schema.renders.status, ['queued', 'running'])))
+    .get();
+  if (busy?.status === 'queued') setRender(busy, { status: 'cancelled', stage: 'Cancelled', finishedAt: now() });
+  else if (busy && running.has(busy.id)) {
+    rerenderAfter.set(editId, by);
+    running.get(busy.id)!.abort();
+    return;
+  }
+  try {
+    queueRender(editId, by);
+  } catch {
+    /* nothing to render */
+  }
 }
 
 export function cancelRender(id: string) {
@@ -148,7 +187,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
       const fileEnd = info.durationMs ? info.durationMs / 1000 : Infinity;
       const to = Math.min(fileEnd, cut.start + cut.duration + (cut.after ?? 0));
       await cutSegment({ file: mediaPath(m), out: join(dir, 'media', `${name}.mp4`), info, start: from, duration: to - from, zoom: cut.zoom, audio: cut.audio && info.hasAudio, box, lut, cwd: dir, signal: abort.signal });
-      return { src: `media/${name}.mp4`, mediaStart: Math.round((cut.start - from) * 1000) / 1000, duration: to - from };
+      return { src: `media/${name}.mp4`, mediaStart: Math.round((cut.start - from) * 1000) / 1000, duration: to - from, silent: !info.hasAudio };
     };
     const clipSources: ComposeSource[] = [];
     const handles = transitionHandles(spec);
@@ -184,7 +223,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
       fileNames.set(m.id, name);
     }
     for (const f of BUNDLED_FONTS.flatMap((f) => f.files)) await copyFile(join(config.assetsDir, 'fonts', f), join(dir, 'fonts', f));
-    await copyFile(gsapPath(), join(dir, 'gsap.min.js'));
+    for (const f of GSAP_FILES) await copyFile(gsapFilePath(f), join(dir, f));
 
     const { html } = composeEdit({
       spec,
@@ -194,7 +233,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
       brollSource: (i) => brollSources[i] ?? null,
       fileUrl: (id) => `media/${fileNames.get(id) ?? id}`,
       fontUrl: (file) => `fonts/${file}`,
-      scripts: ['gsap.min.js'],
+      scripts: GSAP_FILES,
       preview: false,
     });
     await writeFile(join(dir, 'index.html'), html);
@@ -265,6 +304,11 @@ export async function renderJob({ renderId }: { renderId: string }) {
   } finally {
     running.delete(r.id);
     await rm(dir, { recursive: true, force: true }).catch(() => {});
+    const by = rerenderAfter.get(r.editId);
+    if (by) {
+      rerenderAfter.delete(r.editId);
+      rerenderLatest(r.editId, by);
+    }
   }
 }
 

@@ -8,17 +8,43 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { api, errorMessage } from '@/lib/api';
+import { BUNDLED_FONTS } from '@shared/fonts';
+import { api, errorMessage, fileUrl } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useStudio } from './context';
-import { ColorField, Field, MediaSelect, SliderField } from './controls';
+import { ChoiceSelect, ColorField, Field, MediaSelect, SliderField } from './controls';
 
-const PRESET_LOOK: Record<CaptionPreset, string> = {
-  bold: 'font-black uppercase tracking-tight [-webkit-text-stroke:1px_black]',
-  karaoke: 'font-extrabold uppercase',
-  clean: 'font-semibold rounded bg-black/70 px-1.5',
-  subtitle: 'font-medium text-xs',
+/** How each preset's name is drawn on its button: a hint of the real look, in its own font. */
+const PRESET_LOOK: Record<CaptionPreset, { className: string; font?: string; accent?: boolean }> = {
+  bold: { className: 'font-black uppercase tracking-tight [-webkit-text-stroke:1px_black]', accent: true },
+  karaoke: { className: 'font-extrabold uppercase', accent: true },
+  clean: { className: 'font-semibold rounded bg-black/70 px-1.5' },
+  subtitle: { className: 'font-medium text-xs' },
+  pop: { className: 'font-black uppercase text-base [-webkit-text-stroke:1px_black]' },
+  box: { className: 'font-black uppercase rounded px-1 text-black', accent: true },
+  marker: { className: 'font-extrabold underline decoration-4 underline-offset-[-2px]', accent: true },
+  reveal: { className: 'font-black uppercase opacity-80' },
+  bounce: { className: 'font-black uppercase italic' },
+  impact: { className: 'uppercase text-base', font: 'Anton' },
+  neon: { className: 'font-extrabold uppercase', accent: true },
+  outline: { className: 'font-black uppercase text-transparent [-webkit-text-stroke:1px_white]' },
+  retro: { className: 'uppercase', font: 'Anton' },
+  glitch: { className: 'font-black uppercase [text-shadow:2px_0_#ff0046,-2px_0_#00ebff]' },
+  comic: { className: 'uppercase -rotate-2 inline-block tracking-wide', font: 'Bangers' },
+  handwritten: { className: '', font: 'Permanent Marker' },
+  editorial: { className: 'font-bold italic', font: 'Playfair Display' },
+  typewriter: { className: 'text-xs rounded bg-black/70 px-1', font: 'JetBrains Mono' },
+  minimal: { className: 'font-medium lowercase text-xs' },
+  arcade: { className: 'uppercase text-[9px]', font: 'Press Start 2P' },
 };
+
+/** The app's own fonts, loaded from the server so the buttons show them. */
+function StudioFonts() {
+  const css = BUNDLED_FONTS.map((f) => `@font-face { font-family: 'Studio ${f.family}'; font-weight: ${f.weight}; font-display: swap; src: url(${fileUrl(`/studio/fonts/${f.files[0]}`)}) format('woff2'); }`).join('\n');
+  return <style>{css}</style>;
+}
+
+const PRESET_FONT = 'preset';
 
 export function CaptionsPanel() {
   const { edit, spec, update, assets } = useStudio();
@@ -38,6 +64,7 @@ export function CaptionsPanel() {
 
       {c.enabled && (
         <>
+          <StudioFonts />
           <div className="grid grid-cols-2 gap-2">
             {CAPTION_PRESETS.map((p) => (
               <button
@@ -46,7 +73,15 @@ export function CaptionsPanel() {
                 onClick={() => set({ preset: p, ...(p !== c.preset ? CAPTION_PRESET_DEFAULTS[p] : {}) })}
                 className={cn('rounded-lg border p-2.5 text-left transition-colors hover:bg-accent/60', c.preset === p && 'border-brand/60 bg-brand-soft')}
               >
-                <span className={cn('text-sm', PRESET_LOOK[p])} style={{ color: p === 'bold' || p === 'karaoke' ? c.highlight : undefined }}>
+                <span
+                  className={cn('text-sm', PRESET_LOOK[p].className)}
+                  style={{
+                    color: PRESET_LOOK[p].accent && p !== 'box' ? c.highlight : undefined,
+                    backgroundColor: p === 'box' ? c.highlight : undefined,
+                    textShadow: p === 'neon' ? `0 0 6px ${c.highlight}, 0 0 12px ${c.highlight}` : p === 'retro' ? `2px 2px 0 ${c.highlight}` : undefined,
+                    fontFamily: PRESET_LOOK[p].font ? `'Studio ${PRESET_LOOK[p].font}', sans-serif` : undefined,
+                  }}
+                >
                   {CAPTION_PRESET_LABELS[p].label}
                 </span>
                 <p className="mt-1 text-xs text-muted-foreground">{CAPTION_PRESET_LABELS[p].hint}</p>
@@ -68,9 +103,19 @@ export function CaptionsPanel() {
             <ColorField label="Accent" value={c.highlight} onChange={(highlight) => set({ highlight })} />
           </div>
 
-          <Field label="Font" hint={fonts.length ? undefined : 'Import fonts in Brand assets'}>
-            <MediaSelect value={c.fontMediaId} onChange={(fontMediaId) => set({ fontMediaId })} options={fonts} noneLabel="The style’s font" />
-          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Font" hint={c.fontMediaId ? 'Your brand font is used instead' : undefined}>
+              <ChoiceSelect
+                label="Font"
+                value={c.font ?? PRESET_FONT}
+                onChange={(v) => set({ font: v === PRESET_FONT ? null : v })}
+                options={[{ value: PRESET_FONT, label: 'The style’s font' }, ...BUNDLED_FONTS.map((f) => ({ value: f.family, label: f.label }))]}
+              />
+            </Field>
+            <Field label="Brand font" hint={fonts.length ? undefined : 'Import fonts in Brand assets'}>
+              <MediaSelect value={c.fontMediaId} onChange={(fontMediaId) => set({ fontMediaId })} options={fonts} noneLabel="None" />
+            </Field>
+          </div>
         </>
       )}
 

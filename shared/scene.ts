@@ -1,3 +1,5 @@
+import { FONT_FAMILIES } from './fonts';
+
 // A scene: a motion graphic Claude designs itself (with the HyperFrames and GSAP skills' know-how), stored as data, not
 // code. Elements are boxes, text, shapes and library images styled with an allow-list of CSS; tweens are GSAP tweens
 // written as JSON. The server builds the HTML and the timeline from them with everything escaped, so a scene can't
@@ -36,9 +38,14 @@ export type SceneTween = {
   from?: Record<string, string | number>;
   to: Record<string, string | number>;
   ease?: string;
-  stagger?: number;
+  /** Seconds between targets, or where the stagger starts from ("center", "end", "edges" or an index). */
+  stagger?: number | { each: number; from: 'start' | 'center' | 'end' | 'edges' | number };
   repeat?: number;
+  /** Seconds to wait between repeats. */
+  repeatDelay?: number;
   yoyo?: boolean;
+  /** Thrown like a real object (Physics2D): speed in px/s, direction in degrees, gravity in px/s². */
+  physics?: { velocity: number; angle: number; gravity?: number; friction?: number };
 };
 
 export type SceneSpec = {
@@ -113,15 +120,110 @@ const STYLE_PROPS: Record<string, boolean> = {
   'stroke-linecap': false,
   'stroke-linejoin': false,
   fill: false,
+  perspective: true,
+  'perspective-origin': false,
+  'transform-style': false,
+  'backface-visibility': false,
+  transform: false,
+  rotate: false,
+  scale: false,
+  translate: false,
+  'mix-blend-mode': false,
+  isolation: false,
+  'backdrop-filter': false,
+  'background-image': false,
+  'background-size': false,
+  'background-position': false,
+  'background-repeat': false,
+  'background-clip': false,
+  '-webkit-background-clip': false,
+  'background-blend-mode': false,
+  '-webkit-text-fill-color': false,
+  'text-decoration': false,
+  'text-decoration-color': false,
+  'text-decoration-thickness': true,
+  'text-underline-offset': true,
+  'word-spacing': true,
+  'text-indent': true,
+  'text-wrap': false,
+  'word-break': false,
+  'font-variant-numeric': false,
+  outline: false,
+  'outline-offset': true,
+  'aspect-ratio': false,
+  'object-fit': false,
+  'object-position': false,
+  'mask-image': false,
+  '-webkit-mask-image': false,
+  visibility: false,
+  flex: false,
+  'flex-grow': false,
+  'flex-shrink': false,
+  'flex-basis': true,
+  'align-self': false,
+  'align-content': false,
+  'justify-self': false,
+  'place-items': false,
+  'place-content': false,
+  'grid-template-columns': false,
+  'grid-template-rows': false,
+  'grid-column': false,
+  'grid-row': false,
+  'row-gap': true,
+  'column-gap': true,
+  'border-top': false,
+  'border-bottom': false,
+  'border-left': false,
+  'border-right': false,
+  'border-top-left-radius': true,
+  'border-top-right-radius': true,
+  'border-bottom-left-radius': true,
+  'border-bottom-right-radius': true,
+  'stroke-dasharray': false,
+  'stroke-opacity': false,
+  'fill-opacity': false,
 };
 
-/** The fonts a scene can use: the app's own, or the brand font set in the captions. */
-export const SCENE_FONTS = ['Montserrat', 'Inter', 'Anton', 'Brand'] as const;
+/** The fonts a scene can use: the app's own (shared/fonts.ts), or the brand font set in the captions. */
+export const SCENE_FONTS = [...FONT_FAMILIES, 'Brand'];
 
-/** GSAP properties a tween may animate (transforms, opacity, colours, filters, clipping, line drawing). */
+/**
+ * GSAP properties a tween may animate (transforms in 2D and 3D, opacity, colours, size and place, filters, clipping,
+ * line drawing), plus the plugins the page loads: `text` types text out (TextPlugin), `innerText` counts a number up,
+ * `motionPath` moves along SVG path data or a path element ("#id"), `morphSVG` turns a path into another ("#id" or
+ * path data), `drawSVG` draws part of a path ("0% 100%").
+ */
 const TWEEN_PROPS = new Set([
   'x',
   'y',
+  'z',
+  'rotationX',
+  'rotationY',
+  'rotationZ',
+  'transformPerspective',
+  'width',
+  'height',
+  'left',
+  'top',
+  'right',
+  'bottom',
+  'fontSize',
+  'letterSpacing',
+  'lineHeight',
+  'boxShadow',
+  'textShadow',
+  'backgroundPosition',
+  'backgroundSize',
+  'backgroundImage',
+  'strokeDasharray',
+  'strokeWidth',
+  'borderWidth',
+  'padding',
+  'text',
+  'innerText',
+  'motionPath',
+  'morphSVG',
+  'drawSVG',
   'xPercent',
   'yPercent',
   'scale',
@@ -144,7 +246,10 @@ const TWEEN_PROPS = new Set([
   'transformOrigin',
 ]);
 
-const EASE = /^(none|linear|(power[0-4]|back|elastic|bounce|circ|expo|sine)(\.(in|out|inOut))?(\(\d+(\.\d+)?(,\s*\d+(\.\d+)?)?\))?)$/;
+const EASE =
+  /^(none|linear|(power[0-4]|back|elastic|bounce|circ|expo|sine|quad|cubic|quart|quint|strong)(\.(in|out|inOut))?(\(\d+(\.\d+)?(,\s*\d+(\.\d+)?)?\))?|steps\(\d{1,2}\)|slow(\(\d(\.\d+)?(,\s*\d(\.\d+)?)?\))?|expoScale\(\d+(\.\d+)?,\d+(\.\d+)?\)|(wiggle|shake)-\d{1,2})$/;
+/** Wiggle eases a scene names (`wiggle-6` eases out, `shake-6` shakes evenly), made with CustomWiggle on the page. */
+export const sceneWiggles = (spec: Pick<SceneSpec, 'tweens'>) => [...new Set(spec.tweens.map((t) => t.ease).filter((e): e is string => !!e && /^(wiggle|shake)-\d+$/.test(e)))];
 const ID = /^[a-z][a-z0-9-]{0,30}$/;
 const PATH = /^[MmLlHhVvCcSsQqTtAaZz0-9.,\s-]+$/;
 /** Plain CSS values only: no urls, no imports, no escapes, nothing that ends a declaration or a tag. */
@@ -196,6 +301,8 @@ function cleanVars(input: unknown, problems: string[], where: string): Record<st
       continue;
     }
     if (typeof value === 'number' && Number.isFinite(value)) out[key] = round(value);
+    else if (typeof value === 'string' && (key === 'motionPath' || key === 'morphSVG') && (/^#[a-z][a-z0-9-]{0,30}$/.test(value) || (PATH.test(value) && value.length <= 2000))) out[key] = value;
+    else if (typeof value === 'string' && key === 'text' && value.length <= 300 && !/[<>]/.test(value)) out[key] = value;
     else if (typeof value === 'string' && value.length <= 120 && SAFE_VALUE.test(value) && !BAD_VALUE.test(value)) out[key] = value;
     else problems.push(`${where}: ${key} value "${String(value).slice(0, 40)}" isn't allowed`);
   }
@@ -266,6 +373,16 @@ export function normalizeScene(input: unknown, length: number, problems: string[
     if (typeof t.ease === 'string' && EASE.test(t.ease.replace(/\s/g, ''))) tween.ease = t.ease.replace(/\s/g, '');
     else if (t.ease !== undefined) problems.push(`${where}: unknown ease "${String(t.ease).slice(0, 30)}"`);
     if (typeof t.stagger === 'number') tween.stagger = round(num(t.stagger, 0, 0, 2));
+    else if (t.stagger && typeof t.stagger === 'object') {
+      const st = t.stagger as Record<string, unknown>;
+      const from = typeof st.from === 'number' ? Math.round(num(st.from, 0, 0, 200)) : (['start', 'center', 'end', 'edges'] as const).find((f) => f === st.from) ?? 'start';
+      tween.stagger = { each: round(num(st.each, 0.05, 0, 2)), from };
+    }
+    if (typeof t.repeatDelay === 'number') tween.repeatDelay = round(num(t.repeatDelay, 0, 0, 5));
+    if (t.physics && typeof t.physics === 'object') {
+      const ph = t.physics as Record<string, unknown>;
+      tween.physics = { velocity: round(num(ph.velocity, 600, 0, 6000)), angle: round(num(ph.angle, -90, -360, 360)), gravity: round(num(ph.gravity, 1200, -6000, 6000)), friction: round(num(ph.friction, 0, 0, 1)) };
+    }
     // Finite repeats only: the render has to know when the scene ends.
     if (typeof t.repeat === 'number') tween.repeat = Math.round(num(t.repeat, 0, 0, 20));
     if (t.yoyo === true) tween.yoyo = true;

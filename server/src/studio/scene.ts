@@ -1,7 +1,7 @@
 // Builds a scene overlay (shared/scene.ts) into composition HTML and GSAP tweens. Everything that reaches the page is
 // escaped or comes from normalizeScene's allow-lists, so a scene is markup and data only, never script.
 import { graphicWords, type SceneOverlay } from '../../../shared/edit';
-import type { SceneElement } from '../../../shared/scene';
+import { sceneWiggles, type SceneElement, type SceneTween } from '../../../shared/scene';
 import { accent, esc, js, n } from './html';
 
 export type SceneContext = { W: number; H: number; color: string; font: (family: string) => string; fileUrl: (mediaId: string) => string };
@@ -70,11 +70,38 @@ export function composeScene(o: SceneOverlay, i: number, ctx: SceneContext) {
         return `#${domId(i, id)}${part === 'words' ? ' .sw' : part === 'chars' ? ' .sch' : ''}`;
       })
       .join(', ');
-    const vars = { ...t.to, duration: t.duration, ...(t.ease && { ease: t.ease }), ...(t.stagger && { stagger: t.stagger }), ...(t.repeat && { repeat: t.repeat }), ...(t.yoyo && { yoyo: true }) };
+    const to = withIds(t.to, i);
+    const vars = {
+      ...to,
+      duration: t.duration,
+      ...(t.ease && { ease: t.ease }),
+      ...(t.stagger && { stagger: t.stagger }),
+      ...(t.repeat && { repeat: t.repeat }),
+      ...(t.repeatDelay && { repeatDelay: t.repeatDelay }),
+      ...(t.yoyo && { yoyo: true }),
+      // A count-up shows whole numbers.
+      ...('innerText' in to && { snap: { innerText: 1 } }),
+      ...(t.physics && { physics2D: t.physics }),
+    };
     const at = n(o.start + t.at);
-    return t.from ? `tl.fromTo(${js(targets)}, ${js(t.from)}, ${js(vars)}, ${at});` : `tl.to(${js(targets)}, ${js(vars)}, ${at});`;
+    return t.from ? `tl.fromTo(${js(targets)}, ${js(withIds(t.from, i))}, ${js(vars)}, ${at});` : `tl.to(${js(targets)}, ${js(vars)}, ${at});`;
   });
-  return { html, tweens };
+  // Wiggle eases are made on the page before the timeline uses them.
+  const helpers = sceneWiggles(o).map((name) => {
+    const [kind, count] = name.split('-');
+    return `if (window.CustomWiggle) CustomWiggle.create(${js(name)}, { wiggles: ${Number(count)}, type: ${js(kind === 'shake' ? 'uniform' : 'easeOut')} });`;
+  });
+  return { html, tweens, helpers };
+}
+
+/** A path tween names another element of the scene as "#id": point it at that element on the page. */
+function withIds(vars: SceneTween['to'], i: number) {
+  const out = { ...vars };
+  for (const key of ['motionPath', 'morphSVG'] as const) {
+    const v = out[key];
+    if (typeof v === 'string' && v.startsWith('#')) out[key] = `#${domId(i, v.slice(1))}`;
+  }
+  return out;
 }
 
 /** Defaults scene elements build on (once per edit with scenes). */

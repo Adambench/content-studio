@@ -1,6 +1,8 @@
 // The video studio's edit document, shared by the server (compile + render), the web editor and Claude's tools.
 // An edit is plain JSON; the server compiles it to a HyperFrames composition for preview and rendering.
 
+import { bundledFamily } from './fonts';
+import { BROLL_LAYOUTS, CLIP_MOTIONS, FILTER_LOOKS, NO_TEXTURES, OVERLAY_ANIMATIONS, type BrollLayout, type ClipMotion, type FilterLook, type OverlayAnimation, type Textures } from './looks';
 import { normalizeRecipe, type Recipe } from './recipe';
 import { normalizeScene, SCENE_MAX_SECONDS, type SceneSpec } from './scene';
 import { builtinSfxId } from './sfx';
@@ -35,22 +37,75 @@ export type EditClip = {
   volume: number;
   /** How this clip comes in after the one before it (ignored on the first clip); null = a straight cut. */
   transition: ClipTransition | null;
+  /** A camera move over the clip (shared/looks.ts). */
+  motion: ClipMotion;
+  /** This clip's colour look; null = the video's (grade.filter). */
+  filter: FilterLook | null;
 };
 
 // ---------- transitions ----------
 
-export const TRANSITIONS = ['fade', 'dip', 'flash', 'zoom', 'whip', 'slide', 'blur', 'glitch'] as const;
+export const TRANSITIONS = [
+  'fade',
+  'dip',
+  'dip-white',
+  'flash',
+  'zoom',
+  'zoom-out',
+  'whip',
+  'whip-up',
+  'slide',
+  'push',
+  'drop',
+  'blur',
+  'glitch',
+  'spin',
+  'flip',
+  'cube',
+  'squeeze',
+  'stretch',
+  'gravity',
+  'iris',
+  'wipe',
+  'diagonal',
+  'blinds',
+  'shutter',
+  'light-leak',
+  'burn',
+  'shake',
+  'bounce',
+] as const;
 export type TransitionType = (typeof TRANSITIONS)[number];
 /** Each one's default length and the built-in sound it plays when `sound` is on (non-musical, shared/sfx.ts). */
 export const TRANSITION_INFO: Record<TransitionType, { label: string; hint: string; duration: number; sound: string }> = {
   fade: { label: 'Crossfade', hint: 'One shot melts into the next', duration: 0.5, sound: 'whoosh-soft' },
   dip: { label: 'Dip to black', hint: 'A beat of black: a new section, or the end', duration: 0.6, sound: 'whoosh-soft' },
+  'dip-white': { label: 'Dip to white', hint: 'A soft fade through white: a memory, a dream, a fresh start', duration: 0.6, sound: 'whoosh-soft' },
   flash: { label: 'Flash', hint: 'A burst of white light: energy, a reveal', duration: 0.3, sound: 'shutter' },
   zoom: { label: 'Zoom through', hint: 'Punches through into the next shot', duration: 0.36, sound: 'whoosh-fast' },
+  'zoom-out': { label: 'Zoom out', hint: 'This shot shrinks away to show the next behind it: a step back, context', duration: 0.45, sound: 'whoosh-reverse' },
   whip: { label: 'Whip pan', hint: 'A fast blurred swipe sideways', duration: 0.3, sound: 'whoosh-fast' },
+  'whip-up': { label: 'Whip tilt', hint: 'A fast blurred swipe upwards', duration: 0.3, sound: 'whoosh-fast' },
   slide: { label: 'Push up', hint: 'The next shot pushes this one up, like a scroll', duration: 0.4, sound: 'swish' },
+  push: { label: 'Push sideways', hint: 'The next shot pushes this one off to the left, clean and smooth: the next point, the next step', duration: 0.45, sound: 'swish' },
+  drop: { label: 'Drop in', hint: 'The next shot slides down over this one from the top', duration: 0.4, sound: 'swish' },
   blur: { label: 'Blur', hint: 'Soft focus out, and in on the next shot', duration: 0.5, sound: 'whoosh-soft' },
   glitch: { label: 'Glitch', hint: 'A digital stutter', duration: 0.3, sound: 'glitch' },
+  spin: { label: 'Spin', hint: 'Spins out and the next shot spins in: playful, chaotic, a montage', duration: 0.45, sound: 'whoosh-fast' },
+  flip: { label: 'Card flip', hint: 'Flips over in 3D like a card: before/after, the other side', duration: 0.5, sound: 'swish' },
+  cube: { label: 'Cube turn', hint: 'Turns like the side of a cube: the next topic, a switch of place', duration: 0.55, sound: 'whoosh-soft' },
+  squeeze: { label: 'Squeeze', hint: 'This shot squashes away sideways as the next one stretches in', duration: 0.4, sound: 'swish' },
+  stretch: { label: 'Stretch', hint: 'A vertical smear into the next shot: speed, a jump in time', duration: 0.3, sound: 'whoosh-fast' },
+  gravity: { label: 'Fall away', hint: 'This shot drops off the bottom, tumbling, to show the next: a failure, “forget that”', duration: 0.6, sound: 'whoosh-heavy' },
+  iris: { label: 'Circle reveal', hint: 'The next shot opens from a circle in the middle: a reveal, a focus', duration: 0.5, sound: 'whoosh-soft' },
+  wipe: { label: 'Wipe', hint: 'A hard edge sweeps across, left to right: a clean change of scene', duration: 0.45, sound: 'swish' },
+  diagonal: { label: 'Diagonal wipe', hint: 'A slanted edge sweeps across: dynamic, sporty', duration: 0.45, sound: 'swish' },
+  blinds: { label: 'Blinds', hint: 'Horizontal strips open onto the next shot: a list, a montage', duration: 0.55, sound: 'whoosh-soft' },
+  shutter: { label: 'Shutter', hint: 'Black closes in from top and bottom, then opens on the next shot: a snapshot, a new scene', duration: 0.45, sound: 'shutter' },
+  'light-leak': { label: 'Light leak', hint: 'A warm burst of film light washes across: memories, dreamy, summer', duration: 0.7, sound: 'whoosh-soft' },
+  burn: { label: 'Burn out', hint: 'Overexposes to white-hot and back: intense, a big moment', duration: 0.5, sound: 'whoosh-heavy' },
+  shake: { label: 'Impact cut', hint: 'A hard cut with a camera shake: a hit, a punchline, a shock', duration: 0.35, sound: 'hit' },
+  bounce: { label: 'Bounce in', hint: 'The next shot pops up from below and bounces into place: light, fun', duration: 0.55, sound: 'bloop' },
 };
 /**
  * Only the pictures overlap: each shot runs a little past the cut (the source either side of the in/out points) while
@@ -60,13 +115,50 @@ export type ClipTransition = { type: TransitionType; duration: number; sound: bo
 export const TRANSITION_MIN = 0.15;
 export const TRANSITION_MAX = 1.2;
 
-export const CAPTION_PRESETS = ['bold', 'karaoke', 'clean', 'subtitle'] as const;
+export const CAPTION_PRESETS = [
+  'bold',
+  'karaoke',
+  'clean',
+  'subtitle',
+  'pop',
+  'box',
+  'marker',
+  'reveal',
+  'bounce',
+  'impact',
+  'neon',
+  'outline',
+  'retro',
+  'glitch',
+  'comic',
+  'handwritten',
+  'editorial',
+  'typewriter',
+  'minimal',
+  'arcade',
+] as const;
 export type CaptionPreset = (typeof CAPTION_PRESETS)[number];
 export const CAPTION_PRESET_LABELS: Record<CaptionPreset, { label: string; hint: string }> = {
   bold: { label: 'Bold', hint: 'Big words, the spoken one pops in your accent colour' },
   karaoke: { label: 'Karaoke', hint: 'Words light up as they’re said' },
   clean: { label: 'Clean', hint: 'Sentence case on a soft box' },
   subtitle: { label: 'Subtitle', hint: 'Small, two lines, low on screen' },
+  pop: { label: 'One word', hint: 'One huge word at a time, each popping in: fast, high energy' },
+  box: { label: 'Highlight box', hint: 'The spoken word sits in a box of your accent colour' },
+  marker: { label: 'Marker', hint: 'A highlighter swipes behind the spoken word' },
+  reveal: { label: 'Word reveal', hint: 'Words appear only as they’re said' },
+  bounce: { label: 'Bounce', hint: 'Each word bounces up as it’s said: playful' },
+  impact: { label: 'Impact', hint: 'Tall condensed capitals, stacked tight: hype, motivation' },
+  neon: { label: 'Neon', hint: 'Glowing tube letters in your accent colour: night, tech, gaming' },
+  outline: { label: 'Outline', hint: 'Hollow letters that fill in as each word is said' },
+  retro: { label: 'Retro 3D', hint: 'A hard offset shadow in the accent colour: 80s, bold, loud' },
+  glitch: { label: 'Glitch', hint: 'Red/cyan split letters that jitter on each word: tech, edgy' },
+  comic: { label: 'Comic', hint: 'Comic-book capitals that slam in tilted: reactions, fun' },
+  handwritten: { label: 'Handwritten', hint: 'Marker handwriting: personal, raw, DIY' },
+  editorial: { label: 'Editorial', hint: 'Elegant serif, sentence case, the spoken word in italics: stories, luxury' },
+  typewriter: { label: 'Typewriter', hint: 'Monospace letters typed out as they’re said: tech, investigations' },
+  minimal: { label: 'Minimal', hint: 'Small lowercase, no box or outline: calm, aesthetic' },
+  arcade: { label: 'Arcade', hint: 'Pixel letters: games, retro, nerdy' },
 };
 
 /** What switching to a preset also changes, so each looks right out of the box. */
@@ -75,6 +167,22 @@ export const CAPTION_PRESET_DEFAULTS: Record<CaptionPreset, Pick<CaptionSettings
   karaoke: { uppercase: true, maxWords: 4, position: 0.68 },
   clean: { uppercase: false, maxWords: 5, position: 0.72 },
   subtitle: { uppercase: false, maxWords: 8, position: 0.86 },
+  pop: { uppercase: true, maxWords: 1, position: 0.62 },
+  box: { uppercase: true, maxWords: 3, position: 0.68 },
+  marker: { uppercase: false, maxWords: 4, position: 0.7 },
+  reveal: { uppercase: true, maxWords: 4, position: 0.68 },
+  bounce: { uppercase: true, maxWords: 3, position: 0.68 },
+  impact: { uppercase: true, maxWords: 2, position: 0.64 },
+  neon: { uppercase: true, maxWords: 3, position: 0.68 },
+  outline: { uppercase: true, maxWords: 3, position: 0.68 },
+  retro: { uppercase: true, maxWords: 3, position: 0.66 },
+  glitch: { uppercase: true, maxWords: 3, position: 0.68 },
+  comic: { uppercase: true, maxWords: 3, position: 0.66 },
+  handwritten: { uppercase: false, maxWords: 4, position: 0.7 },
+  editorial: { uppercase: false, maxWords: 5, position: 0.72 },
+  typewriter: { uppercase: false, maxWords: 5, position: 0.72 },
+  minimal: { uppercase: false, maxWords: 5, position: 0.78 },
+  arcade: { uppercase: true, maxWords: 3, position: 0.7 },
 };
 
 export type CaptionSettings = {
@@ -90,12 +198,13 @@ export type CaptionSettings = {
   uppercase: boolean;
   /** Most words on screen at once. */
   maxWords: number;
-  /** A brand font from the workspace's assets; null uses the preset's font. */
+  /** A brand font from the workspace's assets; null uses `font` or the preset's font. */
   fontMediaId: string | null;
+  /** One of the app's own fonts (shared/fonts.ts) instead of the preset's; null = the preset's. */
+  font: string | null;
 };
 
-export type OverlayAnimation = 'pop' | 'fade' | 'slide' | 'none';
-export const OVERLAY_ANIMATIONS: OverlayAnimation[] = ['pop', 'fade', 'slide', 'none'];
+export { OVERLAY_ANIMATIONS, type OverlayAnimation } from './looks';
 
 type OverlayBase = { id: string; start: number; end: number };
 export type TextOverlay = OverlayBase & {
@@ -120,14 +229,44 @@ export type BrollOverlay = OverlayBase & {
   mediaId: string;
   /** Where in the b-roll source to start. */
   in: number;
-  layout: 'full' | 'top' | 'pip';
+  layout: BrollLayout;
   focusX: number;
   focusY: number;
 };
 
 // ---------- motion graphics ----------
 
-export const GRAPHICS = ['lowerThird', 'stat', 'list', 'quote', 'callout', 'chapter', 'cta', 'progress', 'kinetic', 'checklist', 'chart', 'wall'] as const;
+export const GRAPHICS = [
+  'lowerThird',
+  'stat',
+  'list',
+  'quote',
+  'callout',
+  'chapter',
+  'cta',
+  'progress',
+  'kinetic',
+  'checklist',
+  'chart',
+  'wall',
+  'versus',
+  'timeline',
+  'ranking',
+  'steps',
+  'compare',
+  'ring',
+  'rating',
+  'price',
+  'comment',
+  'notification',
+  'search',
+  'highlight',
+  'reveal',
+  'question',
+  'definition',
+  'ticker',
+  'circle',
+] as const;
 export type GraphicTemplate = (typeof GRAPHICS)[number];
 export type GraphicPosition = 'top' | 'center' | 'bottom';
 
@@ -151,6 +290,23 @@ export const GRAPHIC_INFO: Record<
   chart: { label: 'Bar chart', hint: 'Bars that grow to the numbers said; compare a few things', seconds: 5, position: 'center', fields: { text: 'Title (optional)', items: 'One bar per line as “Name: number” (up to 6)' }, example: { text: 'Views per video', items: ['Before: 800', 'After: 12000'] } },
   wall: { label: 'Headline wall', hint: 'A stack of headlines or comments that pile in: proof, or the noise around a topic', seconds: 5, position: 'center', fields: { text: 'Small line above (optional)', items: 'One headline per line (up to 6)' }, example: { text: 'They said', items: ['It will never work', 'Nobody wants this', 'Too late to start'] } },
   kinetic: { label: 'Word slam', hint: 'A phrase slammed in word by word, full screen', seconds: 2.2, position: null, fields: { text: 'The phrase (*word* for the accent colour)' }, example: { text: 'Stop *guessing*' } },
+  versus: { label: 'Versus', hint: 'Two sides face off with a VS slam: this or that, the old way against the new', seconds: 3.5, position: 'center', fields: { text: 'Left side', sub: 'Right side' }, example: { text: 'Posting daily', sub: 'Posting *better*' } },
+  timeline: { label: 'Timeline', hint: 'Moments in order on a line that lights up: a story, a history, a journey', seconds: 6, position: 'center', fields: { text: 'Heading (optional)', items: 'One moment per line as “When: what happened” (up to 6)' }, example: { text: 'How it went', items: ['2021: First video', '2023: 10k followers', '2025: Full time'] } },
+  ranking: { label: 'Countdown', hint: 'A ranked list revealed from last place up to #1: top 3, top 5', seconds: 6, position: 'center', fields: { text: 'Heading (optional)', items: 'Ranked, #1 first, one per line (up to 6)' }, example: { text: 'Best habits', items: ['Sleep', 'Walking', 'Reading'] } },
+  steps: { label: 'Steps', hint: 'How-to steps shown one at a time along a progress line', seconds: 6, position: 'center', fields: { text: 'Heading (optional)', items: 'Steps, one per line (up to 6)' }, example: { text: 'How to start', items: ['Pick one topic', 'Post for 30 days', 'Keep what works'] } },
+  compare: { label: 'Pros & cons', hint: 'Two columns that fill point by point: pros and cons, or any two-sided comparison', seconds: 6, position: 'center', fields: { text: 'Heading (optional)', sub: 'Column names (optional, e.g. Pros | Cons)', items: 'One per line, “+” for the left column, “-” for the right (up to 6)' }, example: { text: 'Posting daily', items: ['+ Fast feedback', '+ Builds the habit', '- Easy to burn out', '- Quality can slip'] } },
+  ring: { label: 'Percent ring', hint: 'A ring that fills while the number counts: a share, a rate, a completion', seconds: 3, position: 'center', fields: { text: 'The number (e.g. 73% or 3/4)', sub: 'What it is' }, example: { text: '73%', sub: 'quit in the first year' } },
+  rating: { label: 'Star rating', hint: 'Stars that fill to a score: a review, a verdict', seconds: 3, position: 'center', fields: { text: 'The score (e.g. 4.5 or 8/10)', sub: 'What’s rated' }, example: { text: '4.5', sub: 'Worth the hype' } },
+  price: { label: 'Price drop', hint: 'An old price struck through, then the new one slams in: a deal, a cost, a saving', seconds: 3, position: 'center', fields: { text: 'New price', sub: 'Old price (optional)' }, example: { text: '$49', sub: '$199' } },
+  comment: { label: 'Comment', hint: 'A viewer’s comment as a reply bubble: answering a comment or question', seconds: 4, position: 'center', fields: { text: 'The comment', sub: 'Who wrote it (e.g. @sam)' }, example: { text: 'How do you stay *consistent*?', sub: '@sam' } },
+  notification: { label: 'Notification', hint: 'A phone notification sliding down: a message, an alert, a reminder', seconds: 3, position: 'top', fields: { text: 'Title', sub: 'Message' }, example: { text: 'Reminder', sub: 'Post today’s video' } },
+  search: { label: 'Search bar', hint: 'A search typing itself out: what people look up, the question behind the video', seconds: 3.5, position: 'center', fields: { text: 'What gets typed', items: 'Suggestions under it (optional, up to 3)' }, example: { text: 'how to start a podcast', items: ['how to start a podcast for free', 'how to start a podcast with no audience'] } },
+  highlight: { label: 'Highlighter', hint: 'A phrase whose key words get swiped with a marker', seconds: 3, position: 'center', fields: { text: 'The phrase (*words* get the marker; none marked = all of it)' }, example: { text: 'Consistency beats *talent*' } },
+  reveal: { label: 'Blur reveal', hint: 'Words that come into focus letter by letter: a reveal, a name, a punchline', seconds: 2.5, position: 'center', fields: { text: 'The words (*word* for the accent colour)' }, example: { text: 'The *answer*' } },
+  question: { label: 'Question', hint: 'A big question mark and the question the video answers', seconds: 3, position: null, fields: { text: 'The question' }, example: { text: 'Why do *most* channels quit?' } },
+  definition: { label: 'Definition', hint: 'A dictionary card: a word or term and what it means', seconds: 4.5, position: 'center', fields: { text: 'The word', sub: 'What it means' }, example: { text: 'Hook', sub: 'The first two seconds that decide if anyone stays.' } },
+  ticker: { label: 'News ticker', hint: 'Headlines scrolling across a strip: news, updates, the buzz around a topic', seconds: 5, position: 'bottom', fields: { sub: 'Label on the left (optional, e.g. NEW)', items: 'Headlines, one per line (up to 6)' }, example: { sub: 'New', items: ['New video every Monday', 'Part 2 is out now', 'Ask your questions below'] } },
+  circle: { label: 'Circle it', hint: 'A hand-drawn circle around something on screen', seconds: 2.5, position: null, fields: { text: 'Label (optional)', point: true }, example: { text: 'This one' } },
 };
 
 /** An animated motion-graphics template, in the brand's accent colour and fonts. */
@@ -195,10 +351,41 @@ export function graphicWords(text: string) {
 /** How long a big number takes to count up. */
 export const statCountSeconds = (o: Pick<GraphicOverlay, 'start' | 'end'>) => Math.min(1.4, (o.end - o.start) * 0.5);
 
+/** How long a search bar takes to type its query (it starts 0.35 s in). */
+export const searchTypeSeconds = (o: Pick<GraphicOverlay, 'start' | 'end' | 'text'>) =>
+  Math.min(1.6, Math.max(0.3, (o.end - o.start) * 0.45), Math.max(0.4, Array.from(o.text.replace(/\*/g, '')).length * 0.06));
+
+/** A highlighter's marked runs of words (all of the phrase is one run when none are marked). */
+export function markerRuns(text: string) {
+  const words = graphicWords(text);
+  const any = words.some((w) => w.accent);
+  if (!any) return words.length ? 1 : 0;
+  return words.filter((w, k) => w.accent && !(k > 0 && words[k - 1].accent)).length;
+}
+/** When a highlighter's marker `k` swipes, seconds into it. */
+export const markerAt = (o: Pick<GraphicOverlay, 'start' | 'end'>, k: number) => Math.min(0.4 + k * 0.35, Math.max(0.2, o.end - o.start - 0.8));
+
+/** A star rating's score as stars out of five: "4.5" → 4.5, "8/10" → 4, "92%" → 4.6. */
+export function ratingStars(text: string) {
+  const m = /(\d+(?:[.,]\d+)?)\s*(?:\/\s*(\d+(?:\.\d+)?)|(%))?/.exec(text);
+  if (!m) return 0;
+  const v = Number(m[1].replace(',', '.'));
+  const max = m[2] ? Number(m[2]) : m[3] ? 100 : v <= 5 ? 5 : v <= 10 ? 10 : 100;
+  return Math.max(0, Math.min(5, (v / (max || 5)) * 5));
+}
+/** The gap between a star rating's stars filling (the first fills 0.35 s in). */
+export const ratingStep = (o: Pick<GraphicOverlay, 'start' | 'end'>) => Math.min(0.18, Math.max(0.06, ((o.end - o.start) * 0.5) / 5));
+
+/** When a versus card's sides and badge come in, and when a price drop's new price lands, seconds into it. */
+export const VERSUS_AT = { right: 0.18, badge: 0.45 };
+export const priceNewAt = (o: Pick<GraphicOverlay, 'sub'>) => (o.sub.trim() ? 0.75 : 0.1);
+/** When a comment's like pops, seconds into it. */
+export const commentLikeAt = (o: Pick<GraphicOverlay, 'start' | 'end' | 'text'>) => Math.min(Math.max(0.3, o.end - o.start - 0.6), 0.45 + graphicWords(o.text).length * 0.04);
+
 /** When a graphic's parts come in (seconds on the finished video): a list's points, slammed words. */
 export function graphicBeats(o: GraphicOverlay): number[] {
   const len = o.end - o.start;
-  if (o.template === 'list' || o.template === 'checklist' || o.template === 'wall' || o.template === 'chart') {
+  if (['list', 'checklist', 'wall', 'chart', 'timeline', 'ranking', 'steps', 'compare'].includes(o.template)) {
     const step = Math.min(1.2, Math.max(0.35, (len - 1.2) / Math.max(1, o.items.length)));
     return o.items.map((_, k) => round(o.start + 0.45 + k * step));
   }
@@ -260,6 +447,66 @@ export function graphicSounds(spec: Pick<EditSpec, 'overlays'>): SfxCue[] {
       case 'kinetic':
         beats.forEach((t, k) => cue(o, k, 'knock', t, 0.5));
         break;
+      case 'versus':
+        cue(o, 0, 'whoosh-fast', o.start - 0.05, 0.45);
+        cue(o, 1, 'swish', o.start + VERSUS_AT.right, 0.5);
+        cue(o, 2, 'slam', o.start + VERSUS_AT.badge + 0.2, 0.55);
+        break;
+      case 'timeline':
+      case 'compare':
+        beats.forEach((t, k) => cue(o, k, 'pop-high', t, 0.5));
+        break;
+      case 'ranking':
+        beats.forEach((t, k) => cue(o, k, k === beats.length - 1 ? 'hit' : 'knock', t, 0.5));
+        if (beats.length) cue(o, beats.length, 'ding-glass', beats[beats.length - 1] + 0.3, 0.45);
+        break;
+      case 'steps':
+        beats.forEach((t, k) => cue(o, k, 'click', t, 0.55));
+        break;
+      case 'ring':
+        cue(o, 0, 'pop', o.start);
+        cue(o, 1, 'ding-glass', o.start + 0.1 + statCountSeconds(o), 0.5);
+        break;
+      case 'rating': {
+        const step = ratingStep(o);
+        for (let k = 0; k < Math.ceil(ratingStars(o.text)); k++) cue(o, k, 'tick', o.start + 0.35 + k * step, 0.5);
+        cue(o, 5, 'ding-glass', o.start + 0.35 + 5 * step + 0.1, 0.45);
+        break;
+      }
+      case 'price':
+        if (o.sub.trim()) cue(o, 0, 'swish', o.start + 0.35, 0.5);
+        cue(o, 1, 'hit', o.start + priceNewAt(o) + 0.2, 0.55);
+        break;
+      case 'comment':
+        cue(o, 0, 'pop', o.start);
+        cue(o, 1, 'pop-high', o.start + commentLikeAt(o), 0.45);
+        break;
+      case 'notification':
+        cue(o, 0, 'ping', o.start + 0.1, 0.5);
+        break;
+      case 'search':
+        cue(o, 0, 'typing', o.start + 0.35, 0.5);
+        cue(o, 1, 'click', o.start + 0.45 + searchTypeSeconds(o), 0.5);
+        break;
+      case 'highlight':
+        for (let k = 0; k < markerRuns(o.text); k++) cue(o, k, 'swish', o.start + markerAt(o, k), 0.5);
+        break;
+      case 'reveal':
+        cue(o, 0, 'whoosh-soft', o.start - 0.1, 0.45);
+        break;
+      case 'question':
+        cue(o, 0, 'thud', o.start + 0.25, 0.55);
+        break;
+      case 'definition':
+        cue(o, 0, 'swish', o.start + 0.05, 0.5);
+        cue(o, 1, 'pop-high', o.start + 0.55, 0.4);
+        break;
+      case 'ticker':
+        cue(o, 0, 'whoosh-soft', o.start - 0.05, 0.4);
+        break;
+      case 'circle':
+        cue(o, 0, 'swish', o.start + 0.05, 0.55);
+        break;
     }
   }
   return cues;
@@ -299,7 +546,8 @@ export type EditAudio = {
   sfx: SfxCue[];
 };
 
-export type EditGrade = { lutMediaId: string | null; intensity: number };
+/** A LUT (graded with FFmpeg), a colour look over the footage and film textures over the whole video. */
+export type EditGrade = { lutMediaId: string | null; intensity: number; filter: FilterLook; textures: Textures };
 export type Watermark = { mediaId: string | null; corner: 'tl' | 'tr' | 'bl' | 'br'; opacity: number; size: number };
 
 export type EditSpec = {
@@ -342,10 +590,11 @@ export function emptyEdit(): EditSpec {
       uppercase: true,
       maxWords: 3,
       fontMediaId: null,
+      font: null,
     },
     overlays: [],
     audio: { nasheed: null, voiceover: null, voiceVolume: 1, enhanceVoice: false, normalize: true, sfx: [] },
-    grade: { lutMediaId: null, intensity: 1 },
+    grade: { lutMediaId: null, intensity: 1, filter: 'none', textures: { ...NO_TEXTURES } },
     watermark: { mediaId: null, corner: 'tr', opacity: 0.85, size: 0.16 },
     recipe: null,
   };
@@ -378,6 +627,7 @@ function normalizeCaptions(input: unknown, base = emptyEdit().captions): Caption
     uppercase: typeof c.uppercase === 'boolean' ? c.uppercase : base.uppercase,
     maxWords: Math.round(num(c.maxWords, base.maxWords, 1, 8)),
     fontMediaId: c.fontMediaId === undefined ? base.fontMediaId : idOrNull(c.fontMediaId),
+    font: c.font === undefined ? base.font : bundledFamily(c.font),
   };
 }
 
@@ -412,7 +662,22 @@ function normalizeAudio(input: unknown, base = emptyEdit().audio): EditAudio {
 
 function normalizeGrade(input: unknown, base = emptyEdit().grade): EditGrade {
   const g = obj(input);
-  return { lutMediaId: g.lutMediaId === undefined ? base.lutMediaId : idOrNull(g.lutMediaId), intensity: round(num(g.intensity, base.intensity, 0, 1)) };
+  const t = obj(g.textures);
+  const bt = base.textures;
+  const amount = (k: 'grain' | 'vignette' | 'scanlines' | 'leak') => round(num(t[k], bt[k], 0, 1));
+  return {
+    lutMediaId: g.lutMediaId === undefined ? base.lutMediaId : idOrNull(g.lutMediaId),
+    intensity: round(num(g.intensity, base.intensity, 0, 1)),
+    filter: oneOf(g.filter, FILTER_LOOKS, base.filter),
+    textures: {
+      grain: amount('grain'),
+      vignette: amount('vignette'),
+      scanlines: amount('scanlines'),
+      leak: amount('leak'),
+      letterbox: typeof t.letterbox === 'boolean' ? t.letterbox : bt.letterbox,
+      border: round(num(t.border, bt.border, 0, 0.06)),
+    },
+  };
 }
 
 function normalizeWatermark(input: unknown, base = emptyEdit().watermark): Watermark {
@@ -446,6 +711,8 @@ function normalizeClip(input: Loose): EditClip | null {
     zoom: round(num(input.zoom, 1, 1, 3)),
     volume: round(num(input.volume, 1, 0, 2)),
     transition: normalizeTransition(input.transition),
+    motion: oneOf(input.motion, CLIP_MOTIONS, 'none'),
+    filter: FILTER_LOOKS.includes(input.filter as FilterLook) ? (input.filter as FilterLook) : null,
   };
 }
 
@@ -495,7 +762,7 @@ function normalizeOverlay(input: Loose): EditOverlay | null {
         type: 'broll',
         mediaId: input.mediaId,
         in: round(num(input.in, 0, 0)),
-        layout: oneOf(input.layout, ['full', 'top', 'pip'] as const, 'full'),
+        layout: oneOf(input.layout, BROLL_LAYOUTS, 'full'),
         focusX: round(num(input.focusX, 0.5, 0, 1)),
         focusY: round(num(input.focusY, 0.5, 0, 1)),
       };

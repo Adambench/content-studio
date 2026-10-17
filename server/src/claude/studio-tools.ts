@@ -40,6 +40,8 @@ import { arsenalText } from '../studio/arsenal';
 import { BACKGROUND_STYLES, MATTE_EFFECTS, MATTE_EFFECT_INFO } from '../../../shared/effects';
 import { matteReady, queueEffect } from '../studio/effects';
 import { ARSENAL_KINDS, type ArsenalKind } from '../../../shared/arsenal';
+import { BROLL_LAYOUT_INFO, BROLL_LAYOUTS, CLIP_MOTION_INFO, CLIP_MOTIONS, FILTER_LOOK_INFO, FILTER_LOOKS, OVERLAY_ANIMATION_INFO, OVERLAY_ANIMATIONS, TEXTURE_INFO } from '../../../shared/looks';
+import { BUNDLED_FONTS } from '../../../shared/fonts';
 import { ok, safe, ToolError } from './tool-helpers';
 
 const clipShape = z.object({
@@ -60,6 +62,15 @@ const clipShape = z.object({
     .nullable()
     .optional()
     .describe('How this clip comes in after the one before (not on the first clip). Leave it out for a straight cut — most cuts should stay cuts; save transitions for a change of scene, topic or a reveal'),
+  motion: z
+    .enum(CLIP_MOTIONS)
+    .optional()
+    .describe(`Camera move over the clip: ${CLIP_MOTIONS.map((m) => `${m} (${CLIP_MOTION_INFO[m].hint})`).join('; ')}`),
+  filter: z
+    .enum(FILTER_LOOKS)
+    .nullable()
+    .optional()
+    .describe('This clip’s own colour look (null = the video’s grade.filter): for a flashback, a dream, a twist'),
 });
 
 const overlayShape = z.object({
@@ -77,13 +88,19 @@ const overlayShape = z.object({
   text: z.string().optional().describe('text and graphic: what it says; wrap the accent word in asterisks (*word*) to show it in the accent colour'),
   style: z.enum(['title', 'label', 'note']).optional().describe('text: title = big hook text, label = pill in the accent colour, note = small'),
   position: z.enum(['top', 'center', 'bottom']).optional().describe('text, and graphics that sit somewhere (progress: top or bottom edge)'),
-  animation: z.enum(['pop', 'fade', 'slide', 'none']).optional(),
+  animation: z
+    .enum(OVERLAY_ANIMATIONS)
+    .optional()
+    .describe(`text / image: how it comes in — ${OVERLAY_ANIMATIONS.map((a) => `${a} (${OVERLAY_ANIMATION_INFO[a].hint})`).join('; ')}`),
   mediaId: z.string().optional().describe('image / broll: library file'),
   x: z.number().min(0).max(1).optional().describe('image: centre, 0–1; graphic callout: the point it shows'),
   y: z.number().min(0).max(1).optional(),
   width: z.number().min(0.05).max(1).optional().describe('image: width as a fraction of the frame'),
   in: z.number().min(0).optional().describe('broll: where in the source to start'),
-  layout: z.enum(['full', 'top', 'pip']).optional().describe('broll: whole frame, top half, or picture-in-picture'),
+  layout: z
+    .enum(BROLL_LAYOUTS)
+    .optional()
+    .describe(`broll: ${BROLL_LAYOUTS.map((l) => `${l} = ${BROLL_LAYOUT_INFO[l].label} (${BROLL_LAYOUT_INFO[l].hint})`).join('; ')}`),
   focusX: z.number().min(0).max(1).optional(),
   focusY: z.number().min(0).max(1).optional(),
 });
@@ -202,7 +219,12 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
             highlight: z.string().optional().describe('#rrggbb accent for the spoken word'),
             uppercase: z.boolean().optional(),
             maxWords: z.number().int().min(1).max(8).optional(),
-            fontMediaId: z.string().nullable().optional(),
+            fontMediaId: z.string().nullable().optional().describe('A brand font from list_assets (wins over font)'),
+            font: z
+              .enum(BUNDLED_FONTS.map((f) => f.family) as [string, ...string[]])
+              .nullable()
+              .optional()
+              .describe(`One of the app’s fonts instead of the preset’s (null = the preset’s): ${BUNDLED_FONTS.map((f) => `${f.family} (${f.hint})`).join('; ')}`),
           })
           .optional(),
         audio: z
@@ -222,7 +244,27 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
               .optional(),
           })
           .optional(),
-        grade: z.object({ lutMediaId: z.string().nullable().optional(), intensity: z.number().min(0).max(1).optional() }).optional(),
+        grade: z
+          .object({
+            lutMediaId: z.string().nullable().optional(),
+            intensity: z.number().min(0).max(1).optional(),
+            filter: z
+              .enum(FILTER_LOOKS)
+              .optional()
+              .describe(`Colour look over the whole video's footage (not the text): ${FILTER_LOOKS.map((f) => `${f} (${FILTER_LOOK_INFO[f].hint})`).join('; ')}`),
+            textures: z
+              .object({
+                grain: z.number().min(0).max(1).optional().describe(TEXTURE_INFO.grain.hint),
+                vignette: z.number().min(0).max(1).optional().describe(TEXTURE_INFO.vignette.hint),
+                scanlines: z.number().min(0).max(1).optional().describe(TEXTURE_INFO.scanlines.hint),
+                leak: z.number().min(0).max(1).optional().describe(TEXTURE_INFO.leak.hint),
+                letterbox: z.boolean().optional().describe(TEXTURE_INFO.letterbox.hint),
+                border: z.number().min(0).max(0.06).optional().describe(TEXTURE_INFO.border.hint + ' (0.01–0.03 is tasteful)'),
+              })
+              .optional()
+              .describe('Film textures over the whole video, under the text; 0 = off. Subtle wins (0.2–0.5)'),
+          })
+          .optional(),
         watermark: z
           .object({ mediaId: z.string().nullable().optional(), corner: z.enum(['tl', 'tr', 'bl', 'br']).optional(), opacity: z.number().min(0.1).max(1).optional(), size: z.number().min(0.05).max(0.5).optional() })
           .optional(),
@@ -245,7 +287,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
           captions: { ...spec.captions, ...(captions?.preset && captions.preset !== spec.captions.preset ? CAPTION_PRESET_DEFAULTS[captions.preset] : {}), ...captions },
           // The nasheed stays the creator's (saveEditVersion keeps it too).
           audio: { ...spec.audio, ...(audio as Partial<EditSpec['audio']>), nasheed: spec.audio.nasheed },
-          grade: { ...spec.grade, ...grade },
+          grade: { ...spec.grade, ...grade, textures: { ...spec.grade.textures, ...grade?.textures } },
           watermark: { ...spec.watermark, ...watermark },
         };
         const { version, unchanged } = saveEditVersion(edit.id, { author: 'claude', message, spec: next });
@@ -293,8 +335,12 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         'A scene is data, not code: elements (box, text, image, path) styled with plain CSS, and GSAP tweens as JSON. ' +
         `The frame is 1080 px wide (1920 tall in 9:16); top-level elements are absolutely positioned on it. Fonts: ${SCENE_FONTS.join(', ')} (Brand = the creator’s brand font, if set). ` +
         'Styles may not load anything (no url(), no var()); colours as #hex or rgba(). Text marks accent words with *stars* (the brand’s accent colour). ' +
-        'Tweens animate transforms (x, y, xPercent, yPercent, scale, rotation, skewX), opacity/autoAlpha, colours, borderRadius, filter, clipPath and strokeDashoffset (a path with draw: true goes from 1 to 0); ' +
-        'use from for an explicit start state (fromTo), finite repeats only, and eases like power3.out or back.out(1.7). Times are seconds from the scene’s start. ' +
+        'CSS covers layout (flex, grid), gradients (background-image: linear/radial/conic-gradient), gradient text (background-clip: text with -webkit-text-fill-color: transparent), masks from gradients, blend modes, backdrop-filter, 3D (perspective, transform-style, backface-visibility), outlines, shadows and strokes. ' +
+        'Tweens animate transforms in 2D and 3D (x, y, z, xPercent, yPercent, scale, scaleX/Y, rotation, rotationX/Y, skewX/Y, transformPerspective, transformOrigin), opacity/autoAlpha, colours, size and place (width, height, left, top), fontSize, letterSpacing, ' +
+        'boxShadow, textShadow, background position/size/gradient, borderRadius, filter, clipPath, strokeDashoffset (a path with draw: true goes from 1 to 0), strokeDasharray, strokeWidth — and GSAP plugins: ' +
+        'text (types a string out, TextPlugin), innerText (counts a number up, whole numbers), drawSVG ("0% 100%" on a path), motionPath (moves an element along SVG path data or "#pathId"), morphSVG (turns a path into "#otherPathId" or new path data); ' +
+        'physics throws an element (velocity px/s, angle in degrees, gravity) for confetti, sparks and falling things. ' +
+        'Use from for an explicit start state (fromTo), finite repeats only (repeatDelay between them), stagger as seconds or { each, from: "center" | "end" | "edges" | index }, and eases like power3.out, back.out(1.7), elastic.out(1, 0.4), bounce.out, expo.inOut, steps(6), slow(0.7, 0.7), wiggle-6 (wobbles out and settles back) or shake-8 (an even shake) — a wiggle or shake swings from the start value towards `to` and returns to the start, so `to` is how far it swings (e.g. rotation: 8). Times are seconds from the scene’s start. ' +
         'Anything not allowed is dropped and listed in the reply. Look at it with view_overlay afterwards and fix what doesn’t read well.',
       {
         pieceId: z.string(),
@@ -328,9 +374,13 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
               from: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
               to: z.record(z.string(), z.union([z.string(), z.number()])),
               ease: z.string().optional(),
-              stagger: z.number().optional(),
+              stagger: z
+                .union([z.number(), z.object({ each: z.number(), from: z.union([z.enum(['start', 'center', 'end', 'edges']), z.number()]).optional() })])
+                .optional(),
               repeat: z.number().int().min(0).max(20).optional(),
+              repeatDelay: z.number().min(0).max(5).optional(),
               yoyo: z.boolean().optional(),
+              physics: z.object({ velocity: z.number(), angle: z.number(), gravity: z.number().optional(), friction: z.number().optional() }).optional().describe('Throw it: px/s, degrees (-90 = up), px/s² (default 1200)'),
             }),
           )
           .max(SCENE_MAX_TWEENS),

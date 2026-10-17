@@ -21,7 +21,7 @@ import { getPiece } from '../services/pieces';
 import { BUNDLED_FONTS, composeEdit } from '../studio/compose';
 import { createEdit, editDetail, findEditForPiece, getEdit, listRenders, restoreEditVersion, saveEditVersion, specMedia, specTranscripts, updateEditWorking } from '../studio/edits';
 import { proxyPath } from '../studio/proxy';
-import { builtinSfxPath, cancelRender, getRender, gsapPath, queueRender, runtimePath } from '../studio/render';
+import { builtinSfxPath, cancelRender, getRender, GSAP_FILES, gsapFilePath, queueRender, runtimePath } from '../studio/render';
 import { tightenEdit } from '../studio/tighten';
 import { bearerToken } from './auth';
 
@@ -159,7 +159,7 @@ export async function studioRoutes(app: FastifyInstance) {
         return url(builtin ? `/api/studio/sfx/${builtin.name}.ogg` : `/api/media/${id}/file`);
       },
       fontUrl: (file) => url(`/api/studio/fonts/${file}`),
-      scripts: [url('/api/studio/vendor/gsap.min.js'), url('/api/studio/vendor/hyperframes-runtime.js')],
+      scripts: [...GSAP_FILES.map((f) => url(`/api/studio/vendor/${f}`)), url('/api/studio/vendor/hyperframes-runtime.js')],
       preview: true,
       forApp: !!(token && origin),
     });
@@ -175,7 +175,7 @@ export async function studioRoutes(app: FastifyInstance) {
   });
 
   app.get<{ Params: { file: string } }>('/api/studio/vendor/:file', async (req, reply) => {
-    const files: Record<string, string> = { 'gsap.min.js': gsapPath(), 'hyperframes-runtime.js': runtimePath() };
+    const files: Record<string, string> = { ...Object.fromEntries(GSAP_FILES.map((f) => [f, gsapFilePath(f)])), 'hyperframes-runtime.js': runtimePath() };
     const path = files[req.params.file];
     if (!path) throw notFound();
     reply.header('Cache-Control', 'no-cache');
