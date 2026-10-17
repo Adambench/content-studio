@@ -103,6 +103,7 @@ async function framesCheck(video: string, seconds: number, dir: string): Promise
   const files = await extractFrames(video, [0.15, 0.5, 0.85].map((f) => f * seconds), (i) => join(dir, `frame${i}.jpg`), 768);
   const images = await Promise.all(files.map(async (f) => ({ data: (await readFile(f)).toString('base64'), mediaType: 'image/jpeg' as const })));
   const out = await askStructured<FramesCheck>({
+    task: 'clips',
     system: [
       playbook('halal'),
       'You look at three frames of a short clip cut from a podcast, stream or interview, for a creator who keeps every post halal by the rules above. Judge only what is visible in the frames: `reject` when one clearly shows something never promoted or shown (a drink of alcohol, gambling on screen, smoking or vaping, immodest dress or imagery, a haram product as the point); `flag` when something visible is a gray area, or a frame is too dark or blurred to judge; `ok` when nothing visible applies, with no reasons.',
@@ -155,7 +156,7 @@ export async function makeClip({ momentId }: { momentId: string }) {
     // reach Review sooner (and the laptop doesn't run out of memory).
     if (db.select({ id: schema.jobs.id }).from(schema.jobs).where(and(eq(schema.jobs.type, 'video.render'), eq(schema.jobs.status, 'running'))).get())
       throw new JobError('Waiting for a render to finish', { wait: true, delayMs: 15_000 });
-    waitForUsage();
+    await waitForUsage('clips');
   } catch (err) {
     if (m.detail !== (err as Error).message) updateMoment(momentId, { detail: (err as Error).message });
     throw err;

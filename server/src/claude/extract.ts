@@ -32,6 +32,7 @@ export function pageForPrompt(page: PageRead) {
 export function parsePage<T>(page: PageRead, input: { what: string; schema: Record<string, unknown>; system?: string; model?: string }): Promise<T> {
   if (page.loginWall) throw new HttpError(409, `Sign in to ${SITES[page.loginWall].label} first (Settings → Connected sites).`);
   return askStructured<T>({
+    task: 'pages',
     system: [input.system, SYSTEM].filter(Boolean).join('\n\n'),
     prompt: `${input.what}\n\n---\n\n${pageForPrompt(page)}`,
     schema: input.schema,

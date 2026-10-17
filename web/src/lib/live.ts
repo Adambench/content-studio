@@ -73,6 +73,7 @@ function apply(event: LiveEvent) {
         break;
       case 'settings':
         inv(keys.settings);
+        inv(keys.ai);
         inv(keys.status);
         inv(keys.publishingSetup);
         inv(keys.fcm);
@@ -117,6 +118,8 @@ function apply(event: LiveEvent) {
         break;
       case 'compute':
         inv(keys.compute);
+        // A worker may host the model server.
+        inv(keys.ai);
         break;
       case 'finder':
         inv(wid ? keys.finder(wid) : ['finder']);

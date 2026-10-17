@@ -177,6 +177,8 @@ export const CLAUDE_MODELS = [
   { id: 'haiku', label: 'Haiku', hint: 'Fastest and lightest' },
 ] as const;
 export type ClaudeModelId = (typeof CLAUDE_MODELS)[number]['id'];
+/** What a chat can run on: a Claude model, or the creator's own model on the home server (Settings → Models). */
+export const CHAT_MODELS = [...CLAUDE_MODELS, { id: 'local', label: 'Local', hint: 'Your own model on the home server' }] as const;
 
 /** One rendered piece of an assistant message. */
 export type ChatPart =

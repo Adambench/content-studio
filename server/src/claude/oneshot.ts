@@ -1,4 +1,7 @@
 import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { AiTask } from '../../../shared/ai';
+import { localStructured } from '../ai/local';
+import { canFallBack, routeFor } from '../ai/route';
 import { baseOptions, resolveModel } from './options';
 import { recordUsage } from './usage';
 
@@ -16,8 +19,23 @@ async function* withImages(text: string, images: PromptImage[]): AsyncGenerator<
   };
 }
 
-/** Ask Claude for JSON matching `schema`, with no tools. Used by background jobs. `images` go before the prompt. */
-export async function askStructured<T>(input: { system: string; prompt: string; schema: Record<string, unknown>; model?: string; images?: PromptImage[] }): Promise<T> {
+type StructuredInput = { system: string; prompt: string; schema: Record<string, unknown>; model?: string; images?: PromptImage[] };
+
+/**
+ * JSON matching `schema`, with no tools, from whoever answers `task` now (Claude or the self-hosted model,
+ * `ai/route.ts`). Used by background jobs. `images` go before the prompt. `model` is the Claude model.
+ */
+export async function askStructured<T>(input: StructuredInput & { task: AiTask }): Promise<T> {
+  if ((await routeFor(input.task)).provider === 'local') return localStructured<T>(input);
+  try {
+    return await askClaude<T>(input);
+  } catch (err) {
+    if (await canFallBack(input.task, err)) return localStructured<T>(input);
+    throw err;
+  }
+}
+
+async function askClaude<T>(input: StructuredInput): Promise<T> {
   const q = query({
     prompt: input.images?.length ? withImages(input.prompt, input.images) : input.prompt,
     options: {

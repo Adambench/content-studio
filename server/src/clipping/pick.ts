@@ -115,7 +115,7 @@ function transcriptBlock(lines: Line[], stretches: { start: number; end: number 
 export async function pickMoments({ sourceId }: { sourceId: string }) {
   const s = getSource(sourceId);
   try {
-    waitForUsage();
+    await waitForUsage('clips');
   } catch (err) {
     updateSource(sourceId, { status: 'scanning', detail: (err as Error).message });
     throw err;
@@ -192,6 +192,7 @@ export async function pickMoments({ sourceId }: { sourceId: string }) {
     .join('\n\n');
 
   const out = await askStructured<{ moments: Picked[]; notes: string }>({
+    task: 'clips',
     system: [playbook('clipping', 'hooks', 'halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'),
     prompt,
     schema: schemaFor(pages.map((p) => p.id)),

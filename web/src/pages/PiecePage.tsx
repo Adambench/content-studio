@@ -14,6 +14,7 @@ import { PiecePosts } from '@/components/publish/PiecePosts';
 import { ScheduleDialog } from '@/components/publish/ScheduleDialog';
 import { TagInput } from '@/components/TagInput';
 import { UploadButton, UploadZone } from '@/components/UploadZone';
+import { GenerateButton } from '@/components/GenerateDialog';
 import { VersionHistory } from '@/components/VersionHistory';
 import { useWorkspaceContext } from '@/components/WorkspaceLayout';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -650,10 +651,11 @@ function AttachedMedia({ piece }: { piece: PieceDetail }) {
         </section>
       )}
       <section id="footage" className="scroll-mt-4 space-y-3" aria-label="Footage">
-        <div className="flex items-center gap-2">
-          <h2 className="mr-auto text-sm font-medium">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <h2 className="mr-auto text-sm font-medium whitespace-nowrap">
             Footage <span className="text-muted-foreground tabular-nums">{footage.length || ''}</span>
           </h2>
+          <GenerateButton wid={workspace.id} pieceId={piece.id} />
           <Button size="sm" variant="ghost" onClick={() => setPicking(true)}>
             <Inbox /> From Inbox
           </Button>

@@ -190,7 +190,7 @@ export async function analyseItem({ itemId }: { itemId: string }) {
   const item = getItem(itemId);
   if (item.analysisStatus === 'done') return;
   try {
-    waitForUsage();
+    await waitForUsage('research');
   } catch (err) {
     updateItem(itemId, { analysisStatus: 'queued', analysisError: (err as Error).message });
     throw err;
@@ -248,6 +248,7 @@ export async function analyseItem({ itemId }: { itemId: string }) {
       : '(no speech found)';
     const fresh = getItem(itemId);
     const out = await askStructured<Omit<ResearchAnalysis, 'metrics'>>({
+      task: 'research',
       system: [playbook('hooks', 'retention', 'packaging', 'sound-design', 'halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'),
       prompt: [
         `# The page learning from it: ${ws.name} (${KIND_INFO[ws.kind].label.toLowerCase()})${ws.niche ? ` — ${ws.niche}` : ''}`,

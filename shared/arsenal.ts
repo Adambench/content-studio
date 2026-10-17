@@ -71,6 +71,8 @@ export const ARSENAL: ArsenalItem[] = [
   ...(Object.keys(MATTE_EFFECT_INFO) as (keyof typeof MATTE_EFFECT_INFO)[]).map((e) =>
     ready('effect', `matte-${e}`, MATTE_EFFECT_INFO[e].label, MATTE_EFFECT_INFO[e].hint, `apply_effect effect="${e}" on a clip's video that has a person in it (a few minutes, runs in the background)`),
   ),
+  ready('effect', 'generated-still', 'Generated b-roll picture', 'Show what is said when there is no footage of it: a place, an object, a scene (never people or animals)', 'generate_media kind="image" with pieceId and place (a few minutes on the home PC; a full-screen still drifts in slowly)'),
+  ready('effect', 'generated-clip', 'Generated b-roll clip', 'A moving shot of a place or object for a cutaway or an opener (never people or animals)', 'generate_media kind="video" with pieceId and place: made overnight on the home PC, so plan it a day ahead'),
   // Step 7 of the build plan (local effects library). Listed so a direction can plan around them later.
   planned('orbit', 'Orbit', 'The subject circled by the camera'),
   planned('frame-break', 'Frame break', 'The subject steps out of the frame over a background'),

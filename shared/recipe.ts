@@ -16,7 +16,10 @@ export const VOICES = [
   { id: 'bf_isabella', label: 'Isabella', who: 'British woman, crisp' },
   { id: 'bm_george', label: 'George', who: 'British man' },
   { id: 'bm_fable', label: 'Fable', who: 'British man, storyteller' },
+  // Not Kokoro: the creator's own voice, cloned from their recording (Settings → My voice) on a home PC.
+  { id: 'clone', label: 'My voice', who: 'your own voice, cloned' },
 ] as const;
+export const CLONE_VOICE = 'clone';
 export type VoiceId = (typeof VOICES)[number]['id'];
 const VOICE_IDS = VOICES.map((v) => v.id) as string[];
 export const voiceLabel = (id: string) => {

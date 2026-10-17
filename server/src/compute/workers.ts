@@ -29,7 +29,7 @@ type Task = {
   settle: (r: { ok: true; stdout: string; on: string } | { ok: false; reason: 'no-worker' | 'lost' | 'failed'; message: string }) => void;
 };
 
-type WorkerState = { name: string; gpu: string; tools: ComputeTool[]; lastPoll: number; taskId: string | null; speed: WorkerInfo['speed'] };
+type WorkerState = { name: string; gpu: string; tools: ComputeTool[]; lastPoll: number; taskId: string | null; speed: WorkerInfo['speed']; llmUrl: string | null };
 
 const LEASE_MS = 90_000;
 const tasks = new Map<string, Task>();
@@ -37,6 +37,23 @@ const workers = new Map<string, WorkerState>();
 
 const online = (w: WorkerState) => now() - w.lastPoll < WORKER_ONLINE_MS;
 const changed = () => emit({ type: 'changed', entity: 'compute' });
+
+/** Only a plain http(s) address is taken from a worker (it's used as a base URL for the model server). */
+function llmAddress(url: unknown) {
+  if (typeof url !== 'string' || url.length > 200) return null;
+  try {
+    const u = new URL(url);
+    return (u.protocol === 'http:' || u.protocol === 'https:') && !u.username && !u.password ? u.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/** An online worker that hosts the model server. */
+export function llmWorker(): { name: string; url: string } | null {
+  const w = [...workers.values()].find((x) => online(x) && x.llmUrl);
+  return w ? { name: w.name, url: w.llmUrl! } : null;
+}
 
 /** Whether some online worker has the tool (so a task is worth queueing). */
 export const workerFor = (tool: ComputeTool) => [...workers.values()].some((w) => online(w) && w.tools.includes(tool));
@@ -96,9 +113,9 @@ timer.unref();
 /** A worker polls: hand it the first queued task it can run, waiting a while for one to appear. */
 export async function poll(workerId: string, name: string, report: WorkerReport, signal: { aborted: boolean }): Promise<WorkerTask | null> {
   const before = workers.get(workerId);
-  const state: WorkerState = { name, gpu: report.gpu, tools: report.tools.filter((t) => COMPUTE_TOOLS.includes(t)), lastPoll: now(), taskId: before?.taskId ?? null, speed: report.speed ?? before?.speed ?? null };
+  const state: WorkerState = { name, gpu: report.gpu, tools: report.tools.filter((t) => COMPUTE_TOOLS.includes(t)), lastPoll: now(), taskId: before?.taskId ?? null, speed: report.speed ?? before?.speed ?? null, llmUrl: llmAddress(report.llm?.url) };
   workers.set(workerId, state);
-  if (!before || !online(before) || before.gpu !== state.gpu || before.tools.join() !== state.tools.join()) changed();
+  if (!before || !online(before) || before.gpu !== state.gpu || before.tools.join() !== state.tools.join() || before.llmUrl !== state.llmUrl) changed();
   const deadline = now() + 25_000;
   while (!signal.aborted && now() < deadline) {
     state.lastPoll = now();
@@ -222,6 +239,7 @@ export function listWorkers(): WorkerInfo[] {
         lastSeenAt: w?.lastPoll ?? s.lastSeenAt,
         task: t ? { tool: t.tool, progress: t.progress } : null,
         speed: w?.speed ?? null,
+        llmUrl: w?.llmUrl ?? null,
       };
     });
 }

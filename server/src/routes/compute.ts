@@ -74,9 +74,15 @@ export async function computeRoutes(app: FastifyInstance) {
       .object({
         name: z.string().max(80).default('Worker'),
         gpu: z.string().max(120).default(''),
-        tools: z.array(z.enum(COMPUTE_TOOLS)).max(10).default([]),
+        // A worker newer than this laptop may list tools it doesn't know yet: they're left out.
+        tools: z
+          .array(z.string().max(40))
+          .max(20)
+          .default([])
+          .transform((ts) => ts.filter((t): t is (typeof COMPUTE_TOOLS)[number] => (COMPUTE_TOOLS as readonly string[]).includes(t))),
         busy: z.boolean().default(false),
         speed: z.object({ matteMsPerFrame: z.number().nullable(), cuda: z.boolean() }).optional(),
+        llm: z.object({ url: z.string().max(200) }).optional(),
       })
       .parse(req.body);
     const signal = { aborted: false };

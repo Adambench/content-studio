@@ -1,11 +1,14 @@
-// Compute workers: the home PCs that take the heavy jobs (Whisper, Demucs, the person matte, the speaker scan). A worker
+// Compute workers: the home PCs that take the heavy jobs (Whisper, Demucs, the person matte, the speaker scan, picture
+// and video generation, the cloned voice). A worker
 // pairs with the laptop like the phone, polls it for tasks over Tailscale, runs the tool's command from its own scripts,
 // and sends the output files back. The command line of each tool is defined here once, so the laptop's own run (the
 // fallback when no worker is free) and a worker's run are the same command. A worker never runs anything else: the
 // laptop sends a tool name and file names, never a command.
 
-export const COMPUTE_TOOLS = ['transcribe', 'separate', 'matte', 'speakers', 'probe'] as const;
+export const COMPUTE_TOOLS = ['transcribe', 'separate', 'matte', 'speakers', 'probe', 'image', 'video', 'speak'] as const;
 export type ComputeTool = (typeof COMPUTE_TOOLS)[number];
+/** Tools only a worker runs (the laptop has no GPU for them): a job waits for one instead of running here. */
+export const WORKER_ONLY: ComputeTool[] = ['image', 'video', 'speak'];
 
 /** Where things are on the machine that runs the tool (they differ between the laptop and a worker). */
 export type MachinePaths = {
@@ -18,6 +21,12 @@ export type MachinePaths = {
   matteModel: string;
   yunetModel: string;
   ffmpeg: string;
+  /** stable-diffusion.cpp's command-line program, and the folder with the FLUX and Wan weights. */
+  sdBin: string;
+  genModels: string;
+  /** Python with Chatterbox and Kokoro (its own environment: Chatterbox pins its own PyTorch). */
+  voicePython: string;
+  kokoroModels: string;
 };
 
 export type ToolInfo = {
@@ -35,9 +44,22 @@ export const TOOL_INFO: Record<ComputeTool, ToolInfo> = {
   matte: { label: 'Person matte', inputs: ['video'], outputs: ['mask'], stdout: false },
   speakers: { label: 'Speaker scan', inputs: ['video'], outputs: [], stdout: true },
   probe: { label: 'Self-test', inputs: [], outputs: [], stdout: true },
+  image: { label: 'Pictures (FLUX)', inputs: [], outputs: ['image'], stdout: true },
+  video: { label: 'Video clips (Wan)', inputs: [], outputs: ['video'], stdout: true },
+  speak: { label: 'My voice (Chatterbox)', inputs: ['job', 'reference'], outputs: ['wav'], stdout: true },
 };
 
-export type ToolParams = { model?: string; fps?: number };
+export type ToolParams = {
+  model?: string;
+  fps?: number;
+  /** Generation: what to make, at what size, from which seed; frames for a clip. */
+  prompt?: string;
+  negative?: string;
+  width?: number;
+  height?: number;
+  seed?: number;
+  frames?: number;
+};
 
 /** The command for a tool: `files` maps each input and output name to a path on this machine. */
 export function commandFor(tool: ComputeTool, files: Record<string, string>, params: ToolParams, m: MachinePaths): { bin: string; args: string[] } {
@@ -53,11 +75,28 @@ export function commandFor(tool: ComputeTool, files: Record<string, string>, par
       return { bin: m.toolsPython, args: [script('speakers.py'), files.video, '--model', m.yunetModel, '--fps', String(params.fps ?? 8)] };
     case 'probe':
       return { bin: m.toolsPython, args: [script('probe.py'), '--matte-model', m.matteModel, '--ffmpeg', m.ffmpeg] };
+    case 'image':
+    case 'video': {
+      const size = ['--width', String(params.width ?? 768), '--height', String(params.height ?? 1344), '--seed', String(params.seed ?? 1)];
+      const clip = tool === 'video' ? ['--frames', String(params.frames ?? 81), `--negative=${params.negative ?? ''}`] : [];
+      // `--prompt=…` keeps a prompt that starts with a dash from reading as a flag.
+      return { bin: m.toolsPython, args: [script('generate.py'), tool, '--sd', m.sdBin, '--models', m.genModels, '--ffmpeg', m.ffmpeg, `--prompt=${params.prompt ?? ''}`, ...size, ...clip, '--out', files[tool]] };
+    }
+    case 'speak':
+      return { bin: m.voicePython, args: [script('tts.py'), files.job, '--models', m.kokoroModels, '--clone', files.reference, '--out', files.wav] };
   }
 }
 
 /** What a worker says about itself when it polls. */
-export type WorkerReport = { name: string; gpu: string; tools: ComputeTool[]; busy: boolean; speed?: { matteMsPerFrame: number | null; cuda: boolean } };
+export type WorkerReport = {
+  name: string;
+  gpu: string;
+  tools: ComputeTool[];
+  busy: boolean;
+  speed?: { matteMsPerFrame: number | null; cuda: boolean };
+  /** The text/vision model server it hosts (Ollama), as the laptop reaches it over Tailscale. */
+  llm?: { url: string };
+};
 
 export type WorkerInfo = {
   id: string;
@@ -70,6 +109,8 @@ export type WorkerInfo = {
   task: { tool: ComputeTool; progress: string } | null;
   /** From the self-test: seconds per matted frame, for comparing with the laptop. */
   speed: { matteMsPerFrame: number | null; cuda: boolean } | null;
+  /** The model server it hosts, if any. */
+  llmUrl: string | null;
 };
 
 /** A task as the worker sees it. */

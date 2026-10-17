@@ -34,6 +34,14 @@ type SettingsShape = {
   finderRuns: Record<string, import('../../../shared/finder').FinderRun>;
   /** Whether each clipping page's finder runs by itself each morning (default on). */
   finderAuto: Record<string, boolean>;
+  /** Which model answers each AI task (shared/ai.ts). */
+  aiRouting: Partial<import('../../../shared/ai').AiRouting>;
+  /** The self-hosted model server. */
+  localAi: Partial<import('../../../shared/ai').LocalAiConfig>;
+  /** When video clips may be generated (shared/generate.ts). */
+  generation: Partial<import('../../../shared/generate').GenerationSettings>;
+  /** Claude refused for usage: tasks on auto skip it until then (ms). */
+  claudeLimitedUntil: number;
   /** Campaigns found on Content Rewards that aren't added yet. */
   campaignLeads: import('../../../shared/finder').CampaignLeads;
 };

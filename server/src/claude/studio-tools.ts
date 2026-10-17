@@ -42,6 +42,9 @@ import { matteReady, queueEffect } from '../studio/effects';
 import { ARSENAL_KINDS, type ArsenalKind } from '../../../shared/arsenal';
 import { BROLL_LAYOUT_INFO, BROLL_LAYOUTS, CLIP_MOTION_INFO, CLIP_MOTIONS, FILTER_LOOK_INFO, FILTER_LOOKS, OVERLAY_ANIMATION_INFO, OVERLAY_ANIMATIONS, TEXTURE_INFO } from '../../../shared/looks';
 import { BUNDLED_FONTS } from '../../../shared/fonts';
+import { GEN_ASPECTS, GEN_PURPOSE_INFO, GEN_PURPOSES, NO_LIVING_BEINGS } from '../../../shared/generate';
+import { workerFor } from '../compute/workers';
+import { generationSettings, queueGeneration } from '../studio/generate';
 import { ok, safe, ToolError } from './tool-helpers';
 
 const clipShape = z.object({
@@ -132,6 +135,8 @@ export function studioToolLabel(name: string, input: Record<string, any>): strin
       return 'Started an effect on the person';
     case 'get_arsenal':
       return 'Looked through the toolbox of video moves';
+    case 'generate_media':
+      return input.kind === 'video' ? 'Queued a generated clip for tonight' : 'Started a generated picture';
     default:
       return null;
   }
@@ -556,6 +561,45 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         } finally {
           await Promise.all(files.map((f) => rm(f, { force: true })));
         }
+      }),
+    ),
+
+    tool(
+      'generate_media',
+      'Make a picture or a ~5 s video clip on the creator’s home PC (FLUX.1-schnell for pictures, a few minutes each; Wan 2.1 for clips, made overnight). ' +
+        `For b-roll that shows what is said when there is no footage of it, a calm background, or a cover. Halal rule, always: describe places, objects, food, nature, buildings, light, weather, textures or screens only — ${NO_LIVING_BEINGS} ` +
+        'Every result is checked and made again if a person or animal appears. Describe one concrete shot in plain words (subject, setting, light, angle), not a story. ' +
+        'With pieceId and place it goes into that video’s edit as b-roll by itself when it is ready (a new version); otherwise it lands in the piece’s files. Runs in the background: don’t wait for it or start it twice.',
+      {
+        prompt: z.string().min(3).max(600).describe('One concrete shot, e.g. "a laptop on a wooden desk by a window at dawn, steam rising from a cup of tea"'),
+        kind: z.enum(['image', 'video']).describe('image: ready in minutes; video: made tonight'),
+        purpose: z.enum(GEN_PURPOSES).optional().describe(GEN_PURPOSES.map((p) => `${p}: ${GEN_PURPOSE_INFO[p].hint}`).join('; ')),
+        aspect: z.enum(GEN_ASPECTS).optional().describe('Default 9:16'),
+        pieceId: z.string().optional().describe('The video it is for'),
+        place: z
+          .object({ start: z.number().min(0), end: z.number().min(0.3), layout: z.enum(BROLL_LAYOUTS).optional() })
+          .optional()
+          .describe('Put it into the edit as b-roll from start to end (seconds on the timeline); needs pieceId'),
+      },
+      safe(async ({ prompt, kind, purpose, aspect, pieceId, place }) => {
+        if (pieceId) ownPiece(pieceId);
+        if (place && !pieceId) throw new ToolError('place needs pieceId.');
+        if (place && place.end <= place.start) throw new ToolError('place.end must be after place.start.');
+        if (place && !editFor(pieceId!)) throw new ToolError('This piece has no edit yet: start one first, or leave place out.');
+        queueGeneration({
+          workspaceId,
+          by: 'claude',
+          kind,
+          prompt,
+          purpose: purpose ?? 'broll',
+          aspect: aspect ?? '9:16',
+          pieceId: pieceId ?? null,
+          place: place ? { start: place.start, end: place.end, layout: place.layout ?? 'full' } : null,
+        });
+        const s = generationSettings();
+        const when = kind === 'video' ? `It will be made tonight (between ${s.videoFrom}:00 and ${s.videoTo}:00).` : 'It takes a few minutes.';
+        const pc = workerFor(kind) ? '' : ' No home PC with this is online right now: it waits until one is.';
+        return ok(`Queued. ${when}${pc} ${place ? 'It goes into the edit by itself when it is ready.' : 'It lands in the piece’s files.'}`);
       }),
     ),
 

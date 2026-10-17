@@ -202,7 +202,7 @@ export async function runReview({ reviewId }: { reviewId: string }) {
     .filter(Boolean)
     .join('\n\n');
 
-  const out = await askStructured<ReviewOutput>({ system: systemPrompt(ws), prompt, schema: REVIEW_SCHEMA, model: review.model ?? undefined });
+  const out = await askStructured<ReviewOutput>({ task: 'review', system: systemPrompt(ws), prompt, schema: REVIEW_SCHEMA, model: review.model ?? undefined });
 
   const slots: ReviewSlotSuggestion[] = [];
   for (const change of out.queueChanges ?? []) {

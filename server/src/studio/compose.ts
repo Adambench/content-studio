@@ -231,7 +231,11 @@ export function composeEdit(input: ComposeInput) {
       const style = `left:${px(box.x + g.left)};top:${px(box.y + g.top)};width:${px(g.width)};height:${px(g.height)};clip-path:inset(${inset}${round});z-index:10;${origin}${box.tilt ? `;rotate:${box.tilt}deg` : ''}${lookStyle(spec.grade.filter)}`;
       const frame = brollFrame(o.layout, box, i, timing);
       if (frame) body.push(frame);
-      if (m.kind === 'image') body.push(`<img id="o${i}" class="clip pic" src="${esc(source.src)}" alt="" ${timing} style="${style}">`);
+      if (m.kind === 'image') {
+        body.push(`<img id="o${i}" class="clip pic" src="${esc(source.src)}" alt="" ${timing} style="${style}">`);
+        // A full-screen still drifts in slowly, like a photo on the main track (a window's edges would grow with it).
+        if (o.layout === 'full') tl.push(`tl.fromTo('#o${i}', { scale: 1 }, { scale: 1.08, duration: ${n(len)}, ease: 'none' }, ${n(start)});`);
+      }
       else body.push(`<video id="o${i}" class="pic" src="${esc(source.src)}"${app.video} ${timing} data-media-start="${n(source.mediaStart)}" muted playsinline preload="auto" style="${style}"></video>`);
       const targets = js(frame ? `#o${i}, #of${i} .bf` : `#o${i}`);
       if (['full', 'top', 'bottom', 'split'].includes(o.layout)) tl.push(`tl.fromTo(${targets}, { opacity: 0 }, { opacity: 1, duration: 0.15 }, ${n(start)});`);

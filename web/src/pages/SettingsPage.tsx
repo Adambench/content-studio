@@ -7,6 +7,8 @@ import { CLAUDE_MODELS } from '@shared/types';
 import { ConnectedSitesCard } from '@/components/ConnectedSites';
 import { PageHeader } from '@/components/PageHeader';
 import { ComputeCard } from '@/components/ComputeSettings';
+import { ModelsCard } from '@/components/ModelsSettings';
+import { VoiceCard } from '@/components/VoiceSettings';
 import { FirebaseSetup, PairedDevices, PairPhone, ThisPhone } from '@/components/PhoneSettings';
 import { PublishingCard } from '@/components/publish/PublishingSettings';
 import { UsageMeter } from '@/components/UsageMeter';
@@ -94,6 +96,10 @@ export function SettingsPage() {
               <UsageMeter className="max-w-sm px-0" />
             </CardContent>
           </Card>
+
+          <ModelsCard />
+
+          <VoiceCard />
 
           <TranscriptionCard whisperModel={s?.whisperModel ?? 'small'} onModel={(v) => patch({ whisperModel: v })} />
 

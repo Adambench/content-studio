@@ -135,6 +135,40 @@ export function skillOptions(): Pick<Options, 'plugins' | 'skills' | 'additional
   };
 }
 
+/** The chat's skills with their one-line descriptions, for a model that opens them with a tool (the local chat). */
+export function chatSkillList(): { name: string; description: string }[] {
+  return CHAT_SKILLS.flatMap((name) => {
+    try {
+      const head = readFileSync(join(config.pluginDir, 'skills', name, 'SKILL.md'), 'utf8').slice(0, 4000);
+      const description = /^description:\s*(.+)$/m.exec(head)?.[1]?.replace(/^["']|["']$/g, '') ?? '';
+      return [{ name, description: description.length > 220 ? `${description.slice(0, 220)}…` : description }];
+    } catch {
+      return [];
+    }
+  });
+}
+
+/** A chat skill's SKILL.md, or one of its own files (`references/hooks.md`); nothing outside the skill's folder. */
+export function readSkillFile(name: string, file = 'SKILL.md'): string {
+  if (!CHAT_SKILLS.includes(name)) throw new Error(`No skill called ${name}. Skills: ${CHAT_SKILLS.join(', ')}.`);
+  const root = join(config.pluginDir, 'skills', name);
+  const path = resolve(root, file);
+  if (!inPlugin(path) || !(path === root || path.startsWith(root + sep))) throw new Error('Only the skill’s own files can be read.');
+  if (!existsSync(path)) {
+    const files: string[] = [];
+    const walk = (d: string) => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        if (e.isDirectory()) walk(join(d, e.name));
+        else if (/\.(md|txt)$/.test(e.name)) files.push(relative(root, join(d, e.name)));
+      }
+    };
+    if (existsSync(root)) walk(root);
+    throw new Error(`${name} has no ${file}. Its files: ${files.slice(0, 60).join(', ')}`);
+  }
+  if (statSync(path).isDirectory()) throw new Error(`${file} is a folder.`);
+  return readFileSync(path, 'utf8');
+}
+
 export type PlaybookFile = 'hooks' | 'retention' | 'clipping' | 'packaging' | 'sound-design' | 'halal' | 'platforms';
 const playbookCache = new Map<PlaybookFile, string>();
 

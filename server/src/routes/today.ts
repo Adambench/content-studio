@@ -15,6 +15,7 @@ const DAY = 24 * 60 * 60 * 1000;
 /** Background jobs worth showing, by what they do for me. Renders, transcriptions and posts have their own rows. */
 const JOB_LABELS: Record<string, string> = {
   'capture.structure': 'Turning a captured idea into a card',
+  'media.generate': 'Generating a picture or clip on the home PC',
   'voice.learn': 'Learning from your edits',
   'stats.sync': 'Reading the latest numbers',
   'analytics.review': 'Writing the weekly review',

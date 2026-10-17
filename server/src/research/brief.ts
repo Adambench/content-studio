@@ -110,7 +110,7 @@ export async function writeBrief({ workspaceId, briefId }: { workspaceId: string
     });
     return;
   }
-  waitForUsage();
+  await waitForUsage('research');
   const digest = outlierDigest(items);
   const previous = db
     .select({ id: schema.researchBriefs.id, body: schema.researchBriefs.body })
@@ -121,6 +121,7 @@ export async function writeBrief({ workspaceId, briefId }: { workspaceId: string
     .all()
     .find((b) => b.id !== brief.id && b.body?.patterns.length)?.body;
   const out = await askStructured<BriefOut>({
+    task: 'research',
     system: [playbook('hooks', 'packaging', 'halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'),
     prompt: [
       `# The page: ${ws.name} (${KIND_INFO[ws.kind].label.toLowerCase()})`,

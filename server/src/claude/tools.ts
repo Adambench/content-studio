@@ -603,5 +603,6 @@ export function buildTools(workspaceId: string) {
   ];
 
   const server = createSdkMcpServer({ name: SERVER_NAME, version: '0.1.0', tools, alwaysLoad: true });
-  return { server, toolNames: tools.map((t) => `mcp__${SERVER_NAME}__${t.name}`) };
+  // `tools` is for the local chat, which calls the same handlers through its own loop.
+  return { server, tools, toolNames: tools.map((t) => `mcp__${SERVER_NAME}__${t.name}`) };
 }

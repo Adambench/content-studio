@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -13,10 +13,10 @@ import { emit } from '../lib/events';
 import { badRequest, notFound } from '../lib/http';
 import { correctTranscript, getMedia } from '../services/media';
 import { clipToolsInstalled } from '../services/cliptools';
-import { speak, ttsInstalled } from '../services/tts';
-import { CHARACTERS, VOICES, type CharacterId } from '../../../shared/recipe';
+import { hasVoiceReference, speak, ttsInstalled, voiceReferencePath } from '../services/tts';
+import { CHARACTERS, CLONE_VOICE, VOICES, type CharacterId } from '../../../shared/recipe';
 import { characterSvg } from '../studio/characters';
-import { enqueue, hasPendingJob } from '../jobs/queue';
+import { JobError, enqueue, hasPendingJob } from '../jobs/queue';
 import { getPiece } from '../services/pieces';
 import { BUNDLED_FONTS, composeEdit } from '../studio/compose';
 import { createEdit, editDetail, findEditForPiece, getEdit, listRenders, restoreEditVersion, saveEditVersion, specMedia, specTranscripts, updateEditWorking } from '../studio/edits';
@@ -87,15 +87,23 @@ export async function studioRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // How a voice sounds: a short sample, made once and kept.
+  // How a voice sounds: a short sample, made once and kept (the cloned voice's, once per recording).
   app.get<{ Params: { voice: string } }>('/api/tts/voices/:voice', async (req, reply) => {
     const id = req.params.voice.replace(/\.wav$/, '');
     if (!VOICES.some((v) => v.id === id)) throw notFound('No such voice');
     if (!ttsInstalled()) throw badRequest('Install the clip tools first (Settings → Clip tools).');
-    const file = join(config.cacheDir, 'voices', `${id}.wav`);
+    if (id === CLONE_VOICE && !hasVoiceReference()) throw badRequest('Record your voice first (Settings → My voice).');
+    const version = id === CLONE_VOICE ? `-${Math.round(statSync(voiceReferencePath()).mtimeMs)}` : '';
+    const file = join(config.cacheDir, 'voices', `${id}${version}.wav`);
     if (!existsSync(file)) {
       await mkdir(dirname(file), { recursive: true });
-      await speak([{ text: 'Here’s how I sound reading your script. Short lines work best.', voice: id, speed: 1.05, pause: 0.1 }], file);
+      try {
+        await speak([{ text: 'Here’s how I sound reading your script. Short lines work best.', voice: id, speed: 1.05, pause: 0.1 }], file);
+      } catch (err) {
+        // The cloned voice needs a home PC: say so instead of failing the request.
+        if (err instanceof JobError) throw badRequest(err.message);
+        throw err;
+      }
     }
     reply.header('Cache-Control', 'private, max-age=86400');
     return reply.type('audio/wav').sendFile(basename(file), dirname(file));

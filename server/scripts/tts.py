@@ -1,7 +1,10 @@
-"""Speech for story, chat and character videos, with Kokoro (82M, Apache-2.0) on this computer.
+"""Speech for story, chat and character videos, with Kokoro (82M, Apache-2.0) on this computer, and the creator's own
+voice cloned with Chatterbox (MIT) from their recording, on a home PC.
 
-Usage: tts.py JOB.json --models DIR --out OUT.wav
+Usage: tts.py JOB.json --models DIR --out OUT.wav [--clone REFERENCE.wav]
 JOB.json: {"segments": [{"text": "...", "voice": "am_michael", "speed": 1.0, "pause": 0.3}, ...]}
+A segment with "voice": "clone" is spoken in the reference's voice (needs --clone and the chatterbox-tts package; the
+Python of setup-worker.sh --with voice has both). Chatterbox has no speed setting: those lines keep their own pace.
 Writes one WAV (24 kHz mono) with the segments one after another (each followed by its pause) and prints JSON: the
 total duration, each segment's start and end, and "mouth": how open a talking mouth is, 15 times a second, as digits
 0-4 (from the loudness of the speech, scaled per segment so a quiet voice still moves its mouth).
@@ -9,34 +12,74 @@ total duration, each segment's start and end, and "mouth": how open a talking mo
 import argparse
 import json
 
+import re
+
 import numpy as np
 import soundfile as sf
-from kokoro_onnx import Kokoro
 
 parser = argparse.ArgumentParser()
 parser.add_argument("job")
 parser.add_argument("--models", required=True)
 parser.add_argument("--out", required=True)
+parser.add_argument("--clone", default="")
 args = parser.parse_args()
 
 with open(args.job, encoding="utf-8") as f:
     job = json.load(f)
 
-kokoro = Kokoro(f"{args.models}/kokoro-v1.0.int8.onnx", f"{args.models}/voices-v1.0.bin")
-voices = set(kokoro.get_voices())
 RATE = 24000
 FPS = 15
 WINDOW = RATE // FPS
+CLONE = "clone"
+
+_kokoro = None
+_clone = None
+
+
+def kokoro():
+    global _kokoro
+    if _kokoro is None:
+        from kokoro_onnx import Kokoro
+
+        _kokoro = Kokoro(f"{args.models}/kokoro-v1.0.int8.onnx", f"{args.models}/voices-v1.0.bin")
+    return _kokoro
+
+
+def cloned(text):
+    """The reference's voice, sentence by sentence (Chatterbox makes about 40 s at most in one go)."""
+    global _clone
+    if _clone is None:
+        if not args.clone:
+            raise SystemExit("A line asks for the cloned voice but no recording was given (--clone).")
+        import torch
+        from chatterbox.tts import ChatterboxTTS
+
+        model = ChatterboxTTS.from_pretrained(device="cuda" if torch.cuda.is_available() else "cpu")
+        model.prepare_conditionals(args.clone)
+        _clone = model
+
+    pieces = []
+    for sentence in [s for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]:
+        wav = _clone.generate(sentence).squeeze(0).cpu().numpy().astype(np.float32)
+        if _clone.sr != RATE:
+            import librosa
+
+            wav = librosa.resample(wav, orig_sr=_clone.sr, target_sr=RATE)
+        pieces.append(wav)
+        pieces.append(np.zeros(int(0.08 * RATE), dtype=np.float32))
+    return np.concatenate(pieces[:-1]) if pieces else np.zeros(0, dtype=np.float32)
 
 parts = []
 segments = []
 t = 0.0
 for i, seg in enumerate(job["segments"]):
-    voice = seg.get("voice") if seg.get("voice") in voices else "am_michael"
     text = (seg.get("text") or "").strip()
     pause = max(0.0, float(seg.get("pause", 0.3)))
-    if text:
-        samples, rate = kokoro.create(text, voice=voice, speed=float(seg.get("speed", 1.0)), lang=seg.get("lang", "en-us"))
+    if text and seg.get("voice") == CLONE:
+        samples = cloned(text)
+    elif text:
+        voice = seg.get("voice") if seg.get("voice") in set(kokoro().get_voices()) else "am_michael"
+        samples, rate = kokoro().create(text, voice=voice, speed=float(seg.get("speed", 1.0)), lang=seg.get("lang", "en-us"))
         samples = np.asarray(samples, dtype=np.float32)
         if rate != RATE:
             raise SystemExit(f"unexpected sample rate {rate}")

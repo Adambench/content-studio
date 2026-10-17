@@ -1,5 +1,6 @@
 // A compute worker for Content Studio: runs on a home PC, takes the heavy jobs (Whisper, Demucs, the person matte, the
-// speaker scan) from the laptop's queue and sends the results back. It pairs once with a code from Settings → Compute,
+// speaker scan, picture and video generation, the cloned voice) from the laptop's queue and sends the results back.
+// It also tells the laptop where the text model it hosts (Ollama) is, when it has one (CS_LLM_URL). It pairs once with a code from Settings → Compute,
 // then polls the laptop over Tailscale. It only ever runs the tools in shared/compute.ts, with file names the laptop
 // chose; it never runs a command the laptop sends.
 //
@@ -32,13 +33,17 @@ const machine = (): MachinePaths => ({
   matteModel: join(toolsDir, 'models/u2net_human_seg.onnx'),
   yunetModel: join(toolsDir, 'models/face_detection_yunet_2023mar.onnx'),
   ffmpeg: 'ffmpeg',
+  sdBin: join(toolsDir, 'sd/bin/sd-cli'),
+  genModels: join(toolsDir, 'models/gen'),
+  voicePython: join(toolsDir, 'voice/bin/python'),
+  kokoroModels: join(toolsDir, 'models/kokoro'),
 });
 
 const log = (message: string) => console.log(`${new Date().toISOString().slice(11, 19)} ${message}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** File extensions the tools need on their outputs (FFmpeg picks the container from it). */
-const EXT: Record<string, string> = { json: '.json', vocals: '.wav', rest: '.wav', mask: '.mp4', audio: '.wav', video: '.mp4' };
+const EXT: Record<string, string> = { json: '.json', vocals: '.wav', rest: '.wav', mask: '.mp4', audio: '.wav', video: '.mp4', image: '.png', job: '.json', reference: '.wav', wav: '.wav' };
 
 async function loadConfig(): Promise<Config> {
   try {
@@ -80,6 +85,10 @@ async function capabilities(): Promise<{ tools: ComputeTool[]; gpu: string; spee
   if (p.demucs) tools.push('separate');
   if (p.matte && existsSync(m.matteModel)) tools.push('matte');
   if (p.speakers && existsSync(m.yunetModel)) tools.push('speakers');
+  // Set up by setup-worker.sh --with image,video,voice: each writes its marker once its models are in place.
+  if (existsSync(m.sdBin) && existsSync(join(m.genModels, '.image-ready'))) tools.push('image');
+  if (existsSync(m.sdBin) && existsSync(join(m.genModels, '.video-ready'))) tools.push('video');
+  if (existsSync(m.voicePython) && existsSync(join(toolsDir, 'voice/.ready'))) tools.push('speak');
   return { tools, gpu: p.gpu || '', speed: { matteMsPerFrame: p.matteMsPerFrame, cuda: p.cuda } };
 }
 
@@ -141,9 +150,13 @@ const tool = (t: ComputeTool) => TOOL_INFO[t].label;
 
 /** The laptop picks the tool and its settings; only plain values are accepted (never anything that reads as a flag). */
 function checkParams(task: WorkerTask) {
-  const { model, fps } = task.params;
+  const { model, fps, prompt, negative, width, height, seed, frames } = task.params;
+  const int = (v: unknown, min: number, max: number) => v === undefined || (Number.isInteger(v) && (v as number) >= min && (v as number) <= max);
   if (model !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,40}$/.test(model)) throw new Error('Refused: an odd model name.');
   if (fps !== undefined && !(typeof fps === 'number' && fps > 0 && fps <= 60)) throw new Error('Refused: an odd frame rate.');
+  // Prompts reach the generator as one argument each (`--prompt=…`), never through a shell.
+  for (const text of [prompt, negative]) if (text !== undefined && (typeof text !== 'string' || text.length > 2000 || /[\u0000-\u0008\u000b-\u001f]/.test(text))) throw new Error('Refused: an odd prompt.');
+  if (!int(width, 64, 2048) || !int(height, 64, 2048) || !int(seed, 0, 2 ** 31) || !int(frames, 1, 161)) throw new Error('Refused: an odd size, seed or length.');
   if (task.tool === 'probe' || !(task.tool in TOOL_INFO)) throw new Error('Refused: not a tool a worker runs.');
 }
 
@@ -179,11 +192,13 @@ async function main() {
   }
   const c = await loadConfig();
   const caps = await capabilities();
-  log(`${c.name}: ${caps.gpu || 'no GPU'}; tools: ${caps.tools.join(', ') || 'none (run scripts/setup-worker.sh)'}${caps.speed?.matteMsPerFrame ? `; matte ${caps.speed.matteMsPerFrame} ms/frame` : ''}`);
+  // The text model this PC hosts, as the laptop reaches it (set by setup-worker.sh --with llm).
+  const llmUrl = process.env.CS_LLM_URL?.replace(/\/+$/, '') || '';
+  log(`${c.name}: ${caps.gpu || 'no GPU'}; tools: ${caps.tools.join(', ') || 'none (run scripts/setup-worker.sh)'}${caps.speed?.matteMsPerFrame ? `; matte ${caps.speed.matteMsPerFrame} ms/frame` : ''}${llmUrl ? `; text model at ${llmUrl}` : ''}`);
   let busy = false;
   for (;;) {
     try {
-      const report: WorkerReport = { name: c.name, gpu: caps.gpu, tools: caps.tools, busy, speed: caps.speed ?? undefined };
+      const report: WorkerReport = { name: c.name, gpu: caps.gpu, tools: caps.tools, busy, speed: caps.speed ?? undefined, llm: llmUrl ? { url: llmUrl } : undefined };
       const { task } = await api<{ task: WorkerTask | null }>(c, '/api/worker/poll', report, 45_000);
       if (task) {
         busy = true;

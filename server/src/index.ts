@@ -21,6 +21,8 @@ import { startScheduler, stopScheduler } from './publish/scheduler';
 import { analyticsRoutes } from './routes/analytics';
 import { authRoutes, cookieSecret, isAuthenticated, isWorker } from './routes/auth';
 import { computeRoutes } from './routes/compute';
+import { aiRoutes } from './routes/ai';
+import { voiceRoutes } from './routes/voice';
 import { campaignRoutes, submissionRoutes } from './routes/campaigns';
 import { researchRoutes } from './routes/research';
 import { clippingRoutes } from './routes/clipping';
@@ -130,6 +132,8 @@ await app.register(clippingRoutes);
 await app.register(researchRoutes);
 await app.register(finderRoutes);
 await app.register(computeRoutes);
+await app.register(aiRoutes);
+await app.register(voiceRoutes);
 
 registerHandlers();
 startWorker();

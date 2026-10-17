@@ -8,7 +8,7 @@ import { notFound } from '../lib/http';
 import { openSse } from '../lib/sse';
 import { getPiece, getWorkspace } from '../services/pieces';
 
-const modelSchema = z.enum(['sonnet', 'opus', 'haiku']);
+const modelSchema = z.enum(['sonnet', 'opus', 'haiku', 'local']);
 
 function getThread(id: string) {
   const thread = db.select().from(schema.chatThreads).where(eq(schema.chatThreads.id, id)).get();

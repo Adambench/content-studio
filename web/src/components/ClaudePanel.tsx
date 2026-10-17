@@ -1,6 +1,6 @@
 import { ArrowUp, ChevronDown, Clapperboard, FileText, MessageSquarePlus, Square, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CLAUDE_MODELS, type ChatPart, type ChatStreamEvent } from '@shared/types';
+import { CHAT_MODELS, type ChatPart, type ChatStreamEvent } from '@shared/types';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -171,7 +171,7 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
 
   const suggestions = piece ? (piece.view === 'video' ? SUGGESTIONS.video : SUGGESTIONS.piece) : SUGGESTIONS.general;
   const empty = !shown.length && !pending;
-  const modelLabel = useMemo(() => CLAUDE_MODELS.find((m) => m.id === effectiveModel)?.label ?? effectiveModel, [effectiveModel]);
+  const modelLabel = useMemo(() => CHAT_MODELS.find((m) => m.id === effectiveModel)?.label ?? effectiveModel, [effectiveModel]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -306,7 +306,7 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
                 <SelectValue>{modelLabel}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {CLAUDE_MODELS.map((m) => (
+                {CHAT_MODELS.map((m) => (
                   <SelectItem key={m.id} value={m.id}>
                     <span className="flex flex-col">
                       <span>{m.label}</span>

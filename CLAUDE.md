@@ -11,7 +11,8 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   site windows (`src/sites.ts`).
 - `server/` — Fastify on 127.0.0.1:8787. SQLite = `node:sqlite` behind a better-sqlite3-shaped shim
   (`src/db/sqlite.ts`); never import `drizzle-orm/better-sqlite3` (pulls in the native module; no C toolchain here).
-  Main areas: `claude/` (agent, tools, prompts, plugin), `studio/` (edits → HyperFrames, render), `publish/`,
+  Main areas: `claude/` (agent, tools, prompts, plugin), `ai/` (Claude or the self-hosted model per task, the local
+  chat loop), `studio/` (edits → HyperFrames, render, generation), `publish/`,
   `analytics/`, `campaigns/`, `clipping/`, `research/`, `jobs/` (queue).
 - `web/` — React UI. `isDesktop` (`lib/desktop.ts`), `isApp`/`isNative` (`lib/native.ts`, the `vite --mode app` build).
 - `mobile/` — Capacitor 8, committed `android/`, one native plugin `StudioPlugin` (Java). CI builds APKs.
@@ -27,7 +28,14 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   never applies. Voiceover plays only `tts` or `capture` media.
 - **No Anthropic API key, ever.** Claude runs via `@anthropic-ai/claude-agent-sdk` on the Pro login
   (`claude/options.ts` strips `ANTHROPIC_API_KEY`). Few LLM calls: mechanical work is Whisper/FFmpeg; background jobs
-  use Haiku; they wait (not fail) while 5-hour usage ≥ 80 % (`waitForUsage()`).
+  use Haiku; they wait (not fail) while 5-hour usage ≥ 80 % (`waitForUsage(task)`).
+- **Every model call names its task** (`shared/ai.ts`): `askStructured({ task, … })` and the chat go to Claude or the
+  self-hosted model (Ollama on a home PC) by `ai/route.ts` (Settings → Models: per task, *local only*, auto at a usage
+  limit). A new AI call gets a task; the local chat (`ai/local-agent.ts`) calls the same studio tools, so a tool works
+  on both. Self-hosted models are commercial-safe only (Qwen, FLUX.1-schnell, Wan 2.1, Chatterbox, Kokoro).
+- **Generated pictures never show people or animals** (`shared/generate.ts`): prompts describe empty scenes, and every
+  result is checked (task `pictures`) and made again or dropped. Generation and the cloned voice run only on workers
+  (`WORKER_ONLY`); video clips only in the night window.
 - **Claude's tools are scoped to one workspace** (`buildTools(workspaceId)`), every tool checks ownership. Claude edits
   drafts/edits freely (versions authored `claude`) and may render, but never schedules, publishes, approves, rejects or
   submits: those need the user's click. Never give Claude a publish tool.

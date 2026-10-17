@@ -82,7 +82,7 @@ export async function pitchDirections({ pieceId }: { pieceId: string }) {
   }
   const state = normalizeDirections(piece.directions);
   if (!state || state.status !== 'pitching') return;
-  waitForUsage();
+  await waitForUsage('directions');
   const ws = getWorkspace(piece.workspaceId);
   const detail = getPieceDetail(pieceId);
   const branch = detail.branches.find((b) => b.id === detail.activeBranchId) ?? detail.branches[0];
@@ -127,6 +127,7 @@ export async function pitchDirections({ pieceId }: { pieceId: string }) {
 
   try {
     const out = await askStructured<{ directions: unknown[] }>({
+      task: 'directions',
       system: [playbook('hooks', 'retention', 'packaging', 'sound-design', 'halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'),
       prompt,
       schema: DIRECTION_SCHEMA,

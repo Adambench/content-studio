@@ -63,7 +63,7 @@ const INSTRUCTIONS = `You write UGC videos: short vertical videos a creator film
 
 /** The `ugc.script` job. */
 export async function writeUgcScript({ campaignId, workspaceId, angle }: { campaignId: string; workspaceId: string; angle?: string }) {
-  waitForUsage();
+  await waitForUsage('ugc');
   const c = getCampaignRow(campaignId);
   if (c.halalVerdict === 'reject') throw new JobError('This campaign was rejected by the halal screen.', { retry: false });
   const ws = getWorkspace(workspaceId);
@@ -92,7 +92,7 @@ export async function writeUgcScript({ campaignId, workspaceId, angle }: { campa
   ]
     .filter(Boolean)
     .join('\n\n');
-  const out = await askStructured<Written>({ system: [playbook('hooks', 'retention', 'packaging', 'halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'), prompt, schema: SCHEMA, model: 'sonnet' });
+  const out = await askStructured<Written>({ task: 'ugc', system: [playbook('hooks', 'retention', 'packaging', 'halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'), prompt, schema: SCHEMA, model: 'sonnet' });
 
   const notes = [
     `UGC for “${c.title}”${c.link ? ` (${c.link})` : ''}.`,

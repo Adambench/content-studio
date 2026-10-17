@@ -9,7 +9,7 @@ Decisions, measurements and what's left. What's built is in the code and git his
 | Users | Just me (single user) |
 | Where | Electron desktop app on the laptop (Zorin 18, i5-1135G7, 16 GB, Iris Xe) runs its own server; the phone uses the Android app (or PWA) over Tailscale Funnel's `*.ts.net` address |
 | Posting | Each platform's official API with my own developer apps; no aggregators. Formats: short vertical video + image posts/carousels |
-| Claude | Agent SDK on the Claude Pro login, never an API key. Edits ideas/drafts/edits freely; scheduling, publishing, approving and submitting are always my click |
+| Claude | Agent SDK on the Claude Pro login, never an API key; or the self-hosted model on the home server (phase 9). Edits ideas/drafts/edits freely; scheduling, publishing, approving and submitting are always my click |
 | Workspaces | One workspace = one page (identity, voice, look, pipeline, analytics, accounts) with a kind: Personal brand, Business, Clipping page. A kind presets modules, stages and Claude's instructions; it doesn't fence anything off |
 | Versions | Drafts and edits: alternatives, each with version history; compare + restore |
 | UI | Dark only, shadcn/ui; mobile first-class |
@@ -125,6 +125,12 @@ versionCode from the tag (`v1.2.3` → 10203).
    - [x] Step 5 — Creative directions (personal/business) and varied clip edits (clipping) (2026-10-16; the pitch untried against a real Claude login)
    - [x] Step 6 — One-button finder for clipping pages (2026-10-16; only tried against stand-ins, see the step)
    - [x] Step 7 — Effects library, local only (2026-10-16; a first set, see the step)
+9. **Self-hosted models** — built 2026-10-17, tried against stand-ins only (see *Phase 9 build plan*)
+   - [x] Step 1 — Routing: each AI task on Claude or the home server's model; one *local only* switch; auto switch
+   - [x] Step 2 — The chat and the video chats on the local model (own tool loop over the studio tools)
+   - [x] Step 3 — A worker hosts the text/vision model (Ollama), found by the laptop on its own
+   - [x] Step 4 — Generated b-roll images, video clips (overnight) and covers, never showing people or animals
+   - [x] Step 5 — My own voice, cloned, for voiceovers
 
 ## Waiting on me
 
@@ -144,6 +150,7 @@ versionCode from the tag (`v1.2.3` → 10203).
   doesn't show post links → adjust `syncSubmissions`.
 - Compute: on each home PC run `scripts/setup-worker.sh --server … --code …` (code from Settings → Compute); check `journalctl --user -u content-studio-worker`, that Settings → Compute shows the GPU and four tools, and *Run a test* says it ran there. Then measure each tool's speed on both cards against the laptop (the plan's step 3 asks for it): Whisper, Demucs, matte, speaker scan. The CUDA builds for Pascal (cu126 wheels, cuDNN 9 for faster-whisper) are untried.
 - Find clips: check `DISCOVER_URL` (`server/src/finder/discover.ts`) is the page that lists Content Rewards campaigns; run it once with a real creator and see that the viral search finds their clips (`ytsearch` for "<creator> clips").
+- Self-hosted models (phase 9), on the home PCs: pull the repo, then on the 1070 PC `scripts/setup-worker.sh --server … --code … --with llm,video,voice` and on the 1050 Ti PC `… --with image` (generation needs `nvidia-cuda-toolkit`, git, cmake, build-essential; the model server needs `zstd`). Check Settings → Models says *Ready: qwen3-vl:30b-a3b-instruct · on <PC>*, Compute lists *Pictures*, *Video clips*, *My voice* and *Text model*. Then: a chat on *Local* that edits a video with tools; a background job with *Local only* on; *Generate* a picture from a video's Footage and look at it; a clip overnight; Settings → My voice: record 10–30 s, *Hear the clone*. Measure (the plan needs it): local chat turn time, a picture on each card, a clip on the 1070. Untried here (no GPU, no Hugging Face or ollama.com access): the Ollama download and `ollama pull`, every model download URL in `setup-worker.sh` (file names from memory; FLUX's `ae.safetensors` is from black-forest-labs/FLUX.1-schnell, which may ask for a Hugging Face login), the CUDA build of stable-diffusion.cpp on Pascal, Chatterbox on Pascal, and how well the local model calls the studio tools.
 - Not run with a real chat yet: directions (`direction.pitch`), `view_render` and the package notes; `write_scene`/`view_overlay`, `write_format_video`, `write_ugc_video`, transitions;
   the weekly review with the playbook.
 
@@ -174,7 +181,7 @@ Claude using every useful skill so videos differ from other pages (considered ev
 | Finder | One button on a clipping page, **Find clips**, chains: new Content Rewards campaigns (ranked by pay, budget left, fit, halal-screened — joining stays my click on Whop) → for each active campaign the creator's long videos found and pulled in (newest, most viewed, those whose clips already went viral) → **already-viral moments** (other clippers' clips of the creator that went viral, matched to the source by transcript) go first, then the usual scan/pick → clips made → Review. Niche research runs with no watch list to set up (channels found from the niche and the campaigns) and feeds the pick and the edit. Also runs every morning |
 | Arsenal | A catalog (`shared/arsenal.ts`) of everything a video can use — effects, transitions, graphics, scenes, caption looks, formats, sound moves — with when each fits. Direction pitches and clip edits choose from it (and from the skills) and avoid repeating what the page's last videos used, so videos differ |
 | Skills | The chat loads every installed knowledge skill; more are surveyed and installed (`find-skills`). Background prompts paste the parts they need |
-| Effects | Free and local only, rebuilt in code (HyperFrames + FFmpeg): orbit, couch wall, UI world, frame break, digital zoom, phone mockup, checklist, headline wall, zoom-through cut, chart grow, pull-back reveal, green screen, paper cut, doodle boil, vertigo, cover story, glass type; plus paper collage, hand-drawn and film looks. Cut-outs of a person by a local matting model. No paid image/video generation. onetake isn't used (non-commercial licence); Clawd is Anthropic's mascot, so the cartoon style uses my own characters |
+| Effects | Free and local only, rebuilt in code (HyperFrames + FFmpeg): orbit, couch wall, UI world, frame break, digital zoom, phone mockup, checklist, headline wall, zoom-through cut, chart grow, pull-back reveal, green screen, paper cut, doodle boil, vertigo, cover story, glass type; plus paper collage, hand-drawn and film looks. Cut-outs of a person by a local matting model. No paid image/video generation (self-hosted generation came in phase 9). onetake isn't used (non-commercial licence); Clawd is Anthropic's mascot, so the cartoon style uses my own characters |
 | Compute | Two home PCs on Linux (GTX 1070 + i7-7800X + 32 GB; GTX 1050 Ti + i5-10400F + 16 GB) take the heavy jobs; the laptop app stays the brain (data, UI, Claude, signed-in sites) and its CPU is the fallback. Moving the server to an always-on PC can come later |
 | Brand assets | Not on clipping pages: a page's look (captions, fonts, accent, sounds) is in its settings → Style. On personal and business pages *Brand* sits at the bottom of the nav |
 
@@ -251,3 +258,53 @@ count-ups, motion paths, MorphSVG, DrawSVG, Physics2D, CustomWiggle eases, steps
 The chat also loads `embedded-captions`, `talking-head-recut` and `hyperframes-registry` as idea catalogues. All of it
 rendered through HyperFrames and looked at (contact sheets of every transition, preset, look, layout and animation).
 API version 3 (an older phone app would drop the new fields when saving an edit).
+
+## Phase 9 build plan (2026-10-17)
+
+What I asked for: the option to run on self-hosted models only, for everything Claude does today (chat, editing,
+background jobs) plus image and video generation and my own voice, because Claude's weekly usage runs out and videos
+still need to go out (5–10 a day; how long each takes doesn't matter).
+
+| Topic | Decision |
+|---|---|
+| Hardware | The two home PCs: GTX 1070 (8 GB) + 32 GB RAM and GTX 1050 Ti (4 GB) + 16 GB. Pascal cards do half precision ~64× slower, so everything runs on ggml runtimes (llama.cpp/Ollama, stable-diffusion.cpp) with quantized weights and fp32 maths, not PyTorch fp16 |
+| Switching | Per task: Claude, local, or auto. Auto = Claude until its weekly (or 5-hour) usage passes a limit I set, or Claude refuses for usage, then local. One *local only* switch overrides everything. Background jobs on local never wait for Claude's window |
+| Text + vision model | One Qwen3-VL model in Ollama on the 1070 PC (30B-A3B MoE, partly in RAM; text, images and tool calls), so nothing swaps between calls. Chosen in Settings from what the server has |
+| Chat on local | Its own tool loop (Ollama's chat API with tools) over the same studio tools, the skills as a `read_skill` tool, `web_fetch`; no web search. Same rules: never schedules, publishes, approves, rejects or submits |
+| Images | FLUX.1-schnell (Apache 2.0, GGUF) in stable-diffusion.cpp, 4 steps; b-roll stills (with a camera move), backgrounds and covers |
+| Video | Wan 2.1 T2V 1.3B (Apache 2.0) in stable-diffusion.cpp, 480×832, ~5 s; ~20–60 min a clip on the 1070, so video clips queue and run **overnight** (a window in Settings); the text model is unloaded first |
+| Halal | Generated pictures never show people or animals (any living being): the prompt asks for an empty scene (diffusion models read "no people" as people), a negative prompt backs it, and the vision model checks every image (three frames of a video) and a retry with a new seed replaces a failed one. No music, as always |
+| Voice | My voice cloned with Chatterbox (MIT), English, from a 10–30 s clean recording set in Settings; it's one more voice next to Kokoro's for voiceovers and format videos. Runs on a worker (CPU fallback on the laptop only if installed there) |
+| Licences | Commercial-safe only (Qwen, FLUX.1-schnell, Wan 2.1, Chatterbox, Kokoro) |
+
+**Built (2026-10-17).** Step 1: `shared/ai.ts` (10 tasks, modes, routing settings), `server/src/ai/route.ts`
+(`routeFor(task)`: local only → per-task mode → auto: Claude until its weekly usage ≥ the limit (default 90 %), or its
+5-hour usage ≥ the limit (background jobs: ≥ 80 % as before), or it refused for usage (`claudeLimitedUntil`, an hour),
+and only when the local model answers), `server/src/ai/local.ts` (Ollama's own API: `/api/tags`+`/api/show` for the
+models and what they can do, `/api/chat` streamed with `format` = the JSON schema for structured answers, `think:
+false`, one fixed context window so the model never reloads, a rough token check before sending). Every
+`askStructured` call names its task and goes local or to Claude (a Claude usage refusal on auto is answered locally);
+`waitForUsage(task)` never waits when the task is local. Settings → Models (`ModelsSettings.tsx`, `GET/PATCH
+/api/ai`). Step 2: `server/src/ai/local-agent.ts`, its own loop over the same studio tools (zod shapes → JSON schema,
+arguments checked with zod before the handler runs), `read_skill` (the chat's skills, own files only) and `web_fetch`
+(public addresses only); history from the stored messages within ~35 % of the window; old tool results are cut when a
+turn fills it; pictures from tools go in as a user turn. The chat picker has *Local*; a Claude chat on auto moves
+there with a one-line note saying why. Measured on the stand-in: the instructions + 45 tools are ~64 k characters
+(~18 k tokens), so 32 k is the smallest useful window. Step 3: `setup-worker.sh --with llm` installs Ollama in the
+worker's folder (no root), runs it as a user service bound to the Tailscale address, pulls the model; the worker
+reports `CS_LLM_URL` and the laptop uses the first online worker's server unless an address is set. Step 4: compute
+tools `image` and `video` (`WORKER_ONLY`: a job waits for a worker instead of running on the laptop),
+`server/scripts/generate.py` → stable-diffusion.cpp (`master-929-3f8527a`, built by the setup script with CUDA for
+compute 6.1; prompts through files, sd-cli has no `--prompt=`), job `media.generate` (`studio/generate.ts`): clips wait
+for the night window (Settings → Models, default 23:00–07:00), up to 3 tries with new seeds until the vision check
+(task `pictures`) finds no person, animal or haram thing, into the piece's files, and with `place` into the edit as
+b-roll (a full-screen still drifts in slowly); `generate_media` for Claude, *Generate* on a video's Footage; the arsenal
+lists both. Step 5: compute tool `speak` = `tts.py --clone REF` in the worker's own Chatterbox environment (Kokoro
+voices in the same job still work, so a dialogue can mix them); *My voice* in every voice picker; Settings → My voice
+keeps the recording (`/api/voice`, mono 24 kHz, first 30 s, silence trimmed). Tried: a stand-in Ollama (schema-shaped
+JSON, scripted tool calls) for capture → idea card, chat turns with `get_board`/`read_skill`, history, the auto switch
+at 95 % weekly usage, an unreachable server; a real worker process with a stand-in sd-cli for a picture into the edit,
+3 failed checks → a clear error, a clip waiting 77 min for the window then made (480×832, 5.06 s) and placed; the
+cloned voice through the worker with stub models, and a mixed clone + Kokoro job; the Settings cards, the Generate
+dialog (desktop and phone width). Not done: covers aren't sent to the platforms as covers (Instagram's `cover_url`);
+the pictures go in as b-roll or a background; no web search on the local chat.

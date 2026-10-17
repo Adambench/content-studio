@@ -14,6 +14,7 @@ import { makeClip, onMakeFailed } from '../clipping/make';
 import { pickMoments } from '../clipping/pick';
 import { scanSource } from '../clipping/scan';
 import { askStructured } from '../claude/oneshot';
+import { generateMedia, onGenerateFailed } from '../studio/generate';
 import { playbook } from '../claude/plugin';
 import { config } from '../config';
 import { db, now, schema } from '../db';
@@ -118,6 +119,7 @@ async function structureCapture(payload: { workspaceId: string; mediaId?: string
   let idea: CapturedIdea;
   if (raw) {
     idea = await askStructured<CapturedIdea>({
+      task: 'ideas',
       system: [
         // The same text every time first, so it caches.
         playbook('hooks', 'halal'),
@@ -179,6 +181,7 @@ async function learnVoice({ workspaceId }: { workspaceId: string }) {
 
   const examples = edits.map((e, i) => `### Edit ${i + 1} — ${e.field}\nClaude wrote:\n${e.before}\n\nI changed it to:\n${e.after}`).join('\n\n');
   const { memory } = await askStructured<{ memory: string }>({
+    task: 'ideas',
     system:
       'You maintain a concise style memory for a content creator: how they want their hooks, scripts and captions written. ' +
       'Study how they rewrote drafts and update the memory. Keep durable, specific, actionable rules (tone, length, words they cut or add, ' +
@@ -256,6 +259,9 @@ export function registerHandlers() {
   onJobFailed('research.analyse', onAnalyseFailed);
   // Effects that cut the person out: the matte (a local model) then FFmpeg; one at a time, they fill the CPU.
   registerJob('media.effect', applyEffect, 1);
+  // One at a time: they all run on the same home PC's card.
+  registerJob('media.generate', generateMedia, 1);
+  onJobFailed('media.generate', onGenerateFailed);
   onJobFailed('media.effect', onEffectFailed);
   // The finder: a run per clipping page, one at a time (it only starts the jobs above).
   registerJob('finder.run', runFinder, 1);
