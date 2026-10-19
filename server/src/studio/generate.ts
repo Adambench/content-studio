@@ -15,13 +15,16 @@ import {
 } from '../../../shared/generate';
 import { normalizeEdit, type BrollOverlay } from '../../../shared/edit';
 import { REVIEW_STAGE } from '../../../shared/types';
+import { HOSTED_OUT, hostedPriceUsd } from '../../../shared/hosted';
+import { download, submit, waitFor } from '../ai/hosted/kie';
+import { fitsCap, hostedKey, hostedSettings, msUntilTomorrow, recordSpend, spentTodayUsd } from '../ai/hosted/ledger';
 import { askStructured } from '../claude/oneshot';
 import { runToolOn } from '../compute/run';
 import { config } from '../config';
 import { db, newId, schema } from '../db';
 import { JobError, enqueue } from '../jobs/queue';
 import { emit } from '../lib/events';
-import { extractFrames, probe } from '../lib/ffmpeg';
+import { extractFrames, fitToSize, probe } from '../lib/ffmpeg';
 import { getSetting } from '../lib/settings';
 import { notify } from '../lib/push';
 import { adoptFile, mediaPath } from '../services/media';
@@ -71,9 +74,44 @@ async function checkPicture(file: string, kind: GenerateRequest['kind'], dir: st
   });
 }
 
+/** One try on the hosted service: submit, wait, download, bring to full size. Spend is recorded when it's submitted. */
+async function makeHosted(job: GenerateJob, prompt: string, file: string, dir: string, attempt: number) {
+  const h = hostedSettings();
+  const model = h.models[job.kind];
+  const usd = hostedPriceUsd(h, job.kind);
+  const taskId = await submit({ kind: job.kind, model, prompt, negative: NEGATIVE_PROMPT, aspect: job.aspect, seed: Math.floor(Math.random() * 2 ** 31) });
+  recordSpend({ model: model.id, kind: job.kind, taskId, credits: job.kind === 'video' ? model.credits * model.seconds : model.credits, dollars: usd, pieceId: job.pieceId });
+  const raw = join(dir, `raw-${attempt}.${job.kind === 'video' ? 'mp4' : 'png'}`);
+  await download(await waitFor(taskId, job.kind), raw);
+  const [w, hgt] = HOSTED_OUT[job.aspect];
+  await fitToSize(raw, file, w, hgt, job.kind === 'video');
+  return { seconds: job.kind === 'video' ? model.seconds : 0, on: 'kie.ai' };
+}
+
+/**
+ * Where this job runs: the hosted service when the key is saved, the kind is set to it and today's cap has room;
+ * otherwise a home PC (or, with the backend set to hosted only, a wait for tomorrow's cap).
+ */
+function backendFor(kind: GenerateRequest['kind']): 'hosted' | 'home' {
+  const h = hostedSettings();
+  const mode = h.backend[kind];
+  if (mode === 'home') return 'home';
+  const usable = !!hostedKey();
+  if (!usable) {
+    if (mode === 'hosted') throw new JobError('Add the kie.ai key in Settings → Models (hosted generation is on).', { retry: false });
+    return 'home';
+  }
+  if (!fitsCap(hostedPriceUsd(h, kind), h)) {
+    if (mode === 'auto') return 'home';
+    throw new JobError(`Today’s hosted spend ($${spentTodayUsd().toFixed(2)}) has reached the $${h.dailyCapUsd} cap: waiting for tomorrow.`, { wait: true, delayMs: msUntilTomorrow() });
+  }
+  return 'hosted';
+}
+
 /** The `media.generate` job. */
 export async function generateMedia(job: GenerateJob) {
-  if (job.kind === 'video') {
+  let where = backendFor(job.kind);
+  if (job.kind === 'video' && where === 'home') {
     const wait = msUntilVideoWindow(generationSettings());
     if (wait > 0) {
       const at = new Date(Date.now() + wait).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -88,18 +126,25 @@ export async function generateMedia(job: GenerateJob) {
     let kept: { file: string; on: string; seconds: number } | null = null;
     let failed = '';
     for (let attempt = 1; attempt <= TRIES && !kept; attempt++) {
+      // Each try asks again, so a cap reached mid-way moves the rest to the home PC (or waits).
+      if (attempt > 1) where = backendFor(job.kind);
       const file = join(dir, `try-${attempt}.${job.kind === 'video' ? 'mp4' : 'png'}`);
-      const seed = Math.floor(Math.random() * 2 ** 31);
-      const { stdout, on } = await runToolOn(
-        job.kind,
-        { [job.kind]: file },
-        { prompt, negative: NEGATIVE_PROMPT, width, height, seed, ...(job.kind === 'video' && { frames: VIDEO_FRAMES }) },
-        { timeoutMs: job.kind === 'video' ? 4 * 60 * 60_000 : 30 * 60_000, track: `generate:${job.workspaceId}` },
-      );
+      let made: { seconds: number; on: string };
+      if (where === 'hosted') {
+        made = await makeHosted(job, prompt, file, dir, attempt);
+      } else {
+        const seed = Math.floor(Math.random() * 2 ** 31);
+        const { stdout, on } = await runToolOn(
+          job.kind,
+          { [job.kind]: file },
+          { prompt, negative: NEGATIVE_PROMPT, width, height, seed, ...(job.kind === 'video' && { frames: VIDEO_FRAMES }) },
+          { timeoutMs: job.kind === 'video' ? 4 * 60 * 60_000 : 30 * 60_000, track: `generate:${job.workspaceId}` },
+        );
+        made = { seconds: Number((JSON.parse(stdout.trim().split('\n').pop() || '{}') as { seconds?: number }).seconds) || 0, on };
+      }
       const check = await checkPicture(file, job.kind, dir);
       if (!check.livingBeings && !check.haram) {
-        const seconds = Number((JSON.parse(stdout.trim().split('\n').pop() || '{}') as { seconds?: number }).seconds) || 0;
-        kept = { file, on, seconds };
+        kept = { file, ...made };
       } else {
         failed = check.what || (check.livingBeings ? 'a person or an animal' : 'something haram');
         console.warn(`[generate] try ${attempt} showed ${failed}; making it again`);
@@ -114,8 +159,8 @@ export async function generateMedia(job: GenerateJob) {
     emit({ type: 'changed', entity: 'media', workspaceId: job.workspaceId, id: made.id });
 
     const placed = job.place && job.pieceId ? place(job, made.id, probed.durationMs) : false;
-    const where = kept.on === 'laptop' ? '' : ` on ${kept.on}`;
-    await notify('Generated', `${job.kind === 'video' ? 'A clip' : 'A picture'} is ready${where}${kept.seconds ? ` (${Math.round(kept.seconds)} s)` : ''}${placed ? ', in the edit' : ''}: ${job.prompt.slice(0, 80)}`, job.pieceId ? `/w/${job.workspaceId}/p/${job.pieceId}` : undefined);
+    const wherePhrase = kept.on === 'laptop' ? '' : ` on ${kept.on}`;
+    await notify('Generated', `${job.kind === 'video' ? 'A clip' : 'A picture'} is ready${wherePhrase}${kept.seconds ? ` (${Math.round(kept.seconds)} s)` : ''}${placed ? ', in the edit' : ''}: ${job.prompt.slice(0, 80)}`, job.pieceId ? `/w/${job.workspaceId}/p/${job.pieceId}` : undefined);
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }

@@ -313,8 +313,7 @@ the pictures go in as b-roll or a background; no web search on the local chat.
 
 Why: the local models (FLUX.1-schnell, Wan 2.1 1.3B at 480p) are the weakest generators there are, and a soft clip
 upscaled to 1080×1920 hurts reach. Videos that ship should use better models; the home PCs stay for drafts, the text
-model and anything that must stay free. Checked: Crayo has no public API (nothing in its docs or from third parties),
-so it can't be called; its exports come in as ordinary footage.
+model and anything that must stay free. Crayo does have an API (crayo.ai/features/api, bearer key); parked for now at the user's request. (An earlier check wrongly found none.) Its exports come in as ordinary footage meanwhile.
 
 | Topic | Decision |
 |---|---|
@@ -325,7 +324,7 @@ so it can't be called; its exports come in as ordinary footage.
 | Halal | Unchanged and enforced on our side: prompts describe empty scenes (`EMPTY_SCENE`), the negative prompt is sent where the model takes one, and every result is checked (task `pictures`, three frames of a clip) and made again or dropped. Each retry is paid, so retries count against the cap |
 | Spend cap | $10 a day (Settings → Models, editable), kept in a ledger table (`ai_spend`: provider, model, kind, credits, dollars, piece, time). A request that would pass the cap waits until tomorrow (job `wait`), or falls back to the home PC when the setting is *auto*. Shown as today's spend on the Models card and on each job |
 | Failures | The task id is saved in `jobs` so a restart resumes polling and never pays twice; a refused prompt (provider moderation) counts as a failed try; the result file is downloaded at once because provider links expire |
-| Crayo | Not integrable. Exports go into Footage like any footage; nothing else to build |
+| Crayo | Has a REST API (api.crayo.ai); parked. Exports go into Footage like any footage meanwhile |
 | Voice | Stock Kokoro voices stay free on the laptop. A hosted cloned voice is not planned (open question: only if the Chatterbox result on the home PC isn't good enough) |
 
 Steps: (1) `shared/ai.ts` + settings: generation backend per kind, hosted settings, cap; (2) kie.ai client + provider
@@ -336,3 +335,10 @@ estimated price; (5) docs (CLAUDE.md rule on the hosted key and the cap), typech
 
 Waiting on me: a kie.ai key (80 free credits to test), the real prices from its dashboard (the figures above come from
 search results and its marketing pages), and which Wan/Kling model names its API exposes today.
+
+**Built (2026-10-19):** steps 1–5 except resume-after-restart. `shared/hosted.ts`; `server/src/ai/hosted/` (kie.ts client,
+ledger.ts, `ai_spend` table); `studio/generate.ts` picks hosted or home per try (`backendFor`), checks every result, and
+scales to 1080×1920 with the sound stripped; Settings → Models → Hosted generation; Generate dialog shows the price.
+Tried against a stand-in (`CS_HOSTED_API`): create, poll, download, resize, cap, bad key. Not tried against kie.ai itself:
+the model ids, input fields and credit prices are from its public docs/price list and are editable in Settings. A restart
+mid-task loses that task (its spend is already counted): task ids are in `ai_spend`, not yet resumed.

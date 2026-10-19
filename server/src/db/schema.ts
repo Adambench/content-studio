@@ -632,3 +632,20 @@ export const researchBriefs = sqliteTable(
   },
   (t) => [index('research_briefs_workspace_idx').on(t.workspaceId, t.createdAt)],
 );
+
+/** What hosted generation (kie.ai) has cost: one row per request, so the daily cap can be enforced and shown. */
+export const aiSpend = sqliteTable(
+  'ai_spend',
+  {
+    id: id(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    kind: text('kind').notNull(),
+    taskId: text('task_id'),
+    credits: real('credits').notNull().default(0),
+    dollars: real('dollars').notNull().default(0),
+    pieceId: text('piece_id'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('ai_spend_created_idx').on(t.createdAt)],
+);

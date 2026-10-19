@@ -34,12 +34,15 @@ function GenerateDialog({ open, onOpenChange, wid, pieceId }: { open: boolean; o
   const [busy, setBusy] = useState(false);
   const gen = ai.data?.generation;
   const online = ai.data?.generators.some((g) => g[kind]);
+  const hosted = ai.data?.hosted;
+  // Hosted when the key is saved, the kind is set to it and today's cap has room (the server decides the same way).
+  const useHosted = !!hosted?.hasKey && hosted.settings.backend[kind] !== 'home' && hosted.spentTodayUsd + hosted.priceUsd[kind] <= hosted.settings.dailyCapUsd;
 
   async function submit() {
     setBusy(true);
     try {
       await api(`/workspaces/${wid}/generate`, { body: { kind, prompt, purpose, aspect, pieceId } });
-      toast.success(kind === 'video' ? `Queued: it’s made tonight from ${String(gen?.videoFrom ?? 23).padStart(2, '0')}:00.` : 'Started: it lands in Footage in a few minutes.');
+      toast.success(useHosted ? 'Started: it lands in Footage in a few minutes.' : kind === 'video' ? `Queued: it’s made tonight from ${String(gen?.videoFrom ?? 23).padStart(2, '0')}:00.` : 'Started: it lands in Footage in a few minutes.');
       setPrompt('');
       onOpenChange(false);
     } catch (err) {
@@ -54,7 +57,7 @@ function GenerateDialog({ open, onOpenChange, wid, pieceId }: { open: boolean; o
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Generate</DialogTitle>
-          <DialogDescription>Made on your home PC. Describe a place, an object or a scene: generated pictures never show people or animals, and any that do are made again.</DialogDescription>
+          <DialogDescription>{useHosted ? 'Made by kie.ai.' : 'Made on your home PC.'} Describe a place, an object or a scene: generated pictures never show people or animals, and any that do are made again.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <ToggleGroup type="single" variant="outline" value={kind} onValueChange={(v) => v && setKind(v as GenKind)} className="w-full">
@@ -62,7 +65,7 @@ function GenerateDialog({ open, onOpenChange, wid, pieceId }: { open: boolean; o
               Picture
             </ToggleGroupItem>
             <ToggleGroupItem value="video" className="flex-1">
-              Clip (tonight)
+              {useHosted ? 'Clip' : 'Clip (tonight)'}
             </ToggleGroupItem>
           </ToggleGroup>
           <div className="space-y-2">
@@ -101,7 +104,12 @@ function GenerateDialog({ open, onOpenChange, wid, pieceId }: { open: boolean; o
               </Select>
             </div>
           </div>
-          {ai.data && !online && <p className="text-xs text-amber-400">No home PC that makes {kind === 'video' ? 'clips' : 'pictures'} is online: it waits until one is.</p>}
+          {useHosted && hosted && (
+            <p className="text-xs text-muted-foreground">
+              About ${hosted.priceUsd[kind].toFixed(2)} · ${hosted.spentTodayUsd.toFixed(2)} of ${hosted.settings.dailyCapUsd} spent today.
+            </p>
+          )}
+          {ai.data && !online && !useHosted && <p className="text-xs text-amber-400">No home PC that makes {kind === 'video' ? 'clips' : 'pictures'} is online: it waits until one is.</p>}
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>

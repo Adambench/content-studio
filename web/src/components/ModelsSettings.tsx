@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { api, errorMessage } from '@/lib/api';
+import { HostedGeneration } from '@/components/HostedSettings';
 import { keys, queryClient, useAiSettings } from '@/lib/queries';
 
 const SHARES = [0.5, 0.7, 0.8, 0.9, 0.95, 1];
@@ -198,6 +199,10 @@ export function ModelsCard() {
           </div>
           <p className="text-xs text-muted-foreground">A clip takes 20–60 minutes on the GTX 1070 and needs the card to itself, so clips wait for these hours; pictures are made any time.</p>
         </div>
+
+        <Separator />
+
+        <HostedGeneration />
       </CardContent>
     </Card>
   );

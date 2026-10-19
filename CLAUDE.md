@@ -35,7 +35,9 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   on both. Self-hosted models are commercial-safe only (Qwen, FLUX.1-schnell, Wan 2.1, Chatterbox, Kokoro).
 - **Generated pictures never show people or animals** (`shared/generate.ts`): prompts describe empty scenes, and every
   result is checked (task `pictures`) and made again or dropped. Generation and the cloned voice run only on workers
-  (`WORKER_ONLY`); video clips only in the night window.
+  (`WORKER_ONLY`); video clips only in the night window. Pictures and clips can instead be made by kie.ai
+  (`ai/hosted/`, Settings → Models): the key lives in settings, write-only, never sent to the UI; every request is
+  recorded in `ai_spend` and a daily cap ($10) stops new ones; hosted clips lose their sound. `CS_HOSTED_API` = stand-in.
 - **Claude's tools are scoped to one workspace** (`buildTools(workspaceId)`), every tool checks ownership. Claude edits
   drafts/edits freely (versions authored `claude`) and may render, but never schedules, publishes, approves, rejects or
   submits: those need the user's click. Never give Claude a publish tool.

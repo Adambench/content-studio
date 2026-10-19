@@ -216,3 +216,10 @@ export async function normalizeLoudness(file: string, out: string, target: numbe
   await run(['-i', file, '-map', '0', '-c:v', 'copy', '-af', `${filter}:${measured},aresample=48000`, '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', out], { signal });
   return true;
 }
+
+/** Fill a `width`×`height` frame (scale up, crop the overflow). A clip loses its sound: nothing generated may carry any. */
+export async function fitToSize(file: string, out: string, width: number, height: number, isVideo: boolean) {
+  const vf = `scale=${width}:${height}:force_original_aspect_ratio=increase:flags=lanczos,crop=${width}:${height},setsar=1`;
+  const args = isVideo ? ['-an', '-c:v', 'libx264', '-preset', 'medium', '-crf', '17', '-pix_fmt', 'yuv420p', '-movflags', '+faststart'] : ['-frames:v', '1'];
+  await execFile(requireBinary('ffmpeg'), ['-y', '-v', 'error', '-i', file, '-vf', vf, ...args, out], { maxBuffer: 10 * 1024 * 1024 });
+}

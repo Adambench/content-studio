@@ -40,6 +40,10 @@ type SettingsShape = {
   localAi: Partial<import('../../../shared/ai').LocalAiConfig>;
   /** When video clips may be generated (shared/generate.ts). */
   generation: Partial<import('../../../shared/generate').GenerationSettings>;
+  /** Hosted generation (shared/hosted.ts): backend per kind, prices, daily cap. */
+  hosted: Partial<import('../../../shared/hosted').HostedSettings>;
+  /** The kie.ai API key: write-only, never sent to the UI. */
+  hostedKey: string;
   /** Claude refused for usage: tasks on auto skip it until then (ms). */
   claudeLimitedUntil: number;
   /** Campaigns found on Content Rewards that aren't added yet. */

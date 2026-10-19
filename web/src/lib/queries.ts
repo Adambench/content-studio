@@ -3,6 +3,7 @@ import { api } from './api';
 import type { AiRouteNow, AiRouting, AiTask, LocalAiConfig, LocalAiStatus } from '@shared/ai';
 import type { WorkerInfo } from '@shared/compute';
 import type { GenerationSettings } from '@shared/generate';
+import type { HostedStatus } from '@shared/hosted';
 import type { CampaignLeads, FinderRun } from '@shared/finder';
 import type { PairedDevice } from '@shared/devices';
 import type { CreatorInfo } from '@shared/publish';
@@ -141,6 +142,7 @@ export type AiSettings = {
   claudeLimitedUntil: number | null;
   generation: GenerationSettings;
   generators: { name: string; image: boolean; video: boolean }[];
+  hosted: HostedStatus;
 };
 export const useAiSettings = () => useQuery({ queryKey: keys.ai, queryFn: () => api<AiSettings>('/ai'), refetchInterval: 30_000 });
 export const useWorkers = () => useQuery({ queryKey: keys.compute, queryFn: () => api<WorkerInfo[]>('/compute/workers'), refetchInterval: 15_000 });

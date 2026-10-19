@@ -7,6 +7,9 @@ import { listWorkers } from '../compute/workers';
 import { badRequest } from '../lib/http';
 import { getPiece, getWorkspace } from '../services/pieces';
 import { generationSettings, queueGeneration } from '../studio/generate';
+import { creditsLeft } from '../ai/hosted/kie';
+import { hostedKey, hostedSettings, spentTodayUsd } from '../ai/hosted/ledger';
+import { hostedPriceUsd, normalizeHosted, type HostedStatus } from '../../../shared/hosted';
 import { localConfig, localStatus } from '../ai/local';
 import { aiRouting, routesNow } from '../ai/route';
 import { emit } from '../lib/events';
@@ -14,7 +17,29 @@ import { getSetting, setSetting } from '../lib/settings';
 
 /** Settings → Models: which model answers each task, and the self-hosted model server. */
 export async function aiRoutes(app: FastifyInstance) {
+  async function hostedStatus(fresh: boolean): Promise<HostedStatus> {
+    const settings = hostedSettings();
+    let left: number | null = null;
+    let error: string | null = null;
+    if (fresh && hostedKey()) {
+      try {
+        left = await creditsLeft();
+      } catch (err) {
+        error = (err as Error).message;
+      }
+    }
+    return {
+      hasKey: !!hostedKey(),
+      spentTodayUsd: spentTodayUsd(),
+      settings,
+      priceUsd: { image: hostedPriceUsd(settings, 'image'), video: hostedPriceUsd(settings, 'video') },
+      creditsLeft: left,
+      error,
+    };
+  }
+
   app.get<{ Querystring: { fresh?: string } }>('/api/ai', async (req) => ({
+    hosted: await hostedStatus(req.query.fresh === '1'),
     routing: aiRouting(),
     local: localConfig(),
     status: await localStatus(req.query.fresh === '1'),
@@ -53,6 +78,20 @@ export async function aiRoutes(app: FastifyInstance) {
           .partial()
           .optional(),
         generation: z.object({ videoFrom: z.number().int().min(0).max(23), videoTo: z.number().int().min(0).max(23) }).partial().optional(),
+        hosted: z
+          .object({
+            backend: z.partialRecord(z.enum(GEN_KINDS), z.enum(['auto', 'hosted', 'home'])),
+            usdPerCredit: z.number().min(0.0001).max(1),
+            dailyCapUsd: z.number().min(0).max(10000),
+            models: z.partialRecord(
+              z.enum(GEN_KINDS),
+              z.object({ id: z.string().trim().min(1).max(120), credits: z.number().min(0).max(10000), seconds: z.number().min(0).max(30), resolution: z.string().trim().min(1).max(20) }).partial(),
+            ),
+          })
+          .partial()
+          .optional(),
+        /** The kie.ai key: write-only; empty removes it. */
+        hostedKey: z.string().trim().max(200).optional(),
         /** Claude works again: stop skipping it before the hour is up. */
         clearClaudeLimit: z.boolean().optional(),
       })
@@ -64,6 +103,16 @@ export async function aiRoutes(app: FastifyInstance) {
     if (body.local) setSetting('localAi', { ...DEFAULT_LOCAL_AI, ...getSetting('localAi'), ...body.local });
     if (body.clearClaudeLimit) setSetting('claudeLimitedUntil', 0);
     if (body.generation) setSetting('generation', { ...DEFAULT_GENERATION, ...getSetting('generation'), ...body.generation });
+    if (body.hosted) {
+      const h = hostedSettings();
+      setSetting('hosted', normalizeHosted({
+        ...h,
+        ...body.hosted,
+        backend: { ...h.backend, ...body.hosted.backend },
+        models: { image: { ...h.models.image, ...body.hosted.models?.image }, video: { ...h.models.video, ...body.hosted.models?.video } },
+      }));
+    }
+    if (body.hostedKey !== undefined) setSetting('hostedKey', body.hostedKey);
     emit({ type: 'changed', entity: 'settings' });
     return { ok: true };
   });
