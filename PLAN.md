@@ -308,3 +308,31 @@ at 95 % weekly usage, an unreachable server; a real worker process with a stand-
 cloned voice through the worker with stub models, and a mixed clone + Kokoro job; the Settings cards, the Generate
 dialog (desktop and phone width). Not done: covers aren't sent to the platforms as covers (Instagram's `cover_url`);
 the pictures go in as b-roll or a background; no web search on the local chat.
+
+## Phase 10 build plan (2026-10-19): hosted generation, so quality isn't capped by the home PCs
+
+Why: the local models (FLUX.1-schnell, Wan 2.1 1.3B at 480p) are the weakest generators there are, and a soft clip
+upscaled to 1080×1920 hurts reach. Videos that ship should use better models; the home PCs stay for drafts, the text
+model and anything that must stay free. Checked: Crayo has no public API (nothing in its docs or from third parties),
+so it can't be called; its exports come in as ordinary footage.
+
+| Topic | Decision |
+|---|---|
+| Provider | kie.ai (one key, one credit wallet, ~$0.005 a credit; Wan 2.5, Kling 3, FLUX 2). Behind a small provider interface (`server/src/ai/hosted/`: `submit`, `poll`, `download`, `price`) so fal.ai or Replicate can be added without touching callers. The key is stored server-side only (never in `publicAccount`-style responses or logs) |
+| Text | No hosted text API. Claude stays on the subscription login (the *no Anthropic API key* rule stands) and falls back to the local model as built in phase 9 |
+| Where each thing runs | Pictures and clips: *hosted*, *home PC* or *auto* (hosted when a key is set and the cap allows, else the worker), set per kind in Settings → Models. Hosted clips ignore the night window and take minutes, not hours. The edit, render, Whisper, FFmpeg, captions, effects and stock voices stay on the machine running the server |
+| Quality | Clips: Wan 2.5 / Kling 3, 720p or better, ~5 s, about $0.30–0.40 each; stills: FLUX 2 1K–2K, ~$0.025. Hosted clips are upscaled to 1080×1920 with FFmpeg when needed |
+| Halal | Unchanged and enforced on our side: prompts describe empty scenes (`EMPTY_SCENE`), the negative prompt is sent where the model takes one, and every result is checked (task `pictures`, three frames of a clip) and made again or dropped. Each retry is paid, so retries count against the cap |
+| Spend cap | $10 a day (Settings → Models, editable), kept in a ledger table (`ai_spend`: provider, model, kind, credits, dollars, piece, time). A request that would pass the cap waits until tomorrow (job `wait`), or falls back to the home PC when the setting is *auto*. Shown as today's spend on the Models card and on each job |
+| Failures | The task id is saved in `jobs` so a restart resumes polling and never pays twice; a refused prompt (provider moderation) counts as a failed try; the result file is downloaded at once because provider links expire |
+| Crayo | Not integrable. Exports go into Footage like any footage; nothing else to build |
+| Voice | Stock Kokoro voices stay free on the laptop. A hosted cloned voice is not planned (open question: only if the Chatterbox result on the home PC isn't good enough) |
+
+Steps: (1) `shared/ai.ts` + settings: generation backend per kind, hosted settings, cap; (2) kie.ai client + provider
+interface + ledger, tried against a stand-in at `CS_HOSTED_API` (like `CS_PLATFORM_API`); (3) `studio/generate.ts`
+takes the backend: hosted path skips `WORKER_ONLY` and the window, same check and retries, same placement;
+(4) Settings → Models card: key (write-only), backend per kind, cap, spend today; Generate dialog shows the
+estimated price; (5) docs (CLAUDE.md rule on the hosted key and the cap), typecheck, commit, push.
+
+Waiting on me: a kie.ai key (80 free credits to test), the real prices from its dashboard (the figures above come from
+search results and its marketing pages), and which Wan/Kling model names its API exposes today.
