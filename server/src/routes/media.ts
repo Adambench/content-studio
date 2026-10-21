@@ -12,6 +12,7 @@ import { isAuthenticated } from './auth';
 import { deleteMedia, getMedia, mediaPath, readTranscript, saveUpload, thumbPath, whisperInstalled, type UploadedFile } from '../services/media';
 import { inboxWhere, queueInboxSort } from '../services/inbox';
 import { createPiece, getPiece, getWorkspace } from '../services/pieces';
+import { saveShared } from '../ideas/ideas';
 
 const uploadQuery = z.object({
   pieceId: z.string().optional(),
@@ -19,7 +20,7 @@ const uploadQuery = z.object({
 });
 
 /** Save every file in a multipart request; collect text fields along the way. */
-async function readMultipart(req: FastifyRequest, onFile: (file: UploadedFile) => Promise<void>) {
+export async function readMultipart(req: FastifyRequest, onFile: (file: UploadedFile) => Promise<void>) {
   const fields: Record<string, string> = {};
   for await (const part of req.parts()) {
     if (part.type === 'file') await onFile({ stream: part.file, filename: part.filename, mimetype: part.mimetype });
@@ -159,7 +160,8 @@ export async function mediaRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // Android share sheet → Content Studio (Web Share Target). Audio and text become ideas; video and images go to the library.
+  // Android share sheet → Content Studio (Web Share Target). Text and links go to the Saved pile of the last page with
+  // Ideas; audio becomes an idea card; video and images go to the library.
   app.post('/api/share-target', async (req, reply) => {
     if (!isAuthenticated(req)) return reply.redirect('/login?next=shared', 303);
     const workspaces = db.select().from(schema.workspaces).all();
@@ -177,6 +179,11 @@ export async function mediaRoutes(app: FastifyInstance) {
     });
     const text = [fields.title, fields.text, fields.url].map((s) => s?.trim()).filter(Boolean).join('\n');
     if (text && !library && !ideas) {
+      const target = ws.kind !== 'clipping' ? ws : workspaces.find((w) => w.kind !== 'clipping');
+      if (target) {
+        const card = saveShared(target.id, { text });
+        return reply.redirect(`/w/${target.id}/ideas?open=${card.id}`, 303);
+      }
       enqueue('capture.structure', { workspaceId: ws.id, text });
       ideas++;
     }

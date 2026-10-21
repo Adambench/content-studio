@@ -131,6 +131,8 @@ versionCode from the tag (`v1.2.3` → 10203).
    - [x] Step 3 — A worker hosts the text/vision model (Ollama), found by the laptop on its own
    - [x] Step 4 — Generated b-roll images, video clips (overnight) and covers, never showing people or animals
    - [x] Step 5 — My own voice, cloned, for voiceovers
+10. **Hosted generation** — built 2026-10-19 against a stand-in (see *Phase 10 build plan*)
+11. **Ideas canvas and save-from-anywhere** — built 2026-10-21 (see *Phase 11*)
 
 ## Waiting on me
 
@@ -151,6 +153,12 @@ versionCode from the tag (`v1.2.3` → 10203).
 - Compute: on each home PC run `scripts/setup-worker.sh --server … --code …` (code from Settings → Compute); check `journalctl --user -u content-studio-worker`, that Settings → Compute shows the GPU and four tools, and *Run a test* says it ran there. Then measure each tool's speed on both cards against the laptop (the plan's step 3 asks for it): Whisper, Demucs, matte, speaker scan. The CUDA builds for Pascal (cu126 wheels, cuDNN 9 for faster-whisper) are untried.
 - Find clips: check `DISCOVER_URL` (`server/src/finder/discover.ts`) is the page that lists Content Rewards campaigns; run it once with a real creator and see that the viral search finds their clips (`ytsearch` for "<creator> clips").
 - Self-hosted models (phase 9), on the home PCs: pull the repo, then on the 1070 PC `scripts/setup-worker.sh --server … --code … --with llm,video,voice` and on the 1050 Ti PC `… --with image` (generation needs `nvidia-cuda-toolkit`, git, cmake, build-essential; the model server needs `zstd`). Check Settings → Models says *Ready: qwen3-vl:30b-a3b-instruct · on <PC>*, Compute lists *Pictures*, *Video clips*, *My voice* and *Text model*. Then: a chat on *Local* that edits a video with tools; a background job with *Local only* on; *Generate* a picture from a video's Footage and look at it; a clip overnight; Settings → My voice: record 10–30 s, *Hear the clone*. Measure (the plan needs it): local chat turn time, a picture on each card, a clip on the 1070. Untried here (no GPU, no Hugging Face or ollama.com access): the Ollama download and `ollama pull`, every model download URL in `setup-worker.sh` (file names from memory; FLUX's `ae.safetensors` is from black-forest-labs/FLUX.1-schnell, which may ask for a Hugging Face login), the CUDA build of stable-diffusion.cpp on Pascal, Chatterbox on Pascal, and how well the local model calls the studio tools.
+- Ideas (phase 11): release a new Android build, then share a TikTok, a Reel, a Short and a screenshot with **Save to Ideas**
+  (check the "Saved to …" notification, *Add a note* typed in it, *Change page*); open a personal page in the app once
+  first so it knows where to save. Instagram saves only get the account and caption (from the desktop window), no
+  thumbnail, views or words, and *Break it down* fails on Instagram without a signed-in yt-dlp. On the Ideas page,
+  *Move them here* moves the 8 title-only cards from the Videos board (my click). "× their usual" for TikTok and
+  Instagram needs the desktop app (it reads the profile, at most once a week per account).
 - Not run with a real chat yet: directions (`direction.pitch`), `view_render` and the package notes; `write_scene`/`view_overlay`, `write_format_video`, `write_ugc_video`, transitions;
   the weekly review with the playbook.
 
@@ -342,3 +350,26 @@ scales to 1080×1920 with the sound stripped; Settings → Models → Hosted gen
 Tried against a stand-in (`CS_HOSTED_API`): create, poll, download, resize, cap, bad key. Not tried against kie.ai itself:
 the model ids, input fields and credit prices are from its public docs/price list and are editable in Settings. A restart
 mid-task loses that task (its spend is already counted): task ids are in `ai_spend`, not yet resumed.
+
+## Phase 11 (2026-10-21): Ideas canvas and save-from-anywhere
+
+Why: brainstorming for the personal brand had nowhere to go but the Videos board (one title per card). Ideas comes
+before the board: write freely, at any depth, and lock an idea in as a video when it's ready.
+
+| Topic | Decision |
+|---|---|
+| Shape | An auto-laid mind map per personal/business page (`ideas` table, a tree; layout in `web/src/components/ideas/layout.ts`): nothing is placed by hand. Tab = sub-idea, Enter = next idea, typing edits, drag onto a card = move under it (between two = reorder), Alt+arrows move with the keyboard, Delete with undo |
+| Clutter | Three levels show under the card being looked at; deeper ones, collapsed cards and lists past 12 fold into a count. Double-click (or Shift+Enter) opens any card as its own canvas with a breadcrumb |
+| Writing | Click a card: a side panel (full screen on the phone) with notes, a script draft (any time), labels (colour from the name, nothing to manage) and Claude's buttons |
+| Series | A card kind: premise, format/hook style, numbered episodes (its idea children). Board cards and the video page show "Series · Ep n"; scheduling an episode before the previous one warns |
+| Claude | Only on my click: Expand, Angles, Episodes (series), Challenge, results in the panel to add as sub-ideas or notes (task `ideas`, one call each). Locking in creates the video (Idea, or Script when drafted) with my notes, sub-ideas and inspirations, then Claude adds hooks, angle and outline as a new version (`ideas.flesh`). The chat gets `get_ideas` and `add_ideas` (adds only) |
+| Saved | Each page has a Saved pile (newest first, "n new"). Posts are kept as research items (source `saved`): details fetched with no Claude (`ideas.details`: TikTok's embed page, else yt-dlp; thumbnail; × the account's usual; words from captions or Whisper); *Break it down* is Research's analysis on my click. Drag a saved post onto an idea = inspired by |
+| Share | Android: a second share target, **Save to Ideas** (`ShareActivity`, no screen): links, text and screenshots go to the last personal/business page opened, queued like uploads (the phone picks the card id, so retries and a later note join the same card); a notification has *Add a note* (typed in it) and *Change page*. Footage still goes through the app's share screen. The PWA share target saves text and links the same way |
+| Phone | The same cards as a nested list: tap to open, swipe for sub-idea/delete, a quick-add box; Ideas is in the bottom bar |
+| Research | The old "Ideas" tab is *Research*; its brief ideas and outliers save to the Saved pile |
+
+**Built (2026-10-21):** all of the above. Tried against a test server: cards, ordering, moves, delete/undo, page moves,
+pictures, board import, saved TikTok and YouTube posts (details, thumbnails, × usual for YouTube), lock-in with a real
+flesh-out, a real Episodes call, the chat tools, and the canvas, panel and phone list in headless Chrome. Not tried:
+the Android parts (no SDK here: CI builds them), Instagram saves, Whisper on saved TikToks (the test had no Whisper).
+Also fixed: thumbnails of still JPEGs (FFmpeg skipped their one frame when asked to seek).

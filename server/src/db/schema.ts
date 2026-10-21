@@ -6,6 +6,7 @@ import type { CampaignOrigin, CampaignPlatform, CampaignStatus, HalalVerdict, Pa
 import type { EditSpec, EditTemplate } from '../../../shared/edit';
 import type { ViralHint } from '../../../shared/finder';
 import type { PieceDirections } from '../../../shared/direction';
+import type { IdeaAssist, IdeaKind } from '../../../shared/ideas';
 import type { AnalysisStatus, ItemPlatform, ResearchAnalysis, ResearchBriefBody, ResearchSettings, ResearchSource } from '../../../shared/research';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
 import type { SessionKind } from '../../../shared/devices';
@@ -264,7 +265,9 @@ export const uploads = sqliteTable('uploads', {
   workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   pieceId: text('piece_id').references(() => pieces.id, { onDelete: 'set null' }),
   assetType: text('asset_type').$type<AssetType>(),
-  source: text('source').$type<'upload' | 'capture' | 'share'>().notNull().default('upload'),
+  source: text('source').$type<'upload' | 'capture' | 'share' | 'idea'>().notNull().default('upload'),
+  /** A picture shared to the Saved pile: the card it becomes once it's all here. */
+  ideaId: text('idea_id'),
   name: text('name').notNull(),
   mime: text('mime').notNull(),
   size: integer('size').notNull(),
@@ -609,6 +612,8 @@ export const researchItems = sqliteTable(
     analysis: text('analysis', { mode: 'json' }).$type<ResearchAnalysis>(),
     analysisStatus: text('analysis_status').$type<AnalysisStatus>().notNull().default('none'),
     analysisError: text('analysis_error'),
+    /** What's said in it (YouTube's captions or Whisper), for a saved post. */
+    transcript: text('transcript').notNull().default(''),
     firstSeenAt: integer('first_seen_at').notNull(),
     lastSeenAt: integer('last_seen_at').notNull(),
   },
@@ -631,6 +636,39 @@ export const researchBriefs = sqliteTable(
     finishedAt: integer('finished_at'),
   },
   (t) => [index('research_briefs_workspace_idx').on(t.workspaceId, t.createdAt)],
+);
+
+/**
+ * A card on a page's Ideas canvas (shared/ideas.ts): an idea, a series, a saved post or a picture, in a tree. Deleting
+ * marks it (`deletedAt`) so it can be undone; marked ones go for good after a month.
+ */
+export const ideas = sqliteTable(
+  'ideas',
+  {
+    id: id(),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    parentId: text('parent_id').references((): AnySQLiteColumn => ideas.id, { onDelete: 'cascade' }),
+    position: real('position').notNull().default(0),
+    kind: text('kind').$type<IdeaKind>().notNull().default('idea'),
+    title: text('title').notNull().default(''),
+    body: text('body').notNull().default(''),
+    script: text('script').notNull().default(''),
+    format: text('format').notNull().default(''),
+    labels: text('labels', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+    collapsed: integer('collapsed', { mode: 'boolean' }).notNull().default(false),
+    url: text('url'),
+    researchItemId: text('research_item_id').references(() => researchItems.id, { onDelete: 'set null' }),
+    mediaId: text('media_id').references(() => media.id, { onDelete: 'set null' }),
+    /** The video it was locked in as. */
+    pieceId: text('piece_id').references(() => pieces.id, { onDelete: 'set null' }),
+    by: text('by').$type<'you' | 'claude'>().notNull().default('you'),
+    assist: text('assist', { mode: 'json' }).$type<IdeaAssist | null>(),
+    seenAt: integer('seen_at'),
+    deletedAt: integer('deleted_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('ideas_workspace_idx').on(t.workspaceId), index('ideas_parent_idx').on(t.parentId), index('ideas_piece_idx').on(t.pieceId)],
 );
 
 /** What hosted generation (kie.ai) has cost: one row per request, so the daily cap can be enforced and shown. */

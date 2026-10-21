@@ -95,7 +95,7 @@ final class ShareInbox {
         if (id.matches("[0-9a-f-]{36}")) LocalFiles.deleteTree(new File(LocalFiles.dir(context, "inbox"), id));
     }
 
-    private static List<Uri> streams(Intent intent) {
+    static List<Uri> streams(Intent intent) {
         Set<Uri> uris = new LinkedHashSet<>();
         if (Intent.ACTION_SEND_MULTIPLE.equals(intent.getAction())) {
             ArrayList<Uri> list = IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri.class);
@@ -110,8 +110,12 @@ final class ShareInbox {
         return new ArrayList<>(uris);
     }
 
+    static boolean hasLink(String text) {
+        return text.matches("(?s).*https?://\\S+.*");
+    }
+
     @Nullable
-    private static String joinText(@Nullable String subject, @Nullable String text) {
+    static String joinText(@Nullable String subject, @Nullable String text) {
         StringBuilder out = new StringBuilder();
         if (subject != null && !subject.trim().isEmpty() && (text == null || !text.contains(subject.trim()))) out.append(subject.trim());
         if (text != null && !text.trim().isEmpty()) {

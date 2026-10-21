@@ -1,4 +1,4 @@
-import { CalendarDays, Clapperboard, MoreHorizontal, Mic, Search, Settings, Sparkles, Sun } from 'lucide-react';
+import { CalendarDays, Clapperboard, Lightbulb, MoreHorizontal, Mic, Search, Settings, Sparkles, Sun } from 'lucide-react';
 import { NavLink, Outlet, useMatch } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -86,8 +86,10 @@ export function AppShell() {
   const { data: workspaces = [] } = useWorkspaces();
   const ws = workspaces.find((w) => w.id === wid);
   const nav = ws ? workspaceNav(ws) : [];
-  // On phones the board and calendar sit in the bottom bar; the rest go in the top bar, the first ones as icons.
-  const topItems = nav.filter((i) => i.to !== 'board' && i.to !== 'calendar');
+  // On phones the bottom bar has the board and, on clipping pages, the calendar (else the Ideas canvas); the rest go
+  // in the top bar, the first ones as icons.
+  const ideasBelow = !!ws && ws.kind !== 'clipping' && nav.some((i) => i.to === 'ideas');
+  const topItems = nav.filter((i) => i.to !== 'board' && (ideasBelow ? i.to !== 'ideas' : i.to !== 'calendar'));
 
   return (
     <div className="flex h-full">
@@ -191,14 +193,14 @@ export function AppShell() {
         </main>
 
         {/* Mobile bottom navigation */}
-        {wid && !isCapture && <MobileNav wid={wid} kind={ws?.kind ?? 'personal'} />}
+        {wid && !isCapture && <MobileNav wid={wid} kind={ws?.kind ?? 'personal'} ideas={ideasBelow} />}
       </div>
       <SearchDialog />
     </div>
   );
 }
 
-function MobileNav({ wid, kind }: { wid: string; kind: Workspace['kind'] }) {
+function MobileNav({ wid, kind, ideas }: { wid: string; kind: Workspace['kind']; ideas: boolean }) {
   const item = 'flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] text-muted-foreground';
   const active = 'text-foreground';
   return (
@@ -207,18 +209,30 @@ function MobileNav({ wid, kind }: { wid: string; kind: Workspace['kind'] }) {
         <Sun className="size-5" /> Today
         <TodayBadge className="absolute top-2 left-1/2 ml-1.5" />
       </NavLink>
-      <NavLink to={`/w/${wid}/board`} className={({ isActive }) => cn(item, 'h-14', isActive && active)}>
-        <Clapperboard className="size-5" /> {boardLabel(kind)}
-      </NavLink>
+      {ideas ? (
+        <NavLink to={`/w/${wid}/ideas`} className={({ isActive }) => cn(item, 'h-14', isActive && active)}>
+          <Lightbulb className="size-5" /> Ideas
+        </NavLink>
+      ) : (
+        <NavLink to={`/w/${wid}/board`} className={({ isActive }) => cn(item, 'h-14', isActive && active)}>
+          <Clapperboard className="size-5" /> {boardLabel(kind)}
+        </NavLink>
+      )}
       <NavLink to="/capture" className={cn(item, 'h-14')} aria-label="Capture an idea">
         <span className="grid size-10 place-items-center rounded-full bg-brand text-white shadow-lg shadow-brand/20">
           <Mic className="size-5" />
         </span>
       </NavLink>
-      <NavLink to={`/w/${wid}/calendar`} className={({ isActive }) => cn(item, 'relative h-14', isActive && active)}>
-        <CalendarDays className="size-5" /> Calendar
-        <AttentionBadge wid={wid} className="absolute top-2 left-1/2 ml-1.5" />
-      </NavLink>
+      {ideas ? (
+        <NavLink to={`/w/${wid}/board`} className={({ isActive }) => cn(item, 'h-14', isActive && active)}>
+          <Clapperboard className="size-5" /> {boardLabel(kind)}
+        </NavLink>
+      ) : (
+        <NavLink to={`/w/${wid}/calendar`} className={({ isActive }) => cn(item, 'relative h-14', isActive && active)}>
+          <CalendarDays className="size-5" /> Calendar
+          <AttentionBadge wid={wid} className="absolute top-2 left-1/2 ml-1.5" />
+        </NavLink>
+      )}
       <button type="button" className={cn(item, 'h-14')} onClick={() => claudeMobileOpen.set(true)}>
         <Sparkles className="size-5 text-brand" /> Claude
       </button>

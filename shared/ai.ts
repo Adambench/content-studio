@@ -13,7 +13,7 @@ export const AI_TASK_INFO: Record<AiTask, { label: string; hint: string }> = {
   review: { label: 'Weekly review', hint: 'Reading the week’s results and suggesting what to change' },
   research: { label: 'Research', hint: 'Why outliers worked, and the daily brief' },
   inbox: { label: 'Inbox filing', hint: 'Which idea a shared file belongs to' },
-  ideas: { label: 'Ideas and voice', hint: 'Voice memos into idea cards; learning from your rewrites' },
+  ideas: { label: 'Ideas and voice', hint: 'Help on Ideas cards, fleshing out a locked-in idea, voice memos into cards, learning from your rewrites' },
   pages: { label: 'Reading pages', hint: 'Campaign rules, submissions and listings read from sites' },
   pictures: { label: 'Checking generated pictures', hint: 'That a generated image or clip shows no people or animals' },
 };

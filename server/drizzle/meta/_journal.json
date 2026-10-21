@@ -113,6 +113,13 @@
       "when": 1792448639159,
       "tag": "0015_late_dark_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1792622613509,
+      "tag": "0016_secret_dragon_lord",
+      "breakpoints": true
     }
   ]
 }

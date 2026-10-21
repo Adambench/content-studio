@@ -45,6 +45,9 @@ export type BoardCard = {
   postAttention: boolean;
   /** Latest views across its posts, once any are in. */
   views: number | null;
+  /** The Ideas card it came from, and the series it's an episode of. */
+  ideaId: string | null;
+  series: { id: string; name: string; episode: number } | null;
 };
 
 export type VersionMeta = { id: string; number: number; author: 'you' | 'claude'; message: string; createdAt: number };
@@ -100,6 +103,8 @@ export type PieceDetail = {
   branches: Branch[];
   media: Media[];
   directions?: PieceDirections | null;
+  /** The Ideas card it came from. */
+  idea?: { id: string; workspaceId: string; series: { id: string; name: string; episode: number } | null } | null;
 };
 
 export type Version = VersionMeta & { branchId: string; pieceId: string; parentId: string | null; content: DraftContent };

@@ -59,8 +59,11 @@ export function normalizeResearch(input: unknown): ResearchSettings {
 
 export const watchesAnything = (r: ResearchSettings) => r.keywords.length + r.youtube.length + r.tiktok.length + r.instagram.length > 0;
 
-/** `watch`: from an account the page watches; `search`: from a keyword search; `link`: a link I pasted; `library`: a video in the library. */
-export type ResearchSource = 'watch' | 'search' | 'link' | 'library';
+/**
+ * `watch`: from an account the page watches; `search`: from a keyword search; `link`: a link I pasted; `library`: a
+ * video in the library; `saved`: a post I saved to Ideas (shared from the phone, pasted on the canvas).
+ */
+export type ResearchSource = 'watch' | 'search' | 'link' | 'library' | 'saved';
 export type AnalysisStatus = 'none' | 'queued' | 'running' | 'done' | 'error';
 
 /** Claude's look at one video: how it hooks, how it's built and edited, and what the page can take from it. */
@@ -103,11 +106,13 @@ export type ResearchItem = {
   analysis: ResearchAnalysis | null;
   analysisStatus: AnalysisStatus;
   analysisError: string | null;
+  transcript: string;
   firstSeenAt: number;
   lastSeenAt: number;
 };
 
-export type BriefIdea = { title: string; hook: string; why: string; pieceId?: string };
+/** `pieceId`: added to a clipping page's board; `ideaId`: saved to a page's Ideas. */
+export type BriefIdea = { title: string; hook: string; why: string; pieceId?: string; ideaId?: string };
 
 export type ResearchBriefBody = {
   headline: string;

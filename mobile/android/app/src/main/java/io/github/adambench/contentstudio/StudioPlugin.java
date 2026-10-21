@@ -435,6 +435,37 @@ public class StudioPlugin extends Plugin {
         }
     }
 
+    /** Something for a page's Saved pile, from the app's own share screen (when "Save to Ideas" had nowhere to go yet). */
+    @PluginMethod
+    public void enqueueSaved(PluginCall call) {
+        String workspaceId = call.getString("workspaceId");
+        String id = call.getString("id");
+        String text = call.getString("text");
+        if (workspaceId == null || id == null || text == null || text.trim().isEmpty()) {
+            call.reject("workspaceId, id and text are required");
+            return;
+        }
+        try {
+            UploadQueue.get(getContext()).addSaved(workspaceId, id, text.trim(), null);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    /** The page "Save to Ideas" sends to: the last personal or business page opened. */
+    @PluginMethod
+    public void setShareTarget(PluginCall call) {
+        String workspaceId = call.getString("workspaceId");
+        String name = call.getString("name");
+        if (workspaceId == null || name == null) {
+            call.reject("workspaceId and name are required");
+            return;
+        }
+        SavedShare.setTarget(getContext(), workspaceId, name);
+        call.resolve();
+    }
+
     @PluginMethod
     public void listUploads(PluginCall call) {
         JSObject result = new JSObject();

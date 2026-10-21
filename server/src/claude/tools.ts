@@ -23,6 +23,7 @@ import { findMoments } from '../routes/clipping';
 import { accountLabel, listAccounts } from '../publish/accounts';
 import { piecePosts, upcomingPosts } from '../publish/posts';
 import { studioTools, studioToolLabel } from './studio-tools';
+import { createIdea, getIdea, hasIdeas, listIdeas } from '../ideas/ideas';
 import { ok, safe, ToolError } from './tool-helpers';
 
 export const SERVER_NAME = 'studio';
@@ -101,6 +102,10 @@ export function toolLabel(fullName: string, input: Record<string, any>): string 
       return 'Started a UGC video';
     case 'get_research':
       return 'Read the research brief';
+    case 'get_ideas':
+      return 'Read the Ideas canvas';
+    case 'add_ideas':
+      return `Added ${input.items?.length ?? ''} card${input.items?.length === 1 ? '' : 's'} to Ideas`;
     case 'WebSearch':
       return `Searched the web: ${input.query ?? ''}`;
     case 'WebFetch':
@@ -596,6 +601,51 @@ export function buildTools(workspaceId: string) {
             .filter((a) => a.analysis)
             .map((a) => ({ title: a.title || a.url, account: a.channel || undefined, whyItWorks: a.analysis!.whyItWorks, takeaways: a.analysis!.takeaways, metrics: a.analysis!.metrics })),
         });
+      }),
+    ),
+
+    tool(
+      'get_ideas',
+      'Read this page’s Ideas canvas: the creator’s brainstorm before anything is a video, as a tree of cards: ideas (title, notes, script draft, labels, ' +
+        'the video it became and its stage), series (premise, format, episodes in order), posts saved from other creators (platform, account, caption, views, × ' +
+        'their usual, what’s said) and pictures, plus the Saved pile of things shared from the phone. Read-only.',
+      { cardId: z.string().optional().describe('Only this card and what’s under it'), depth: z.number().int().min(1).max(6).optional().describe('Levels to include (default 4)') },
+      safe(async ({ cardId, depth }) => {
+        if (!hasIdeas(workspaceId)) throw new ToolError('Clipping pages don’t have Ideas.');
+        const nodes = listIdeas(workspaceId);
+        if (cardId && !nodes.some((n) => n.id === cardId)) throw new ToolError('That card isn’t on this page.');
+        const kids = (pid: string | null) => nodes.filter((n) => n.parentId === pid).sort((a, b) => a.position - b.position);
+        const card = (n: (typeof nodes)[number], level: number): Record<string, unknown> => ({
+          id: n.id,
+          kind: n.kind,
+          title: n.title || undefined,
+          notes: n.body ? n.body.slice(0, 600) : undefined,
+          script: n.script ? n.script.slice(0, 1500) : undefined,
+          format: n.format || undefined,
+          labels: n.labels.length ? n.labels : undefined,
+          video: n.piece ? { id: n.piece.id, stage: n.piece.stageName, views: n.piece.views ?? undefined } : undefined,
+          post: n.post ? { platform: n.post.platform, account: n.post.channel, caption: n.post.title.slice(0, 200) || undefined, views: n.post.views ?? undefined, timesUsual: n.post.score ? Number(n.post.score.toFixed(1)) : undefined, url: n.url } : undefined,
+          byClaude: n.by === 'claude' || undefined,
+          under: level < (depth ?? 4) && kids(n.id).length ? kids(n.id).map((c) => card(c, level + 1)) : kids(n.id).length ? `${kids(n.id).length} more (read with cardId)` : undefined,
+        });
+        const roots = cardId ? nodes.filter((n) => n.id === cardId) : kids(null);
+        return ok(roots.map((n) => card(n, 1)));
+      }),
+    ),
+
+    tool(
+      'add_ideas',
+      'Add new cards to the Ideas canvas, marked as yours: under a card (`parentId`: a series for new episodes, an idea for sub-ideas or angles) or at the ' +
+        'top level. Only adds: never change or delete the creator’s cards, and only when they ask for ideas on the canvas.',
+      {
+        parentId: z.string().optional().describe('From get_ideas; leave out for the top level'),
+        items: z.array(z.object({ title: z.string().min(1).max(200), notes: z.string().max(2000).optional() })).min(1).max(20),
+      },
+      safe(async ({ parentId, items }) => {
+        if (!hasIdeas(workspaceId)) throw new ToolError('Clipping pages don’t have Ideas.');
+        if (parentId && getIdea(parentId).workspaceId !== workspaceId) throw new ToolError('That card is on another page.');
+        const made = items.map((i) => createIdea(workspaceId, { parentId: parentId ?? null, title: i.title, body: i.notes ?? '', by: 'claude' }));
+        return ok(`Added ${made.length} card${made.length === 1 ? '' : 's'} to Ideas.`);
       }),
     ),
 

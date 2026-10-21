@@ -160,9 +160,9 @@ export type InboxSuggestion = { pieceId: string | null; title: string; why: stri
 export type TranscriptStatus = 'none' | 'queued' | 'running' | 'done' | 'error' | 'unavailable';
 /**
  * `clip`: cut from a campaign's source video by clipping. `tts`: speech made on this computer for a format video.
- * `generated`: a built-in moving background.
+ * `generated`: a built-in moving background. `idea`: a picture on an Ideas card (a screenshot, a saved post's thumbnail).
  */
-export type MediaSource = 'upload' | 'capture' | 'share' | 'render' | 'clip' | 'tts' | 'generated';
+export type MediaSource = 'upload' | 'capture' | 'share' | 'render' | 'clip' | 'tts' | 'generated' | 'idea';
 /** The browser-friendly copy of a clip that the video studio previews and renders from. */
 export type ProxyStatus = 'none' | 'queued' | 'running' | 'done' | 'error';
 export type RenderStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled';
@@ -205,7 +205,7 @@ export type ClaudeUsage = {
 export type LiveEvent =
   | {
       type: 'changed';
-      entity: 'workspaces' | 'pieces' | 'media' | 'threads' | 'settings' | 'edits' | 'renders' | 'accounts' | 'posts' | 'stats' | 'reviews' | 'devices' | 'sites' | 'campaigns' | 'submissions' | 'research' | 'finder' | 'compute';
+      entity: 'workspaces' | 'pieces' | 'media' | 'threads' | 'settings' | 'edits' | 'renders' | 'accounts' | 'posts' | 'stats' | 'reviews' | 'devices' | 'sites' | 'campaigns' | 'submissions' | 'research' | 'finder' | 'compute' | 'ideas';
       workspaceId?: string;
       id?: string;
       pieceId?: string;

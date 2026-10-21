@@ -46,6 +46,8 @@ type SettingsShape = {
   hostedKey: string;
   /** Claude refused for usage: tasks on auto skip it until then (ms). */
   claudeLimitedUntil: number;
+  /** An account's usual views (by platform:account), so posts saved to Ideas from it don't each read its profile. */
+  channelMedians: Record<string, { median: number | null; at: number }>;
   /** Campaigns found on Content Rewards that aren't added yet. */
   campaignLeads: import('../../../shared/finder').CampaignLeads;
 };

@@ -4,6 +4,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { Spinner } from '@/components/ui/spinner';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import { api } from '@/lib/api';
+import { isNative, Studio } from '@/lib/native';
 import { usePiece, useWorkspace } from '@/lib/queries';
 import type { Workspace } from '@/lib/types';
 import { claudeDesktopOpen, claudeMobileOpen, openClaude, useStore } from '@/lib/ui-state';
@@ -24,7 +25,9 @@ export function WorkspaceLayout() {
 
   useEffect(() => {
     if (ws.data) api('/settings', { method: 'PATCH', body: { lastWorkspaceId: wid } }).catch(() => {});
-  }, [wid, ws.data?.id]);
+    // "Save to Ideas" in the phone's share sheet goes to the last page opened that has Ideas.
+    if (isNative && ws.data && ws.data.kind !== 'clipping') void Studio.setShareTarget({ workspaceId: wid, name: ws.data.name }).catch(() => {});
+  }, [wid, ws.data?.id, ws.data?.name]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

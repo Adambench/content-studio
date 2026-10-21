@@ -13,7 +13,7 @@ import { thumbPath, type MediaRow } from './media';
 import { getWorkspace } from './pieces';
 
 /** Files that are made inside a video or turned into an idea by themselves never wait in the Inbox. */
-const NOT_LOOSE: MediaSource[] = ['render', 'clip', 'tts', 'generated', 'capture'];
+const NOT_LOOSE: MediaSource[] = ['render', 'clip', 'tts', 'generated', 'capture', 'idea'];
 
 export const inboxWhere = (workspaceId: string) =>
   and(eq(schema.media.workspaceId, workspaceId), isNull(schema.media.pieceId), isNull(schema.media.assetType), notInArray(schema.media.source, NOT_LOOSE));

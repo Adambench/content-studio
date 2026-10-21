@@ -12,6 +12,7 @@ import { CampaignPage } from '@/pages/CampaignPage';
 import { CampaignsPage } from '@/pages/CampaignsPage';
 import { CapturePage } from '@/pages/CapturePage';
 import { HomeRedirect } from '@/pages/HomeRedirect';
+import { IdeasPage } from '@/pages/IdeasPage';
 import { InboxPage } from '@/pages/InboxPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NewWorkspacePage } from '@/pages/NewWorkspacePage';
@@ -50,6 +51,7 @@ export const router = createBrowserRouter([
             children: [
               { index: true, element: <Navigate to="board" replace /> },
               { path: 'board', element: <BoardPage /> },
+              { path: 'ideas', element: <IdeasPage /> },
               { path: 'p/:pid', element: <PiecePage /> },
               { path: 'p/:pid/edit', element: <StudioPage /> },
               { path: 'inbox', element: <InboxPage /> },

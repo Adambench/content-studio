@@ -1,4 +1,4 @@
-import { CircleAlert, Copy, ExternalLink, FileVideo, Lightbulb, Loader2, Microscope, Plus, RefreshCw, Telescope, Trash2 } from 'lucide-react';
+import { Bookmark, CircleAlert, Copy, ExternalLink, FileVideo, Lightbulb, Loader2, Microscope, Plus, RefreshCw, Telescope, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
@@ -39,13 +39,15 @@ function BriefCard({ wid, brief, overview, onOpen }: { wid: string; brief: Resea
   const b = brief.body!;
   const [adding, setAdding] = useState<number | null>(null);
   const byId = new Map(overview.outliers.map((o) => [o.id, o]));
+  // Pages with Ideas keep the brief's ideas in their Saved pile; clipping pages put them on the board.
+  const toIdeas = useWorkspaceContext().workspace.kind !== 'clipping';
 
   async function addIdea(i: number) {
     setAdding(i);
     try {
       await api(`/research/briefs/${brief.id}/ideas/${i}`, { body: {} });
       refresh(wid);
-      toast.success('Added to the board');
+      toast.success(toIdeas ? 'Saved to Ideas' : 'Added to the board');
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -128,13 +130,17 @@ function BriefCard({ wid, brief, overview, onOpen }: { wid: string; brief: Resea
                     <p className="text-sm">“{idea.hook}”</p>
                     <p className="text-xs text-muted-foreground">{idea.why}</p>
                   </div>
-                  {idea.pieceId ? (
+                  {idea.ideaId ? (
+                    <Button size="sm" variant="ghost" asChild>
+                      <Link to={`/w/${wid}/ideas?open=${idea.ideaId}`}>In Ideas</Link>
+                    </Button>
+                  ) : idea.pieceId ? (
                     <Button size="sm" variant="ghost" asChild>
                       <Link to={`/w/${wid}/p/${idea.pieceId}`}>Open card</Link>
                     </Button>
                   ) : (
                     <Button size="sm" variant="outline" disabled={adding === i} onClick={() => addIdea(i)}>
-                      {adding === i ? <Spinner /> : <Plus />} Add to board
+                      {adding === i ? <Spinner /> : toIdeas ? <Bookmark /> : <Plus />} {toIdeas ? 'Save to Ideas' : 'Add to board'}
                     </Button>
                   )}
                 </li>
@@ -168,8 +174,19 @@ function BriefCard({ wid, brief, overview, onOpen }: { wid: string; brief: Resea
   );
 }
 
+/** Save a post to the page's Ideas (its Saved pile), to think about or attach to an idea. */
+async function saveToIdeas(wid: string, itemId: string) {
+  try {
+    await api(`/workspaces/${wid}/ideas/saved`, { body: { researchItemId: itemId } });
+    toast.success('Saved to Ideas');
+  } catch (err) {
+    toast.error(errorMessage(err));
+  }
+}
+
 function OutlierRow({ o, wid, onOpen }: { o: ResearchItem; wid: string; onOpen: () => void }) {
   const [busy, setBusy] = useState(false);
+  const canSave = useWorkspaceContext().workspace.kind !== 'clipping';
   const analysing = o.analysisStatus === 'queued' || o.analysisStatus === 'running';
   return (
     <li className="flex items-start gap-3 p-3">
@@ -192,6 +209,11 @@ function OutlierRow({ o, wid, onOpen }: { o: ResearchItem; wid: string; onOpen: 
           <Button size="icon-sm" variant="ghost" aria-label="Open the post" title="Open the post" onClick={() => openExternal(o.url)}>
             <ExternalLink />
           </Button>
+          {canSave && (
+            <Button size="icon-sm" variant="ghost" aria-label="Save to Ideas" title="Save to Ideas" onClick={() => void saveToIdeas(wid, o.id)}>
+              <Bookmark />
+            </Button>
+          )}
           {o.analysisStatus === 'done' ? (
             <Button size="sm" variant="ghost" onClick={onOpen}>
               <Microscope /> Analysis
@@ -442,7 +464,7 @@ export function ResearchPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={workspace.kind === 'clipping' ? 'Find' : 'Ideas'}
+        title={workspace.kind === 'clipping' ? 'Find' : 'Research'}
         description={`What’s working in ${workspace.niche ? workspace.niche.replace(/\.$/, '') : 'the niche'}${workspace.kind === 'clipping' ? '' : ', and ideas from it'}`}
         actions={
           d &&

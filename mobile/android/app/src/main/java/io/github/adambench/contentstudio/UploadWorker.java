@@ -77,6 +77,7 @@ public class UploadWorker extends Worker {
             Pairing pairing = Pairing.read(getApplicationContext());
             if (pairing == null) throw new Permanent("Pair the app with your computer, then try again.", true);
             if ("text".equals(item.optString("kind"))) sendText(pairing, item);
+            else if ("saved".equals(item.optString("kind"))) sendSaved(pairing, item);
             else sendFile(pairing, item);
             queue.markState(id, "done", null);
             return Result.success();
@@ -95,6 +96,16 @@ public class UploadWorker extends Worker {
     private void sendText(Pairing pairing, JSONObject item) throws Exception {
         JSONObject body = new JSONObject().put("text", item.getString("text"));
         try (Response res = call(pairing, "POST", "/api/workspaces/" + item.getString("workspaceId") + "/capture", RequestBody.create(body.toString(), JSON))) {
+            check(res);
+        }
+    }
+
+    /** A share for the Saved pile, or a note for it: the card's id makes sending it again harmless. */
+    private void sendSaved(Pairing pairing, JSONObject item) throws Exception {
+        JSONObject body = new JSONObject().put("id", item.getString("ideaId"));
+        if (item.has("text")) body.put("text", item.getString("text"));
+        if (item.has("note")) body.put("note", item.getString("note"));
+        try (Response res = call(pairing, "POST", "/api/workspaces/" + item.getString("workspaceId") + "/ideas/saved", RequestBody.create(body.toString(), JSON))) {
             check(res);
         }
     }
@@ -123,6 +134,7 @@ public class UploadWorker extends Worker {
                 .put("workspaceId", item.getString("workspaceId"))
                 .put("pieceId", item.opt("pieceId"))
                 .put("assetType", item.opt("assetType"))
+                .put("ideaId", item.opt("ideaId"))
                 .put("source", item.optString("source", "upload"))
                 .put("name", item.getString("name"))
                 .put("mime", item.optString("mime", "application/octet-stream"))

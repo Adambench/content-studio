@@ -22,7 +22,7 @@ export const isNative = isApp && Capacitor.isNativePlatform();
 export type QueuedFile = { path: string; name: string; mime: string; size: number };
 export type UploadItem = {
   id: string;
-  kind: 'file' | 'text';
+  kind: 'file' | 'text' | 'saved';
   name: string;
   size: number;
   sent: number;
@@ -53,6 +53,10 @@ type StudioPlugin = {
   pickFiles(o: { accept: string[]; camera?: boolean }): Promise<{ files: QueuedFile[] }>;
   enqueueFiles(o: UploadTarget & { files: QueuedFile[] }): Promise<void>;
   enqueueText(o: { workspaceId: string; text: string }): Promise<void>;
+  /** A link or text for the page's Saved pile (Ideas), sent when the computer can be reached. */
+  enqueueSaved(o: { workspaceId: string; id: string; text: string }): Promise<void>;
+  /** Where "Save to Ideas" in the share sheet sends things: the last personal or business page opened. */
+  setShareTarget(o: { workspaceId: string; name: string }): Promise<void>;
   listUploads(): Promise<{ uploads: UploadItem[] }>;
   retryUpload(o: { id: string }): Promise<void>;
   removeUpload(o: { id: string }): Promise<void>;
@@ -295,6 +299,8 @@ export async function startApp() {
     const link = appLink(url);
     if (link?.target === 'pair') pendingPairLink.set(url);
     else if (link?.target === 'capture') goTo(link.params.has('record') ? '/capture?record=1' : '/capture');
+    // The "Saved to …" notification: the card, or its move menu.
+    else if (link?.target === 'open' && link.params.get('path')?.startsWith('/')) goTo(link.params.get('path')!);
   };
   const launch = await App.getLaunchUrl();
   if (launch?.url) openLink(launch.url);

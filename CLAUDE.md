@@ -13,7 +13,7 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   (`src/db/sqlite.ts`); never import `drizzle-orm/better-sqlite3` (pulls in the native module; no C toolchain here).
   Main areas: `claude/` (agent, tools, prompts, plugin), `ai/` (Claude or the self-hosted model per task, the local
   chat loop), `studio/` (edits → HyperFrames, render, generation), `publish/`,
-  `analytics/`, `campaigns/`, `clipping/`, `research/`, `jobs/` (queue).
+  `analytics/`, `campaigns/`, `clipping/`, `research/`, `ideas/` (the brainstorm canvas, Saved pile), `jobs/` (queue).
 - `web/` — React UI. `isDesktop` (`lib/desktop.ts`), `isApp`/`isNative` (`lib/native.ts`, the `vite --mode app` build).
 - `mobile/` — Capacitor 8, committed `android/`, one native plugin `StudioPlugin` (Java). CI builds APKs.
 - `shared/` — types for both sides (`types.ts`, `edit.ts`, `campaigns.ts`, `clipping.ts`, …).
@@ -40,7 +40,8 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   recorded in `ai_spend` and a daily cap ($10) stops new ones; hosted clips lose their sound. `CS_HOSTED_API` = stand-in.
 - **Claude's tools are scoped to one workspace** (`buildTools(workspaceId)`), every tool checks ownership. Claude edits
   drafts/edits freely (versions authored `claude`) and may render, but never schedules, publishes, approves, rejects or
-  submits: those need the user's click. Never give Claude a publish tool.
+  submits: those need the user's click. Never give Claude a publish tool. On Ideas it only adds cards (`by: 'claude'`),
+  never edits or deletes the user's; locking an idea in is the user's click.
 - Chat skills: `.claude/skills` loads as the `studio-skills` plugin (`claude/plugin.ts`, allow-list `CHAT_SKILLS`); the
   chat's Read is held to the plugin folder by a hook; claude.ai connectors off. Background prompts don't load skills:
   paste playbook files with `playbook(...)`, first in the system prompt.

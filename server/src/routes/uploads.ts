@@ -12,6 +12,7 @@ import { db, newId, now, schema } from '../db';
 import { badRequest, HttpError, notFound } from '../lib/http';
 import { adoptFile } from '../services/media';
 import { getPiece, getWorkspace } from '../services/pieces';
+import { saveShared } from '../ideas/ideas';
 
 /*
  * Resumable uploads for the Android app, which sends big videos from a background job that may be stopped and
@@ -63,7 +64,9 @@ export async function uploadRoutes(app: FastifyInstance) {
         workspaceId: z.string(),
         pieceId: z.string().nullish(),
         assetType: z.enum(ASSET_TYPES).nullish(),
-        source: z.enum(['upload', 'capture', 'share']).default('upload'),
+        source: z.enum(['upload', 'capture', 'share', 'idea']).default('upload'),
+        // A picture shared to the Saved pile: the card it joins (the phone picks the id, so a note can join it too).
+        ideaId: z.string().regex(/^[0-9a-f-]{36}$/i).nullish(),
         name: z.string().trim().min(1).max(255),
         mime: z.string().max(200).default('application/octet-stream'),
         size: z.number().int().min(1).max(MAX_SIZE, 'Files can be up to 8 GB.'),
@@ -73,7 +76,7 @@ export async function uploadRoutes(app: FastifyInstance) {
     if (body.pieceId && getPiece(body.pieceId).workspaceId !== ws.id) throw badRequest('That piece belongs to another workspace.');
     const id = newId();
     db.insert(schema.uploads)
-      .values({ id, workspaceId: ws.id, pieceId: body.pieceId ?? null, assetType: body.assetType ?? null, source: body.source, name: body.name, mime: body.mime, size: body.size })
+      .values({ id, workspaceId: ws.id, pieceId: body.pieceId ?? null, assetType: body.assetType ?? null, source: body.source, ideaId: body.ideaId ?? null, name: body.name, mime: body.mime, size: body.size })
       .run();
     return { id, offset: 0, size: body.size, mediaId: null };
   });
@@ -136,6 +139,7 @@ export async function uploadRoutes(app: FastifyInstance) {
 
       const media = await adoptFile(row.workspaceId, partPath(row.id), row.name, row.mime, { pieceId: row.pieceId, assetType: row.assetType, source: row.source });
       db.update(schema.uploads).set({ mediaId: media.id, updatedAt: now() }).where(and(eq(schema.uploads.id, row.id), isNull(schema.uploads.mediaId))).run();
+      if (row.source === 'idea') saveShared(row.workspaceId, { id: row.ideaId ?? undefined, mediaId: media.id });
       return { offset: row.size, mediaId: media.id };
     } finally {
       busy.delete(row.id);

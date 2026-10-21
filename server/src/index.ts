@@ -9,6 +9,8 @@ import { startCampaignUpkeep, stopCampaignUpkeep } from './campaigns/schedule';
 import { startResearch, stopResearch } from './research/schedule';
 import { startFinderSchedule, stopFinderSchedule } from './finder/schedule';
 import { finderRoutes } from './routes/finder';
+import { ideaRoutes } from './routes/ideas';
+import { purgeDeletedIdeas } from './ideas/ideas';
 import { stopAllSources } from './campaigns/sources';
 import { preparePlugin } from './claude/plugin';
 import { config } from './config';
@@ -134,6 +136,7 @@ await app.register(finderRoutes);
 await app.register(computeRoutes);
 await app.register(aiRoutes);
 await app.register(voiceRoutes);
+await app.register(ideaRoutes);
 
 registerHandlers();
 startWorker();
@@ -142,6 +145,10 @@ startAnalytics();
 startCampaignUpkeep();
 startResearch();
 startFinderSchedule();
+// Cards deleted over a month ago go for good, checked at start and daily.
+void purgeDeletedIdeas().catch(() => {});
+const purging = setInterval(() => void purgeDeletedIdeas().catch(() => {}), 86400_000);
+purging.unref();
 
 await app.listen({ port: config.port, host: config.host });
 console.log(`Content Studio is running on http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);

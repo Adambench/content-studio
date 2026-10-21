@@ -8,4 +8,5 @@
     <string name="shortcut_capture_long">Capture an idea</string>
     <string name="shortcut_record_short">Voice memo</string>
     <string name="shortcut_record_long">Record a voice memo</string>
+    <string name="share_save_idea">Save to Ideas</string>
 </resources>

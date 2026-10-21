@@ -60,14 +60,19 @@ export function SharePage() {
       const target = { workspaceId: wid, pieceId: pieceId === 'none' ? null : pieceId };
       if (footage.length) await Studio.enqueueFiles({ ...target, source: 'share', files: footage });
       if (voice.length) await Studio.enqueueFiles({ workspaceId: wid, source: 'capture', files: voice });
-      if (text) await Studio.enqueueText({ workspaceId: wid, text });
+      // Text and links: the Saved pile of a page with Ideas, else an idea card made by Claude.
+      const toIdeas = workspaces.find((w) => w.id === wid)?.kind !== 'clipping';
+      const savedId = crypto.randomUUID();
+      if (text && toIdeas) await Studio.enqueueSaved({ workspaceId: wid, id: savedId, text });
+      else if (text) await Studio.enqueueText({ workspaceId: wid, text });
       await Studio.discardShare({ id: share.id });
       leaving.current = true;
       pendingShare.set(null);
       const ws = workspaces.find((w) => w.id === wid)?.name ?? 'the workspace';
       if (footage.length) toast.success(`Sending to ${ws}`, { description: target.pieceId ? 'It uploads in the background into that video.' : 'It uploads in the background into the Inbox; Claude suggests which video it belongs to.' });
+      else if (toIdeas) toast.success(`Saved to ${ws}`, { description: 'It’s in Ideas → Saved. Next time, “Save to Ideas” in the share sheet does this with no screen.' });
       else toast.success('Idea captured', { description: 'Claude will turn it into a card on the board.' });
-      navigate(footage.length ? (target.pieceId ? `/w/${wid}/p/${target.pieceId}` : `/w/${wid}/inbox`) : `/w/${wid}/board`, { replace: true });
+      navigate(footage.length ? (target.pieceId ? `/w/${wid}/p/${target.pieceId}` : `/w/${wid}/inbox`) : toIdeas ? `/w/${wid}/ideas` : `/w/${wid}/board`, { replace: true });
     } catch (err) {
       toast.error(errorMessage(err));
       setSending(false);

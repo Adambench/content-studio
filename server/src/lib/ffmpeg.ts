@@ -1,4 +1,5 @@
 import { execFile as execFileCb } from 'node:child_process';
+import { stat } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { requireBinary } from './bin';
 
@@ -48,8 +49,11 @@ export async function probe(file: string): Promise<ProbeResult> {
 
 /** A small JPEG preview for a video (frame near the start) or an image. */
 export async function makeThumb(file: string, out: string, durationMs: number | null) {
-  const at = durationMs ? Math.min(1, (durationMs / 1000) * 0.1) : 0;
-  await execFile(requireBinary('ffmpeg'), ['-y', '-v', 'error', '-ss', String(at), '-i', file, '-frames:v', '1', '-vf', 'scale=480:-2', '-q:v', '4', out]);
+  // A still picture probes as one frame of 40 ms: seeking at all (even -ss 0 on some JPEGs) skips it, and FFmpeg
+  // still exits fine.
+  const at = durationMs && durationMs > 1000 ? Math.min(1, (durationMs / 1000) * 0.1) : 0;
+  await execFile(requireBinary('ffmpeg'), ['-y', '-v', 'error', ...(at ? ['-ss', String(at)] : []), '-i', file, '-frames:v', '1', '-update', '1', '-vf', 'scale=480:-2', '-q:v', '4', out]);
+  if (!(await stat(out).then((s) => s.size > 0, () => false))) throw new Error('FFmpeg made no picture');
 }
 
 /** 16 kHz mono WAV — what Whisper wants. */

@@ -75,6 +75,11 @@ final class UploadQueue {
 
     /** Take `files` (moved into the queue's folder) and start uploading them to the workspace. */
     synchronized void addFiles(JSArray files, String workspaceId, @Nullable String pieceId, @Nullable String assetType, String source) throws Exception {
+        addFiles(files, workspaceId, pieceId, assetType, source, null);
+    }
+
+    /** `ideaId`: a picture for the Saved pile, joining (or making) that card once it's all there. */
+    synchronized void addFiles(JSArray files, String workspaceId, @Nullable String pieceId, @Nullable String assetType, String source, @Nullable String ideaId) throws Exception {
         for (Object f : files.toList()) {
             JSONObject file = (JSONObject) f;
             File src = new File(file.getString("path"));
@@ -92,6 +97,7 @@ final class UploadQueue {
             item.put("workspaceId", workspaceId);
             if (pieceId != null) item.put("pieceId", pieceId);
             if (assetType != null) item.put("assetType", assetType);
+            if (ideaId != null) item.put("ideaId", ideaId);
             item.put("source", source);
             add(item);
         }
@@ -105,6 +111,26 @@ final class UploadQueue {
         item.put("kind", "text");
         item.put("name", text.length() > 80 ? text.substring(0, 80) + "…" : text);
         item.put("text", text);
+        item.put("size", 0);
+        item.put("workspaceId", workspaceId);
+        add(item);
+        save();
+        notifyChanged();
+    }
+
+    /**
+     * A share for the Saved pile (`text`: a link or note), or a note for one already sent (`note`). Both name the card
+     * by `ideaId`, so whichever reaches the computer first makes it and the other joins it.
+     */
+    synchronized void addSaved(String workspaceId, String ideaId, @Nullable String text, @Nullable String note) throws JSONException {
+        JSONObject item = new JSONObject();
+        item.put("id", UUID.randomUUID().toString());
+        item.put("kind", "saved");
+        String label = note != null ? "Note: " + note : text != null ? text : "Saved";
+        item.put("name", label.length() > 80 ? label.substring(0, 80) + "…" : label);
+        item.put("ideaId", ideaId);
+        if (text != null) item.put("text", text);
+        if (note != null) item.put("note", note);
         item.put("size", 0);
         item.put("workspaceId", workspaceId);
         add(item);
@@ -187,6 +213,7 @@ final class UploadQueue {
                     item.remove("path");
                 }
                 item.remove("text");
+                item.remove("note");
             }
         } catch (JSONException ignored) {}
         save();

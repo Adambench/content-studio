@@ -59,14 +59,14 @@
                 <data android:scheme="contentstudio" />
             </intent-filter>
 
-            <!-- The share sheet: footage and photos go to the library; voice notes, text and links become ideas. -->
+            <!-- The share sheet: footage and photos go to the library; voice notes become ideas. (Links and text go to
+                 "Save to Ideas", ShareActivity.) -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="video/*" />
                 <data android:mimeType="image/*" />
                 <data android:mimeType="audio/*" />
-                <data android:mimeType="text/plain" />
             </intent-filter>
             <!-- Several at once; a mix of photos and videos comes as */*. -->
             <intent-filter>
@@ -82,6 +82,34 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- "Save to Ideas" in the share sheet: no screen, it saves and I'm straight back in the app I shared from. -->
+        <activity
+            android:name=".ShareActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/share_save_idea"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/AppTheme.Invisible">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity>
+
+        <!-- "Add a note" typed in the "Saved to …" notification. -->
+        <receiver
+            android:name=".SavedNoteReceiver"
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

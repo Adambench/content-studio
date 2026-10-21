@@ -6,6 +6,7 @@ import { desktop } from './desktop';
 import { checkServer, isApp } from './native';
 import { keys, queryClient } from './queries';
 import { serverReachable } from './ui-state';
+import { refreshIdeas } from '@/components/ideas/model';
 
 type Listener = (event: LiveEvent) => void;
 const listeners = new Set<Listener>();
@@ -49,11 +50,15 @@ function apply(event: LiveEvent) {
           inv(keys.board(wid));
           inv(keys.tags(wid));
         }
+        // Ideas cards show the video they became (which may be on another page).
+        refreshIdeas(null);
         if (event.id) inv(keys.piece(event.id));
         inv(keys.workspaces);
         break;
       case 'media':
         if (wid) inv(['media', wid]);
+        // A card's picture gets its thumbnail.
+        if (wid) refreshIdeas(wid);
         if (event.id) inv(keys.mediaItem(event.id));
         // The Inbox count in the nav.
         refreshSoon(keys.workspaces);
@@ -98,6 +103,7 @@ function apply(event: LiveEvent) {
         }
         inv(['post-stats']);
         inv(['piece-posts']);
+        refreshIdeas(null);
         inv(['post']);
         // Campaign pages show their clips' views.
         inv(['campaign']);
@@ -127,6 +133,12 @@ function apply(event: LiveEvent) {
         break;
       case 'research':
         inv(wid ? keys.research(wid) : ['research']);
+        // Saved posts' details and breakdowns.
+        inv(['idea']);
+        break;
+      case 'ideas':
+        refreshIdeas(wid ?? null);
+        if (event.id) inv(keys.idea(event.id));
         break;
       case 'submissions':
         inv(['campaign']);
@@ -158,6 +170,8 @@ function apply(event: LiveEvent) {
     if (event.status === 'error' && event.jobType === 'research.analyse') toast.error('The video couldn’t be analysed', { description: event.message?.slice(0, 200) });
     if (event.status === 'done' && event.jobType === 'submissions.sync') toast.success(event.message ?? 'Submissions checked');
     if (event.status === 'error' && event.jobType === 'submissions.sync') toast.error('Couldn’t read Content Rewards', { description: event.message?.slice(0, 200) });
+    if (event.status === 'done' && event.jobType === 'ideas.flesh') toast.success(event.message ?? 'Claude fleshed out your idea', { description: 'Hooks, angle and outline are in the video’s draft.' });
+    if (event.status === 'error' && event.jobType === 'ideas.flesh') toast.error('Claude couldn’t flesh out the idea', { description: event.message?.slice(0, 200) });
     if (event.status === 'error' && event.jobType === 'clip.make') toast.error('A clip couldn’t be made', { description: event.message?.slice(0, 200) });
   }
   for (const l of listeners) l(event);

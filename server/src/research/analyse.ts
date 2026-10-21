@@ -26,6 +26,7 @@ import { getMedia, mediaPath, readTranscript, whisperInstalled } from '../servic
 import { getWorkspace } from '../services/pieces';
 import { emitResearch, getItem, updateItem } from './research';
 import { runTool } from '../compute/run';
+import { downloadTiktok, tiktokPost } from './tiktok';
 
 const execFile = promisify(execFileCb);
 
@@ -107,14 +108,25 @@ export function queueAnalysis(workspaceId: string, input: { url?: string; mediaI
 
 type YtInfo = { title?: string; description?: string; view_count?: number; like_count?: number; comment_count?: number; channel?: string; uploader?: string; uploader_id?: string; channel_url?: string; uploader_url?: string; timestamp?: number; duration?: number };
 
+/** A TikTok from its embed page, when yt-dlp is blocked. */
+async function downloadFromEmbed(url: string, dir: string): Promise<{ file: string; info: YtInfo }> {
+  const p = await tiktokPost(url);
+  const file = await downloadTiktok(p.videoUrl, join(dir, 'video.mp4'));
+  return { file, info: { title: p.caption, channel: p.handle ? `@${p.handle}` : p.name, uploader_url: p.handle ? `https://www.tiktok.com/@${p.handle}` : undefined, view_count: p.views ?? undefined, timestamp: p.postedAt ? p.postedAt / 1000 : undefined } };
+}
+
 async function download(url: string, dir: string) {
   const y = ytdlp();
   const out = await run(
     y.bin,
     [...y.args, '-j', '--no-simulate', '--no-playlist', '-f', 'bv*[height<=720]+ba/b[height<=720]/bv*+ba/b', '--merge-output-format', 'mp4', '-o', join(dir, 'video.%(ext)s'), url],
     { env: y.env, timeoutMs: 10 * 60_000 },
-  ).catch((err: Error) => {
+  ).catch(async (err: Error) => {
+    if (postOf(url)?.platform === 'tiktok') return null;
     throw new JobError(`Couldn’t fetch the video: ${err.message}`, { retry: false });
+  });
+  if (out === null) return downloadFromEmbed(url, dir).catch((err: Error) => {
+    throw new JobError(`Couldn’t fetch the TikTok: ${err.message}`, { retry: false });
   });
   const info = JSON.parse(out.trim().split('\n').filter((l) => l.startsWith('{')).pop() ?? '{}') as YtInfo;
   const file = (await readdir(dir)).find((f) => f.startsWith('video.') && !f.endsWith('.part'));

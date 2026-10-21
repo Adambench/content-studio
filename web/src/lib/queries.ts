@@ -9,6 +9,7 @@ import type { PairedDevice } from '@shared/devices';
 import type { CreatorInfo } from '@shared/publish';
 import type { Campaign, CampaignDetail } from '@shared/campaigns';
 import type { ResearchOverview } from '@shared/research';
+import type { IdeaDetail, IdeaNode } from '@shared/ideas';
 import type { SubmissionsSyncState } from './types';
 import type { ReviewClip } from '@shared/clipping';
 import type { SitesStatus } from '@shared/sites';
@@ -76,6 +77,8 @@ export const keys = {
   review: ['review'] as const,
   submissionsSync: ['submissions-sync'] as const,
   research: (wid: string) => ['research', wid] as const,
+  ideas: (wid: string) => ['ideas', wid] as const,
+  idea: (id: string) => ['idea', id] as const,
   finder: (wid: string) => ['finder', wid] as const,
   compute: ['compute'] as const,
   ai: ['ai'] as const,
@@ -125,6 +128,8 @@ export const useSubmissionsSync = () =>
   useQuery({ queryKey: keys.submissionsSync, queryFn: () => api<SubmissionsSyncState>('/submissions/sync'), refetchInterval: (q) => (q.state.data?.running ? 5000 : false) });
 
 /** A page's research: what it watches, its latest brief, outliers and analyses. Polls while something runs. */
+export const useIdeas = (wid: string) => useQuery({ queryKey: keys.ideas(wid), queryFn: () => api<IdeaNode[]>(`/workspaces/${wid}/ideas`), enabled: !!wid });
+export const useIdea = (id: string | null) => useQuery({ queryKey: keys.idea(id ?? ''), queryFn: () => api<IdeaDetail>(`/ideas/${id}`), enabled: !!id });
 export const useResearch = (wid: string) =>
   useQuery({
     queryKey: keys.research(wid),

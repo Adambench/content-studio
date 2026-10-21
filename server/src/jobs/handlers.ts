@@ -36,6 +36,8 @@ import { onPitchFailed, pitchDirections } from '../studio/directions';
 import { onFinderFailed, runFinder } from '../finder/finder';
 import { applyEffect, onEffectFailed } from '../studio/effects';
 import { runTool } from '../compute/run';
+import { fleshOut, onAssistFailed, onFleshFailed, runAssist } from '../ideas/assist';
+import { fetchDetails } from '../ideas/details';
 
 function setMedia(id: string, values: Partial<typeof schema.media.$inferInsert>) {
   db.update(schema.media).set(values).where(eq(schema.media.id, id)).run();
@@ -269,4 +271,11 @@ export function registerHandlers() {
   // Creative directions for a video (one Sonnet call).
   registerJob('direction.pitch', pitchDirections, 1);
   onJobFailed('direction.pitch', onPitchFailed);
+  // Ideas: a saved post's details (yt-dlp, Whisper, no Claude); Claude's help on a card and on a locked-in idea
+  // (one call each, on my click).
+  registerJob('ideas.details', fetchDetails, 1);
+  registerJob('ideas.assist', runAssist, 2);
+  onJobFailed('ideas.assist', onAssistFailed);
+  registerJob('ideas.flesh', fleshOut, 1);
+  onJobFailed('ideas.flesh', onFleshFailed);
 }

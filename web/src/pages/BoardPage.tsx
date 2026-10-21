@@ -212,7 +212,7 @@ function Column({ wid, stageId, name, ids, byId, isFirst }: { wid: string; stage
         </SortableContext>
         {!ids.length && !adding && (
           <button type="button" onClick={() => setAdding(true)} className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground hover:bg-accent/40">
-            {isFirst ? 'Add an idea, or use Capture to talk one in' : 'Drag cards here'}
+            {isFirst ? 'Make an idea a video from Ideas, add one here, or use Capture to talk one in' : 'Drag cards here'}
           </button>
         )}
       </div>
@@ -245,6 +245,11 @@ function CardView({ card, overlay }: { card: BoardCard; overlay?: boolean }) {
     <article className={cn('group cursor-pointer rounded-lg border bg-card p-3 text-left shadow-xs transition-colors hover:border-foreground/20', overlay && 'rotate-1 cursor-grabbing shadow-xl')}>
       <div className="flex gap-3">
         <div className="min-w-0 flex-1 space-y-1">
+          {card.series && (
+            <p className="truncate text-[10px] font-semibold tracking-wide text-brand uppercase">
+              {card.series.name} · Ep {card.series.episode}
+            </p>
+          )}
           <h3 className="text-sm leading-snug font-medium">{card.title}</h3>
           {card.hook && <p className="line-clamp-2 text-xs text-muted-foreground">{card.hook}</p>}
         </div>

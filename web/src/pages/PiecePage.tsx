@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarClock, ChevronRight, Clapperboard, GitBranchPlus, History, Inbox, MoreHorizontal, Pencil, Save, Sparkles, ThumbsUp, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, CalendarClock, ChevronRight, Clapperboard, GitBranchPlus, History, Inbox, Lightbulb, MoreHorizontal, Pencil, Save, Sparkles, ThumbsUp, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
@@ -177,6 +177,13 @@ function Editor({ piece }: { piece: PieceDetail }) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        {piece.idea && (
+          <Link to={`/w/${piece.idea.workspaceId}/ideas?open=${piece.idea.id}`} className="ml-9 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+            <Lightbulb className="size-3 text-amber-400" />
+            {piece.idea.series ? `${piece.idea.series.name} · Episode ${piece.idea.series.episode}` : 'From Ideas'}
+            <ChevronRight className="size-3" />
+          </Link>
+        )}
         <div className="flex items-center gap-2 pl-9">
           <StageStepper stages={workspace.stages} current={piece.stage} onChange={(stage) => patchPiece({ stage })} className="flex-1" />
           {after && (

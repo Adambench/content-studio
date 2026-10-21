@@ -1,7 +1,7 @@
 // The daily research brief: one Haiku call over the outliers the sweep found, with the playbook, turned into what
 // over-performs in the niche, ideas and hooks shaped for the page. Shown on Today and the Research page, given to
 // moment picking, and read by Claude in chat (get_research).
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { KIND_INFO } from '../../../shared/types';
 import type { ResearchBriefBody } from '../../../shared/research';
 import { askStructured } from '../claude/oneshot';
@@ -11,6 +11,7 @@ import { db, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, notFound } from '../lib/http';
 import { createPiece, getWorkspace } from '../services/pieces';
+import { hasIdeas, saveShared } from '../ideas/ideas';
 import { emitResearch, finishBrief, getBrief, recentOutliers, type ItemRow } from './research';
 
 const PLATFORM = { youtube: 'YouTube Shorts', tiktok: 'TikTok', instagram: 'Instagram Reels', file: 'Video' } as const;
@@ -170,6 +171,15 @@ export function addBriefIdea(briefId: string, index: number) {
   if (!idea) throw notFound('That idea isn’t in this brief.');
   if (idea.pieceId && db.select({ id: schema.pieces.id }).from(schema.pieces).where(eq(schema.pieces.id, idea.pieceId)).get()) return idea;
   const ws = getWorkspace(brief.workspaceId);
+  // Pages with Ideas get it in their Saved pile, to think about before it's a video.
+  if (hasIdeas(ws.id)) {
+    if (idea.ideaId && db.select({ id: schema.ideas.id }).from(schema.ideas).where(and(eq(schema.ideas.id, idea.ideaId), isNull(schema.ideas.deletedAt))).get()) return idea;
+    const card = saveShared(ws.id, { title: idea.title.slice(0, 120), note: [idea.hook && `Hook: ${idea.hook}`, `From the research brief (${brief.day}): ${idea.why}`].filter(Boolean).join('\n\n'), by: 'claude' });
+    idea.ideaId = card.id;
+    db.update(schema.researchBriefs).set({ body: brief.body }).where(eq(schema.researchBriefs.id, briefId)).run();
+    emitResearch(ws.id);
+    return idea;
+  }
   if (!ws.stages.length) throw badRequest('This page has no board columns.');
   const { pieceId } = createPiece(ws.id, {
     title: idea.title.slice(0, 120),

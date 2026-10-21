@@ -10,6 +10,7 @@ import { isLoose, queueInboxSort } from '../services/inbox';
 import { deleteMedia } from '../services/media';
 import { createBranch, createPiece, getBranch, getPiece, getPieceDetail, getWorkspace, restoreVersion, saveVersion, updateWorking } from '../services/pieces';
 import { chooseDirection, requestPitch } from '../studio/directions';
+import { ideaForPiece, seriesForPieces } from '../ideas/ideas';
 
 const draftSchema = z.object({
   hook: z.string(),
@@ -63,6 +64,7 @@ export async function pieceRoutes(app: FastifyInstance) {
       .all();
     const authorOf = new Map(heads.map((h) => [h.id, h.author]));
     const views = pieceViews(ids);
+    const series = seriesForPieces(ids);
     return pieces.map((p) => {
       const own = branches.filter((b) => b.pieceId === p.id);
       const active = own.find((b) => b.id === p.activeBranchId) ?? own[0];
@@ -84,6 +86,9 @@ export async function pieceRoutes(app: FastifyInstance) {
         ...postSummary(posts.filter((x) => x.pieceId === p.id)),
         // Latest views across its posts, once any are in.
         views: views.get(p.id) ?? null,
+        // The Ideas card it came from, and the series it's an episode of.
+        ideaId: series.get(p.id)?.ideaId ?? null,
+        series: series.get(p.id)?.seriesId ? { id: series.get(p.id)!.seriesId, name: series.get(p.id)!.name, episode: series.get(p.id)!.episode } : null,
       };
     });
   });
@@ -94,7 +99,7 @@ export async function pieceRoutes(app: FastifyInstance) {
     return getPieceDetail(pieceId);
   });
 
-  app.get<{ Params: { id: string } }>('/api/pieces/:id', async (req) => getPieceDetail(req.params.id));
+  app.get<{ Params: { id: string } }>('/api/pieces/:id', async (req) => ({ ...getPieceDetail(req.params.id), idea: ideaForPiece(req.params.id) }));
 
   app.patch<{ Params: { id: string } }>('/api/pieces/:id', async (req) => {
     const piece = getPiece(req.params.id);

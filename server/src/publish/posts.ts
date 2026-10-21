@@ -6,6 +6,7 @@ import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, HttpError, notFound } from '../lib/http';
 import { getPiece, getWorkspace } from '../services/pieces';
+import { episodeOrderWarning } from '../ideas/ideas';
 import { accountLabel, publicAccount } from './accounts';
 import type { AccountRow, PostRow } from './platforms';
 import { publicUrl } from './setup';
@@ -103,6 +104,9 @@ export function planPosts(pieceId: string, input: ScheduleInput) {
       else (queued[account.id] ??= []).push(at);
     } else at = base + i * input.when.staggerMinutes * 60_000;
     if (account.status === 'reconnect') problems.push({ level: 'error', message: `Reconnect ${accountLabel(account)} first (Accounts page).` });
+    // A series goes out in order.
+    const order = episodeOrderWarning(pieceId, account.platform, at);
+    if (order) problems.push({ level: 'warning', message: order });
     const copy = t.copy ?? copyFromDraft(account.platform, draft, input.format);
     problems.push(
       ...postProblems({
