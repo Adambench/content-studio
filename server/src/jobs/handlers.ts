@@ -39,6 +39,7 @@ import { applyEffect, onEffectFailed } from '../studio/effects';
 import { runTool } from '../compute/run';
 import { fleshOut, onAssistFailed, onFleshFailed, runAssist } from '../ideas/assist';
 import { fetchDetails } from '../ideas/details';
+import { scoutJob } from '../toolbox/scout';
 
 function setMedia(id: string, values: Partial<typeof schema.media.$inferInsert>) {
   db.update(schema.media).set(values).where(eq(schema.media.id, id)).run();
@@ -257,6 +258,7 @@ export function registerHandlers() {
   // Research: the daily sweep (yt-dlp and page reads, no Claude), the brief (one Haiku call) and analyses of single
   // videos (a download, FFmpeg and one Claude call with frames).
   registerJob('research.sweep', researchSweep, 1);
+  registerJob('toolbox.scout', scoutJob, 1);
   onJobFailed('research.sweep', onSweepFailed);
   registerJob('research.brief', writeBrief, 1);
   onJobFailed('research.brief', onBriefFailed);

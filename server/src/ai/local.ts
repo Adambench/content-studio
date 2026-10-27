@@ -3,6 +3,7 @@
 import { DEFAULT_LOCAL_AI, type LocalAiConfig, type LocalAiStatus, type LocalModel } from '../../../shared/ai';
 import { llmWorker } from '../compute/workers';
 import { getSetting } from '../lib/settings';
+import { countUse } from '../toolbox/uses';
 
 export type LocalToolCall = { function: { name: string; arguments: Record<string, unknown> | string } };
 export type LocalMessage = {
@@ -132,6 +133,7 @@ export async function localChat(input: {
   });
   if (!res.body) throw new LocalAiError('The model server sent nothing back.');
   const reply: LocalReply = { content: '', toolCalls: [], promptTokens: 0, outputTokens: 0, model: status.model };
+  countUse('model', status.model);
   const decoder = new TextDecoder();
   let buffer = '';
   const take = (line: string) => {

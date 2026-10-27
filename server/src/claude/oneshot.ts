@@ -3,6 +3,7 @@ import type { AiTask } from '../../../shared/ai';
 import { localStructured } from '../ai/local';
 import { canFallBack, routeFor } from '../ai/route';
 import { baseOptions, resolveModel } from './options';
+import { claudeFamily, countUse } from '../toolbox/uses';
 import { recordUsage } from './usage';
 
 export type PromptImage = { data: string; mediaType: 'image/jpeg' | 'image/png' };
@@ -36,6 +37,7 @@ export async function askStructured<T>(input: StructuredInput & { task: AiTask }
 }
 
 async function askClaude<T>(input: StructuredInput): Promise<T> {
+  countUse('model', `claude-${claudeFamily(resolveModel(input.model))}`);
   const q = query({
     prompt: input.images?.length ? withImages(input.prompt, input.images) : input.prompt,
     options: {

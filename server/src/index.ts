@@ -8,9 +8,11 @@ import { startAnalytics, stopAnalytics } from './analytics/schedule';
 import { startCampaignUpkeep, stopCampaignUpkeep } from './campaigns/schedule';
 import { startResearch, stopResearch } from './research/schedule';
 import { startFinderSchedule, stopFinderSchedule } from './finder/schedule';
+import { startScoutSchedule, stopScoutSchedule } from './toolbox/scout';
 import { finderRoutes } from './routes/finder';
 import { ideaRoutes } from './routes/ideas';
 import { knowledgeRoutes } from './routes/knowledge';
+import { toolboxRoutes } from './routes/toolbox';
 import { syncKnowledge } from './knowledge/knowledge';
 import { purgeDeletedIdeas } from './ideas/ideas';
 import { stopAllSources } from './campaigns/sources';
@@ -146,6 +148,7 @@ await app.register(aiRoutes);
 await app.register(voiceRoutes);
 await app.register(ideaRoutes);
 await app.register(knowledgeRoutes);
+await app.register(toolboxRoutes);
 
 registerHandlers();
 startWorker();
@@ -154,6 +157,7 @@ startAnalytics();
 startCampaignUpkeep();
 startResearch();
 startFinderSchedule();
+startScoutSchedule();
 // Cards deleted over a month ago go for good, checked at start and daily.
 void purgeDeletedIdeas().catch(() => {});
 const purging = setInterval(() => void purgeDeletedIdeas().catch(() => {}), 86400_000);
@@ -172,6 +176,7 @@ async function shutdown() {
   stopCampaignUpkeep();
   stopResearch();
   stopFinderSchedule();
+  stopScoutSchedule();
   stopAllSources();
   await app.close();
   process.exit(0);

@@ -15,6 +15,7 @@ import { HomeRedirect } from '@/pages/HomeRedirect';
 import { IdeasPage } from '@/pages/IdeasPage';
 import { InboxPage } from '@/pages/InboxPage';
 import { KnowledgePage } from '@/pages/KnowledgePage';
+import { ToolboxPage } from '@/pages/ToolboxPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NewWorkspacePage } from '@/pages/NewWorkspacePage';
 import { PairPage } from '@/pages/PairPage';
@@ -44,6 +45,7 @@ export const router = createBrowserRouter([
           { path: 'review', element: <ReviewRedirect /> },
           { path: 'settings', element: <SettingsPage /> },
           { path: 'knowledge', element: <KnowledgePage /> },
+          { path: 'toolbox', element: <ToolboxPage /> },
           { path: 'capture', element: <CapturePage /> },
           { path: 'share', element: <SharePage /> },
           { path: 'w/new', element: <NewWorkspacePage /> },

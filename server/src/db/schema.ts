@@ -9,6 +9,7 @@ import type { PieceDirections } from '../../../shared/direction';
 import type { IdeaAssist, IdeaKind } from '../../../shared/ideas';
 import type { KnowledgeSource, KnowledgeStatus, KnowledgeTopic } from '../../../shared/knowledge';
 import type { QualityReport } from '../../../shared/quality';
+import type { FindKind, FindStatus, ToolKind } from '../../../shared/toolbox';
 import type { AnalysisStatus, ItemPlatform, ResearchAnalysis, ResearchBriefBody, ResearchSettings, ResearchSource } from '../../../shared/research';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
 import type { SessionKind } from '../../../shared/devices';
@@ -715,4 +716,40 @@ export const knowledge = sqliteTable(
     updatedAt: updatedAt(),
   },
   (t) => [index('knowledge_topic_idx').on(t.topic), uniqueIndex('knowledge_seed_idx').on(t.seedKey)],
+);
+
+/** How often each skill, studio tool and model was used (the Toolbox page), counted from when the Toolbox came in. */
+export const toolUses = sqliteTable(
+  'tool_uses',
+  {
+    kind: text('kind').$type<ToolKind>().notNull(),
+    name: text('name').notNull(),
+    count: integer('count').notNull().default(0),
+    lastAt: integer('last_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.kind, t.name] })],
+);
+
+/** What the weekly scout found (repos, skills, MCP servers, models), kept so a find shows up once. */
+export const toolFinds = sqliteTable(
+  'tool_finds',
+  {
+    id: id(),
+    kind: text('kind').$type<FindKind>().notNull(),
+    name: text('name').notNull(),
+    url: text('url').notNull(),
+    description: text('description').notNull().default(''),
+    adds: text('adds').notNull().default(''),
+    risks: text('risks', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+    licence: text('licence'),
+    stars: integer('stars').notNull().default(0),
+    upstreamAt: integer('upstream_at'),
+    score: integer('score').notNull().default(0),
+    install: text('install').notNull().default(''),
+    // `seen` = looked at and not worth showing: kept so the scout doesn't judge it again.
+    status: text('status').$type<FindStatus | 'seen'>().notNull().default('new'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('tool_finds_url_idx').on(t.url)],
 );

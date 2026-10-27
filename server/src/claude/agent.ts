@@ -14,6 +14,7 @@ import { chatSystemPrompt } from './prompt';
 import { buildTools, toolLabel } from './tools';
 import { recordUsage } from './usage';
 import { runLocalTurn } from '../ai/local-agent';
+import { claudeFamily, countToolCall, countUse } from '../toolbox/uses';
 import { localStatus } from '../ai/local';
 import { canFallBack, isUsageError, routeFor } from '../ai/route';
 
@@ -73,6 +74,7 @@ export async function runChat(input: {
 
   // `local` is the creator's own model; a Claude model on auto moves there when Claude's usage runs low.
   const route = model === 'local' ? { provider: 'local' as const, reason: '' } : await routeFor('chat');
+  if (route.provider === 'claude') countUse('model', `claude-${claudeFamily(model)}`);
   const persist = () => db.update(schema.chatMessages).set({ parts }).where(eq(schema.chatMessages.id, assistantId)).run();
   const abort = new AbortController();
   running.set(thread.id, abort);
@@ -147,6 +149,7 @@ export async function runChat(input: {
             input.onEvent({ type: 'text', text: block.text });
           } else if (block.type === 'tool_use' || block.type === 'server_tool_use') {
             const label = toolLabel(block.name, (block.input ?? {}) as Record<string, unknown>);
+            countToolCall(block.name, (block.input ?? {}) as Record<string, unknown>);
             parts.push({ type: 'tool', id: block.id, name: block.name, label, status: 'running' });
             currentText = null;
             input.onEvent({ type: 'tool_start', id: block.id, name: block.name, label });

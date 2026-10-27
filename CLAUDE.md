@@ -13,7 +13,8 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   (`src/db/sqlite.ts`); never import `drizzle-orm/better-sqlite3` (pulls in the native module; no C toolchain here).
   Main areas: `claude/` (agent, tools, prompts, plugin), `ai/` (Claude or the self-hosted model per task, the local
   chat loop), `studio/` (edits → HyperFrames, render, generation), `publish/`,
-  `analytics/`, `campaigns/`, `clipping/`, `research/`, `ideas/` (the brainstorm canvas, Saved pile), `jobs/` (queue).
+  `analytics/`, `campaigns/`, `clipping/`, `research/`, `ideas/` (the brainstorm canvas, Saved pile), `knowledge/` (the
+  playbook as editable rules), `toolbox/` (what's installed and used, the weekly scout), `jobs/` (queue).
 - `web/` — React UI. `isDesktop` (`lib/desktop.ts`), `isApp`/`isNative` (`lib/native.ts`, the `vite --mode app` build).
 - `mobile/` — Capacitor 8, committed `android/`, one native plugin `StudioPlugin` (Java). CI builds APKs.
 - `shared/` — types for both sides (`types.ts`, `edit.ts`, `campaigns.ts`, `clipping.ts`, …).

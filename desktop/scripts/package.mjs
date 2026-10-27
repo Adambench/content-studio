@@ -28,6 +28,23 @@ writeFileSync(
   join(stage, 'claude-plugin/.claude-plugin/plugin.json'),
   JSON.stringify({ name: 'studio-skills', description: "Content Studio's skills: the playbook and the content skills it builds on", version: '1.0.0' }, null, 2),
 );
+// For the Toolbox page: where each skill came from, and the app's packages (most are bundled, so their package.json
+// files don't ship). Mirrors the development path in server/src/toolbox/inventory.ts.
+cpSync(join(root, 'skills-lock.json'), join(stage, 'skills-lock.json'));
+const libraryNames = new Set();
+for (const ws of ['.', 'server', 'web', 'desktop', 'shared', 'mobile']) {
+  const file = join(root, ws, 'package.json');
+  if (existsSync(file)) for (const n of Object.keys(JSON.parse(readFileSync(file, 'utf8')).dependencies ?? {})) libraryNames.add(n);
+}
+const libraries = [...libraryNames].flatMap((name) => {
+  const file = join(root, 'node_modules', name, 'package.json');
+  if (!existsSync(file)) return [];
+  const pkg = JSON.parse(readFileSync(file, 'utf8'));
+  const repo = typeof pkg.repository === 'string' ? pkg.repository : pkg.repository?.url;
+  const source = pkg.homepage ?? (repo ? String(repo).replace(/^git\+/, '').replace(/\.git$/, '').replace(/^git:\/\//, 'https://') : null);
+  return [{ name, version: pkg.version, licence: pkg.license ?? null, about: pkg.description ?? '', source }];
+});
+writeFileSync(join(stage, 'libraries.json'), JSON.stringify(libraries));
 
 /**
  * The server bundle includes everything except packages that find files inside themselves: the Claude Agent SDK

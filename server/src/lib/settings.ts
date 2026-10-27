@@ -50,6 +50,10 @@ type SettingsShape = {
   channelMedians: Record<string, { median: number | null; at: number }>;
   /** Campaigns found on Content Rewards that aren't added yet. */
   campaignLeads: import('../../../shared/finder').CampaignLeads;
+  /** The skills' source repos as the scout last read them from GitHub (licence, stars, last push). */
+  toolboxRepos: Record<string, import('../toolbox/inventory').RepoInfo>;
+  /** The Toolbox's weekly scout: its last run. */
+  toolScout: import('../../../shared/toolbox').ScoutRun;
 };
 
 export function getSetting<K extends keyof SettingsShape>(key: K): SettingsShape[K] | undefined {

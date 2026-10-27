@@ -136,7 +136,7 @@ versionCode from the tag (`v1.2.3` → 10203).
    - [x] Step 5 — My own voice, cloned, for voiceovers
 10. **Hosted generation** — built 2026-10-19 against a stand-in (see *Phase 10 build plan*)
 11. **Ideas canvas and save-from-anywhere** — built 2026-10-21 (see *Phase 11*)
-12. **Viral quality, knowledge base, toolbox** — in progress: step 1 built 2026-10-27, step 0 waits on me (see *Phase 12*)
+12. **Viral quality, knowledge base, toolbox** — in progress: steps 1–2 built 2026-10-27, step 0 waits on me (see *Phase 12*)
 
 ## Waiting on me
 
@@ -434,5 +434,28 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
     (71/100 in 9 s) and a real render with the check: 40/100 → Claude fixed it in the video's chat (v5) → 80/100 →
     rendered. Knowledge page and the editor's Quality tab looked at in headless Chrome, desktop and phone width. Not
     tried: `get_knowledge`/`suggest_rule` and `render_edit`'s gate from a real chat.
+- [x] Step 2 — Toolbox and the weekly scout (2026-10-27):
+  - **Toolbox page** (`/toolbox`, sidebar; phone: More): *Installed* lists skills (version and licence from SKILL.md or
+    the source repo, source from `skills-lock.json`, whether the chat loads it), the studio's tools (the in-app MCP
+    server and the web), models (Claude on the Pro login, the local model, Whisper, Kokoro, FLUX/Wan/Chatterbox on the
+    workers, kie.ai), programs (ffmpeg, yt-dlp, Python, Tailscale, the renderer's Chrome, the Python environments'
+    packages) and libraries (the app's packages; `libraries.json` is written when it's packaged). Each with what it
+    does, version, licence, where it runs, *Not set up* (and how) and how often it was used (`tool_uses`: chat tool
+    calls, skills opened, every background prompt on the playbook, every Claude/local model call, kie.ai from
+    `ai_spend`; counted from now on).
+  - **Weekly scout** (job `toolbox.scout`, task `scout`, Haiku; once a week after 7:00, or *Scout now*): GitHub's
+    search (names, descriptions, topics: skills, HyperFrames, MCP servers, motion, GSAP, sound effects, short-form,
+    faceless video; changed since the last find, made in the last 18 months) and Hugging Face's trending video, picture
+    and speech models, no keys. New ones (not installed, not seen before) go to one call that scores each 0–10 for these
+    videos (knowing the halal rules, the home PCs' GPUs and the next steps of this phase) with what it'd add and its
+    risks; the licence is checked without the model. 5+ show under *Finds* (skill repos get their `npx skills add`
+    command); *Want it* / *Not for me*. Installing stays my click, outside the app. It also refreshes the installed
+    skills' repos (licence, stars).
+  - Tried on a test server: the inventory (36 skills, 41 studio tools, 11 models, 11 programs, 36 libraries; versions,
+    licences, *Not set up*), counting (skills, tools, web, models), three real scout runs (GitHub + Hugging Face, one
+    Haiku call, ~2 min; the first queries matched READMEs and found only big lists, so names/descriptions/topics only
+    now, and GitHub's 403s wait and retry): 40 judged, 6 shown (herk-edit-kit, anything2explainer, motionmaxxing,
+    claude-video-vision, lemo-opuscar, MOSS-TTS). Page looked at in headless Chrome, desktop and phone width. Not tried:
+    the packaged app's `libraries.json`/`skills-lock.json` (next `npm run install-app`).
 
 Open: the Islamic page's name, niche and language; the mascots' look; which SFX source (licence).

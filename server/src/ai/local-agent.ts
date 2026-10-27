@@ -8,6 +8,7 @@ import type { ChatPart, ChatStreamEvent } from '../../../shared/types';
 import { chatSkillList, readSkillFile } from '../claude/plugin';
 import { SERVER_NAME, toolLabel } from '../claude/tools';
 import { db, newId, schema } from '../db';
+import { countToolCall } from '../toolbox/uses';
 import { localChat, localConfig, roughTokens, type LocalMessage, type LocalTool, type LocalToolCall } from './local';
 
 const MAX_TURNS = 40;
@@ -175,6 +176,7 @@ export async function runLocalTurn(turn: LocalTurn) {
       const id = newId();
       const full = `mcp__${SERVER_NAME}__${name}`;
       const label = toolLabel(full, input);
+      countToolCall(name, input);
       const part: Extract<ChatPart, { type: 'tool' }> = { type: 'tool', id, name: full, label, status: 'running' };
       turn.parts.push(part);
       turn.onEvent({ type: 'tool_start', id, name: full, label });

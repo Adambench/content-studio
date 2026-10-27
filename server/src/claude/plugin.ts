@@ -5,6 +5,7 @@ import type { HookCallback, Options } from '@anthropic-ai/claude-agent-sdk';
 import type { KnowledgeTopic } from '../../../shared/knowledge';
 import { config } from '../config';
 import { hasKnowledge, knowledgeText } from '../knowledge/knowledge';
+import { countUse } from '../toolbox/uses';
 
 /**
  * The skills in `.claude/skills` reach the app's Claude as a local plugin: a folder with `.claude-plugin/plugin.json`
@@ -19,7 +20,7 @@ export const PLUGIN_NAME = 'studio-skills';
  * clips, studio-script) need tools the app's Claude doesn't have, and their know-how reaches it through the
  * playbook. The HyperFrames/GSAP skills come in with motion graphics (phase 7, step 9).
  */
-const CHAT_SKILLS = [
+export const CHAT_SKILLS = [
   'playbook',
   'content-principles',
   'viral-short-form',
@@ -180,6 +181,8 @@ const playbookCache = new Map<PlaybookFile, string>();
  * when there's nothing. Put it first in the system prompt (it's the same text until a rule changes, so it caches).
  */
 export function playbook(...files: PlaybookFile[]) {
+  // A background prompt built on the playbook is a use of it.
+  countUse('skill', 'playbook');
   const text = hasKnowledge() ? knowledgeText(files) : files.map(playbookFile).filter(Boolean).join('\n\n---\n\n');
   return text && `# The playbook (Content Studio's rules for every piece; the halal rules come before everything)\n\n${text}`;
 }

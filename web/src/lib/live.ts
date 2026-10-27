@@ -139,6 +139,9 @@ function apply(event: LiveEvent) {
       case 'knowledge':
         inv(keys.knowledge);
         break;
+      case 'toolbox':
+        inv(keys.toolbox);
+        break;
       case 'ideas':
         refreshIdeas(wid ?? null);
         if (event.id) inv(keys.idea(event.id));

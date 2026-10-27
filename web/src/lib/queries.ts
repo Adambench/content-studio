@@ -11,6 +11,7 @@ import type { Campaign, CampaignDetail } from '@shared/campaigns';
 import type { ResearchOverview } from '@shared/research';
 import type { IdeaDetail, IdeaNode } from '@shared/ideas';
 import type { KnowledgeRule } from '@shared/knowledge';
+import type { Toolbox } from '@shared/toolbox';
 import type { SubmissionsSyncState } from './types';
 import type { ReviewClip } from '@shared/clipping';
 import type { SitesStatus } from '@shared/sites';
@@ -84,6 +85,7 @@ export const keys = {
   compute: ['compute'] as const,
   ai: ['ai'] as const,
   knowledge: ['knowledge'] as const,
+  toolbox: ['toolbox'] as const,
 };
 
 export type AuthStatus = { setupRequired: boolean; authenticated: boolean; desktopManaged: boolean };
@@ -131,6 +133,9 @@ export const useSubmissionsSync = () =>
 
 /** A page's research: what it watches, its latest brief, outliers and analyses. Polls while something runs. */
 export const useKnowledge = () => useQuery({ queryKey: keys.knowledge, queryFn: () => api<KnowledgeRule[]>('/knowledge') });
+/** What's installed and used, and the scout's finds. Polls while the scout runs. */
+export const useToolbox = () =>
+  useQuery({ queryKey: keys.toolbox, queryFn: () => api<Toolbox>('/toolbox'), refetchInterval: (q) => (q.state.data?.scout?.status === 'running' ? 5000 : false) });
 export const useIdeas = (wid: string) => useQuery({ queryKey: keys.ideas(wid), queryFn: () => api<IdeaNode[]>(`/workspaces/${wid}/ideas`), enabled: !!wid });
 export const useIdea = (id: string | null) => useQuery({ queryKey: keys.idea(id ?? ''), queryFn: () => api<IdeaDetail>(`/ideas/${id}`), enabled: !!id });
 export const useResearch = (wid: string) =>
