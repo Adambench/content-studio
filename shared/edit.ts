@@ -5,6 +5,7 @@ import { bundledFamily } from './fonts';
 import { BROLL_LAYOUTS, CLIP_MOTIONS, FILTER_LOOKS, NO_TEXTURES, OVERLAY_ANIMATIONS, type BrollLayout, type ClipMotion, type FilterLook, type OverlayAnimation, type Textures } from './looks';
 import { normalizeRecipe, type Recipe } from './recipe';
 import { normalizeScene, SCENE_MAX_SECONDS, type SceneSpec } from './scene';
+import { refitScene } from './scene-library';
 import { builtinSfxId } from './sfx';
 import type { Transcript } from './types';
 
@@ -792,7 +793,7 @@ function normalizeOverlay(input: Loose): EditOverlay | null {
 export function normalizeEdit(input: unknown): EditSpec {
   const e = obj(input);
   const base = emptyEdit();
-  return {
+  return fitLibraryScenes({
     v: 1,
     format: oneOf(e.format, FORMAT_IDS, base.format),
     clips: list(e.clips).map(normalizeClip).filter((c): c is EditClip => !!c),
@@ -806,7 +807,15 @@ export function normalizeEdit(input: unknown): EditSpec {
     watermark: normalizeWatermark(e.watermark),
     recipe: normalizeRecipe(e.recipe),
     story: normalizeStory(e.story),
-  };
+  });
+}
+
+/** Library scenes built again for the edit as it is now: their length, the frame and the accent colour. */
+export function fitLibraryScenes(spec: EditSpec): EditSpec {
+  if (!spec.overlays.some((o) => o.type === 'scene' && o.preset)) return spec;
+  const { width: W, height: H } = EDIT_FORMATS[spec.format];
+  const frame = { W, H, color: spec.captions.highlight };
+  return { ...spec, overlays: spec.overlays.map((o) => (o.type === 'scene' ? refitScene(o, frame) : o)) };
 }
 
 function normalizeStory(input: unknown): EditStory {

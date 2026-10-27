@@ -4,10 +4,10 @@
 // sounds, so the timings follow every change. The app's own sounds for now; a recorded library joins the pools later.
 import { clipStarts, editDuration, graphicSounds, recipeSounds, transitionSounds, type EditOverlay, type EditSpec, type SfxCue } from './edit';
 import type { OverlayAnimation } from './looks';
-import type { SceneElement, SceneTween } from './scene';
+import type { SceneElement, SceneSound, SceneTween } from './scene';
 import { builtinSfxId } from './sfx';
 
-export type MoveKind = 'pop' | 'swish' | 'whoosh' | 'zoom' | 'whip' | 'hit' | 'slam' | 'thud' | 'tick' | 'typing' | 'draw' | 'focus' | 'glitch';
+export type MoveKind = Exclude<SceneSound, 'none'>;
 
 /** A move on screen and the kind of sound it wants. `scene` and `clip` moves aren't an overlay's own start. */
 export type Move = { at: number; kind: MoveKind; what: string; from: 'overlay' | 'scene' | 'clip'; quiet?: boolean };
@@ -58,13 +58,21 @@ const num = (v: unknown) => {
 const words = (text = '') => text.replace(/\*/g, '').split(/\s+/).filter(Boolean).length;
 const chars = (text = '') => text.replace(/[*\s]/g, '').length;
 
-/** What kind of move a scene tween is, if it's one that wants a sound. */
-function tweenKind(t: SceneTween, big: boolean): { kind: MoveKind; quiet?: boolean } | null {
+/** What kind of move a scene tween is, if it's one that wants a sound. `el`: its first target, for sizes. */
+function tweenKind(t: SceneTween, big: boolean, el?: SceneElement): { kind: MoveKind; quiet?: boolean } | null {
   const from = t.from ?? {};
   const to = t.to;
   if ('strokeDashoffset' in to || 'strokeDashoffset' in from) return { kind: t.duration >= 0.5 ? 'draw' : 'swish' };
   if (t.physics) return { kind: 'whoosh' };
+  // Steady motion (a spin, a drift, a scroll) is texture, not a move.
+  if (t.ease === 'none' || t.ease === 'linear') return null;
   const dist = (k: string) => Math.abs((num(from[k]) ?? 0) - (num(to[k]) ?? num(from[k]) ?? 0));
+  // A shape changing size (a pill becoming a card) from what it was set to.
+  const grow = (k: 'width' | 'height') => {
+    const a = num(from[k]) ?? num(el?.style[k]);
+    const b = num(to[k]);
+    return a === null || b === null ? 0 : Math.abs(b - a);
+  };
   const move = Math.max(dist('x'), dist('y'), dist('left'), dist('top'), 5 * Math.max(dist('xPercent'), dist('yPercent')));
   const turn = Math.max(dist('rotation'), dist('rotationX'), dist('rotationY'));
   const s0 = num(from.scale);
@@ -74,6 +82,7 @@ function tweenKind(t: SceneTween, big: boolean): { kind: MoveKind; quiet?: boole
   if (turn >= 90) return { kind: 'whip' };
   if (move >= 150) return { kind: t.duration <= 0.5 ? 'swish' : 'whoosh' };
   if (s0 !== null && s0 <= 0.6 && s1 >= 0.8) return { kind: big ? 'hit' : 'pop' };
+  if (Math.max(grow('width'), grow('height')) >= 150) return { kind: 'swish' };
   const appears = num(from.opacity) === 0 || num(from.autoAlpha) === 0;
   return appears && move >= 30 ? { kind: 'swish', quiet: true } : null;
 }
@@ -91,8 +100,10 @@ export function sceneMoves(o: Extract<EditOverlay, { type: 'scene' }>): Move[] {
       const el = els.get(id);
       return { el, count: part === 'words' ? words(el?.text) : part === 'chars' ? chars(el?.text) : 1, part };
     });
+    if (t.sound === 'none') continue;
     const big = parts.some(({ el }) => (num(el?.style['font-size']) ?? 0) >= 140 || (el?.kind === 'box' && (num(el.style.width) ?? 0) >= 700));
-    const found = tweenKind(t, big);
+    // A tween can name its sound; otherwise it's read from the move.
+    const found = t.sound ? { kind: t.sound } : tweenKind(t, big, parts[0]?.el);
     const letters = parts.some((p) => p.part === 'chars');
     // Split text that only fades in still types (letters) or ticks (words) as it appears.
     const appears = [t.from?.opacity, t.from?.autoAlpha].some((v) => num(v) === 0) || [t.to.opacity, t.to.autoAlpha].some((v) => num(v) === 1);

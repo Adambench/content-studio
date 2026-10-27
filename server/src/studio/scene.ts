@@ -70,7 +70,7 @@ export function composeScene(o: SceneOverlay, i: number, ctx: SceneContext) {
         return `#${domId(i, id)}${part === 'words' ? ' .sw' : part === 'chars' ? ' .sch' : ''}`;
       })
       .join(', ');
-    const to = withIds(t.to, i);
+    const to = asAttrs(withIds(t.to, i));
     const vars = {
       ...to,
       duration: t.duration,
@@ -84,7 +84,7 @@ export function composeScene(o: SceneOverlay, i: number, ctx: SceneContext) {
       ...(t.physics && { physics2D: t.physics }),
     };
     const at = n(o.start + t.at);
-    return t.from ? `tl.fromTo(${js(targets)}, ${js(withIds(t.from, i))}, ${js(vars)}, ${at});` : `tl.to(${js(targets)}, ${js(vars)}, ${at});`;
+    return t.from ? `tl.fromTo(${js(targets)}, ${js(asAttrs(withIds(t.from, i)))}, ${js(vars)}, ${at});` : `tl.to(${js(targets)}, ${js(vars)}, ${at});`;
   });
   // Wiggle eases are made on the page before the timeline uses them.
   const helpers = sceneWiggles(o).map((name) => {
@@ -92,6 +92,13 @@ export function composeScene(o: SceneOverlay, i: number, ctx: SceneContext) {
     return `if (window.CustomWiggle) CustomWiggle.create(${js(name)}, { wiggles: ${Number(count)}, type: ${js(kind === 'shake' ? 'uniform' : 'easeOut')} });`;
   });
   return { html, tweens, helpers };
+}
+
+/** A line's dash offset is tweened as its attribute: as CSS, GSAP rounds it to whole pixels and a 1 → 0 draw snaps on halfway. */
+function asAttrs(vars: Record<string, string | number>): Record<string, unknown> {
+  if (!('strokeDashoffset' in vars)) return vars;
+  const { strokeDashoffset, ...rest } = vars;
+  return { ...rest, attr: { 'stroke-dashoffset': strokeDashoffset } };
 }
 
 /** A path tween names another element of the scene as "#id": point it at that element on the page. */

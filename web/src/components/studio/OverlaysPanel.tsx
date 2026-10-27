@@ -1,6 +1,7 @@
 import { ChevronDown, Clapperboard, Image as ImageIcon, Shapes, Sparkles, Trash2, Type, WandSparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
+  EDIT_FORMATS,
   editDuration,
   GRAPHIC_INFO,
   GRAPHICS,
@@ -13,6 +14,7 @@ import {
   type SceneOverlay,
 } from '@shared/edit';
 import { BROLL_LAYOUT_INFO, BROLL_LAYOUTS, OVERLAY_ANIMATION_INFO } from '@shared/looks';
+import { libraryScene, SCENE_LIBRARY, SCENE_PRESETS, sceneSeconds, type ScenePreset, type SceneFill } from '@shared/scene-library';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -56,6 +58,12 @@ export function OverlaysPanel() {
     return { id: newEditId(), type: 'graphic', template, text: info.example.text ?? '', sub: info.example.sub ?? '', items: info.example.items ?? [], x: 0.5, y: 0.45, position: info.position ?? 'center', sound: template !== 'progress', ...when };
   };
   const broll = footage.filter((m) => (m.kind === 'video' || m.kind === 'image') && m.source !== 'render');
+  const newScene = (preset: ScenePreset): SceneOverlay => {
+    const ex = SCENE_LIBRARY[preset].example;
+    const fill: SceneFill = { text: ex.text ?? '', sub: ex.sub ?? '', items: ex.items ?? [] };
+    const { problems: _, ...scene } = libraryScene(preset, fill, { W: EDIT_FORMATS[spec.format].width, H: EDIT_FORMATS[spec.format].height, color: spec.captions.highlight });
+    return { id: newEditId(), type: 'scene', ...scene, ...span(sceneSeconds(preset, fill)) };
+  };
 
   return (
     <div className="space-y-4">
@@ -86,6 +94,23 @@ export function OverlaysPanel() {
                 <div>
                   <p>{GRAPHIC_INFO[g].label}</p>
                   <p className="text-xs text-muted-foreground">{GRAPHIC_INFO[g].hint}</p>
+                </div>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline">
+              <WandSparkles /> Scene <ChevronDown />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="max-h-96 w-72 overflow-y-auto">
+            {SCENE_PRESETS.map((p) => (
+              <DropdownMenuItem key={p} onSelect={() => add(newScene(p))}>
+                <div>
+                  <p>{SCENE_LIBRARY[p].label}</p>
+                  <p className="text-xs text-muted-foreground">{SCENE_LIBRARY[p].hint}</p>
                 </div>
               </DropdownMenuItem>
             ))}
@@ -319,6 +344,7 @@ function GraphicFields({ overlay, set }: { overlay: GraphicOverlay; set: (patch:
 
 /** A scene Claude designed: its words can be fixed here; the design is Claude's to change (ask in the panel). */
 function SceneFields({ overlay, set }: { overlay: SceneOverlay; set: (patch: Partial<SceneOverlay>) => void }) {
+  if (overlay.preset && overlay.fill && overlay.preset in SCENE_LIBRARY) return <LibrarySceneFields overlay={overlay} preset={overlay.preset as ScenePreset} fill={overlay.fill} set={set} />;
   const texts = overlay.elements.filter((e) => e.kind === 'text');
   return (
     <>
@@ -333,6 +359,58 @@ function SceneFields({ overlay, set }: { overlay: SceneOverlay; set: (patch: Par
           onChange={(text) => set({ elements: overlay.elements.map((x) => (x.id === e.id ? { ...x, text } : x)) })}
         />
       ))}
+    </>
+  );
+}
+
+/** A library scene: its words and what's behind it; it's built again from them (and its length) as they change. */
+function LibrarySceneFields({ overlay, preset, fill, set }: { overlay: SceneOverlay; preset: ScenePreset; fill: SceneFill; set: (patch: Partial<SceneOverlay>) => void }) {
+  const info = SCENE_LIBRARY[preset];
+  const [text, setText] = useState(fill.text);
+  const [sub, setSub] = useState(fill.sub);
+  const [items, setItems] = useState(fill.items.join('\n'));
+  useEffect(() => {
+    setText(fill.text);
+    setSub(fill.sub);
+    setItems(fill.items.join('\n'));
+  }, [fill]);
+  const save = (patch: Partial<SceneFill>) => set({ fill: { ...fill, ...patch } });
+  const wants = sceneSeconds(preset, fill);
+  const len = overlay.end - overlay.start;
+  const solid = overlay.background !== 'none' && overlay.background !== 'dim';
+  return (
+    <>
+      <p className="text-xs text-muted-foreground">
+        {info.hint}. Put *stars* around a word for the accent colour. It's redrawn from these words; ask Claude to redesign it.
+        {len < wants - 0.05 && ` Shorter than its ${wants} s, so it plays faster.`}
+      </p>
+      {info.fields.text && (
+        <Field label={info.fields.text}>
+          <Input value={text} onChange={(e) => setText(e.target.value)} onBlur={() => text !== fill.text && save({ text: text.trim() })} className="h-8" />
+        </Field>
+      )}
+      {info.fields.sub && (
+        <Field label={info.fields.sub}>
+          <Input value={sub} onChange={(e) => setSub(e.target.value)} onBlur={() => sub !== fill.sub && save({ sub: sub.trim() })} className="h-8" />
+        </Field>
+      )}
+      {info.fields.items && (
+        <Field label={info.fields.items}>
+          <Textarea value={items} onChange={(e) => setItems(e.target.value)} onBlur={() => save({ items: items.split('\n').map((i) => i.trim()).filter(Boolean).slice(0, 8) })} rows={4} />
+        </Field>
+      )}
+      <Field label="Behind it">
+        <ChoiceSelect
+          label="Behind it"
+          value={solid ? 'solid' : overlay.background}
+          onChange={(v) => set({ background: v === 'solid' ? '#0b0c10' : v })}
+          options={[
+            { value: 'none', label: 'The video' },
+            { value: 'dim', label: 'The video, darkened' },
+            { value: 'solid', label: 'Plain dark' },
+          ]}
+        />
+      </Field>
     </>
   );
 }

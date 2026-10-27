@@ -17,6 +17,7 @@ import {
   TRANSITIONS,
   clipStarts,
   editDuration,
+  EDIT_FORMATS,
   newEditId,
   normalizeEdit,
   timelineWords,
@@ -34,7 +35,8 @@ import { queueRender } from '../studio/render';
 import { checkEdit } from '../studio/quality';
 import { QUALITY_BAR, qualityText } from '../../../shared/quality';
 import { previewOverlay } from '../studio/preview';
-import { normalizeScene, SCENE_FONTS, SCENE_MAX_ELEMENTS, SCENE_MAX_SECONDS, SCENE_MAX_TWEENS } from '../../../shared/scene';
+import { normalizeScene, SCENE_FONTS, SCENE_MAX_ELEMENTS, SCENE_MAX_SECONDS, SCENE_MAX_TWEENS, SCENE_SOUNDS } from '../../../shared/scene';
+import { libraryScene, SCENE_LIBRARY, SCENE_PRESETS, sceneSeconds } from '../../../shared/scene-library';
 import { CHARACTERS, normalizeRecipe, RECIPE_INFO, recipeNeedsBuild, VOICES } from '../../../shared/recipe';
 import { ttsInstalled } from '../services/tts';
 import { clipToolsInstalled } from '../services/cliptools';
@@ -131,6 +133,8 @@ export function studioToolLabel(name: string, input: Record<string, any>): strin
       return 'Started reframing on the speaker';
     case 'write_scene':
       return input.name ? `Designed a scene: ${input.name}` : 'Designed a scene';
+    case 'add_library_scene':
+      return `Added a scene: ${SCENE_LIBRARY[input.preset as keyof typeof SCENE_LIBRARY]?.label ?? 'from the library'}`;
     case 'view_overlay':
       return 'Looked at a motion graphic';
     case 'write_format_video':
@@ -191,7 +195,8 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         said: words.filter((w) => w.clipId === c.id).map((w) => w.text).join(' ') || undefined,
       })),
       captions: spec.captions,
-      overlays: spec.overlays,
+      // A library scene is built from its words, so its design isn't worth reading.
+      overlays: spec.overlays.map((o) => (o.type === 'scene' && o.preset ? { id: o.id, type: o.type, start: o.start, end: o.end, name: o.name, preset: o.preset, fill: o.fill, background: o.background } : o)),
       audio: spec.audio,
       soundsOnMoves: spec.audio.autoSfx ? motionSounds(spec).length : undefined,
       grade: spec.grade,
@@ -364,7 +369,8 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         'text (types a string out, TextPlugin), innerText (counts a number up, whole numbers), drawSVG ("0% 100%" on a path), motionPath (moves an element along SVG path data or "#pathId"), morphSVG (turns a path into "#otherPathId" or new path data); ' +
         'physics throws an element (velocity px/s, angle in degrees, gravity) for confetti, sparks and falling things. ' +
         'Use from for an explicit start state (fromTo), finite repeats only (repeatDelay between them), stagger as seconds or { each, from: "center" | "end" | "edges" | index }, and eases like power3.out, back.out(1.7), elastic.out(1, 0.4), bounce.out, expo.inOut, steps(6), slow(0.7, 0.7), wiggle-6 (wobbles out and settles back) or shake-8 (an even shake) — a wiggle or shake swings from the start value towards `to` and returns to the start, so `to` is how far it swings (e.g. rotation: 8). Times are seconds from the scene’s start. ' +
-        'Anything not allowed is dropped and listed in the reply. Look at it with view_overlay afterwards and fix what doesn’t read well.',
+        'Anything not allowed is dropped and listed in the reply. Look at it with view_overlay afterwards and fix what doesn’t read well. ' +
+        'Check the library first (add_library_scene): a designed scene there filled with your words is better than one from scratch.',
       {
         pieceId: z.string(),
         sceneId: z.string().optional().describe('Rewrite this scene instead of adding one'),
@@ -404,6 +410,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
               repeatDelay: z.number().min(0).max(5).optional(),
               yoyo: z.boolean().optional(),
               physics: z.object({ velocity: z.number(), angle: z.number(), gravity: z.number().optional(), friction: z.number().optional() }).optional().describe('Throw it: px/s, degrees (-90 = up), px/s² (default 1200)'),
+              sound: z.enum(SCENE_SOUNDS).optional().describe('The sound effect on its frame (Sound on every move): none for a move that should stay quiet, or a kind; left out, it’s picked from the move'),
             }),
           )
           .max(SCENE_MAX_TWEENS),
@@ -425,6 +432,45 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
             (problems.length ? ` Dropped: ${problems.slice(0, 20).join('; ')}.` : '') +
             ' Check it with view_overlay.',
         );
+      }),
+    ),
+
+    tool(
+      'add_library_scene',
+      'Put a ready-made motion scene from the library on a piece’s video, filled with your words and built for its frame and accent colour, or change one (pass its sceneId). ' +
+        'Each is a designed animation with a sound on every move; when each fits and what its words are for: get_arsenal kind "scene". The library and the words each takes: ' +
+        SCENE_PRESETS.map((p) => `${p} (${Object.keys(SCENE_LIBRARY[p].fields).join(', ')})`).join(', ') +
+        '. It’s built again whenever the edit changes, so retime it with update_edit like any overlay. To redesign one by hand, write_scene with its sceneId (it becomes a custom scene). Check it with view_overlay.',
+      {
+        pieceId: z.string(),
+        preset: z.enum(SCENE_PRESETS),
+        sceneId: z.string().optional().describe('Change this library scene (its words, times or background) instead of adding one'),
+        start: z.number().min(0).describe('Seconds on the finished video'),
+        end: z.number().optional().describe(`Leave it out for the length it wants with these words; at most ${SCENE_MAX_SECONDS} s after start. Shorter than it wants, it plays faster`),
+        text: z.string().max(300).optional(),
+        sub: z.string().max(200).optional(),
+        items: z.array(z.string().max(120)).max(8).optional(),
+        background: z.string().optional().describe('none (the video shows), dim (the video darkened) or a solid #rrggbb; left out, the scene’s own'),
+      },
+      safe(async ({ pieceId, preset, sceneId, start, end, text, sub, items, background }) => {
+        const edit = editFor(pieceId) ?? createEdit(pieceId, 'claude');
+        const spec = normalizeEdit(edit.working);
+        const old = sceneId ? spec.overlays.find((o) => o.id === sceneId && o.type === 'scene') : undefined;
+        if (sceneId && (!old || old.type !== 'scene' || !old.preset)) throw new ToolError(`There’s no library scene with id ${sceneId} on this edit (a custom one is changed with write_scene).`);
+        const before = old?.type === 'scene' ? old.fill : undefined;
+        const fill = { text: text ?? before?.text ?? '', sub: sub ?? before?.sub ?? '', items: items ?? before?.items ?? [] };
+        const info = SCENE_LIBRARY[preset];
+        const missing = (Object.keys(info.fields) as ('text' | 'sub' | 'items')[]).filter((k) => !/optional/.test(info.fields[k] ?? '') && !(k === 'items' ? fill.items.length : fill[k].trim()));
+        if (missing.length) throw new ToolError(`${info.label} needs ${missing.map((k) => `${k} (${info.fields[k]})`).join(' and ')}.`);
+        const stop = Math.min(end ?? start + sceneSeconds(preset, fill), start + SCENE_MAX_SECONDS);
+        if (stop <= start) throw new ToolError('end must be after start.');
+        const bg = background ?? (old?.type === 'scene' ? old.background : undefined);
+        const scene = libraryScene(preset, fill, { W: EDIT_FORMATS[spec.format].width, H: EDIT_FORMATS[spec.format].height, color: spec.captions.highlight }, stop - start, bg);
+        const id = sceneId ?? newEditId();
+        const overlay = { id, type: 'scene' as const, start, end: stop, ...scene };
+        const next: EditSpec = { ...spec, overlays: [...spec.overlays.filter((o) => o.id !== id), overlay].sort((a, b) => a.start - b.start) };
+        const { version } = saveEditVersion(edit.id, { author: 'claude', message: `${sceneId ? 'Changed' : 'Added'} the scene “${info.label}”`, spec: next });
+        return ok(`Saved v${version.number}: scene ${id} (${info.label}), ${Math.round((stop - start) * 10) / 10} s from ${start} s${stop - start < sceneSeconds(preset, fill) - 0.05 ? `, faster than its own ${sceneSeconds(preset, fill)} s` : ''}. Check it with view_overlay.`);
       }),
     ),
 
@@ -557,7 +603,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
 
     tool(
       'get_arsenal',
-      'The arsenal: every move a video can use here (transitions, caption looks, motion graphics, custom scenes, formats, camera moves, cuts, sound effects) with when each fits and how to do it, ' +
+      'The arsenal: every move a video can use here (transitions, caption looks, motion graphics, library and custom scenes, formats, camera moves, cuts, sound effects) with when each fits and how to do it, ' +
         'and how often this page’s recent edits used each. Consider it whenever you plan or edit a video, pick what fits the idea, avoid what the last videos already leaned on so videos on this page differ, ' +
         'and say in a line which moves you chose and why. Items with ready=false are not built yet.',
       { kind: z.enum(Object.keys(ARSENAL_KINDS) as [ArsenalKind, ...ArsenalKind[]]).optional().describe('Only this group'), pieceId: z.string().optional().describe('The video you are working on, so its own edit does not count as "recent"') },

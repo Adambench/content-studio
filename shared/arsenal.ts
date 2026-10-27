@@ -5,6 +5,7 @@
 import { CAPTION_PRESET_LABELS, CAPTION_PRESETS, GRAPHIC_INFO, GRAPHICS, TRANSITION_INFO, TRANSITIONS } from './edit';
 import { MATTE_EFFECT_INFO } from './effects';
 import { BUNDLED_FONTS } from './fonts';
+import { SCENE_LIBRARY, SCENE_PRESETS } from './scene-library';
 import { BROLL_LAYOUT_INFO, BROLL_LAYOUTS, CLIP_MOTION_INFO, CLIP_MOTIONS, FILTER_LOOK_INFO, FILTER_LOOKS, OVERLAY_ANIMATION_INFO, OVERLAY_ANIMATIONS, TEXTURE_INFO, type Textures } from './looks';
 import { SFX_GROUPS } from './sfx';
 
@@ -12,7 +13,7 @@ export const ARSENAL_KINDS = {
   transition: 'Transitions',
   caption: 'Caption looks',
   graphic: 'Motion graphics',
-  scene: 'Custom scenes',
+  scene: 'Scenes',
   format: 'Formats',
   camera: 'Camera moves',
   look: 'Colour looks and textures',
@@ -47,7 +48,10 @@ export const ARSENAL: ArsenalItem[] = [
   ),
   ...CAPTION_PRESETS.map((p) => ready('caption', p, CAPTION_PRESET_LABELS[p].label, CAPTION_PRESET_LABELS[p].hint, `update_edit: captions.preset = "${p}"`)),
   ...GRAPHICS.map((g) => ready('graphic', g, GRAPHIC_INFO[g].label, GRAPHIC_INFO[g].hint, `update_edit: an overlay { type: "graphic", template: "${g}" }`)),
-  ready('scene', 'custom', 'Custom scene', 'When no template says it: a diagram, a map-like layout, a hand-built animation', 'write_scene, then view_overlay to check it'),
+  ...SCENE_PRESETS.map((p) =>
+    ready('scene', p, SCENE_LIBRARY[p].label, SCENE_LIBRARY[p].hint, `add_library_scene preset="${p}", ${Object.entries(SCENE_LIBRARY[p].fields).map(([k, v]) => `${k} = ${v}`).join(', ')}`),
+  ),
+  ready('scene', 'custom', 'Custom scene', 'When nothing in the library or the templates says it: a diagram, a map-like layout, a hand-built animation', 'write_scene, then view_overlay to check it'),
   ready('format', 'story', 'Story over footage', 'Faceless page; a story read aloud over background footage with a post card', 'write_format_video kind=story'),
   ready('format', 'chat', 'Text conversation', 'Drama, advice or a joke that plays out as messages, each read aloud', 'write_format_video kind=chat'),
   ready('format', 'dialogue', 'Two characters', 'A back-and-forth between two drawn characters', 'write_format_video kind=dialogue'),
@@ -86,7 +90,7 @@ export const readyArsenal = () => ARSENAL.filter((a) => a.ready);
 export function arsenalUsed(spec: {
   clips?: { transition?: { type: string } | null; zoom?: number; motion?: string; filter?: string | null }[];
   captions?: { enabled?: boolean; preset?: string; font?: string | null };
-  overlays?: { type: string; template?: string; animation?: string; layout?: string }[];
+  overlays?: { type: string; template?: string; animation?: string; layout?: string; preset?: string }[];
   grade?: { filter?: string; textures?: Partial<Record<string, number | boolean>> };
   recipe?: { kind: string } | null;
 }): string[] {
@@ -103,7 +107,7 @@ export function arsenalUsed(spec: {
   if (spec.captions?.enabled && spec.captions.font) used.add(`font:${spec.captions.font.toLowerCase().replace(/\s+/g, '-')}`);
   for (const o of spec.overlays ?? []) {
     if (o.type === 'graphic' && o.template) used.add(`graphic:${o.template}`);
-    else if (o.type === 'scene') used.add('scene:custom');
+    else if (o.type === 'scene') used.add(`scene:${o.preset ?? 'custom'}`);
     else if (o.type === 'broll') {
       used.add('cut:broll');
       if (o.layout) used.add(`layout:${o.layout}`);

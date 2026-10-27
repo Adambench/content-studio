@@ -9,6 +9,10 @@ export const SCENE_MAX_ELEMENTS = 40;
 export const SCENE_MAX_TWEENS = 80;
 export const SCENE_MAX_SECONDS = 20;
 
+/** The sound a tween can ask for on its frame (shared/sound-design.ts), or `none` to stay silent. */
+export const SCENE_SOUNDS = ['none', 'pop', 'swish', 'whoosh', 'zoom', 'whip', 'hit', 'slam', 'thud', 'tick', 'typing', 'draw', 'focus', 'glitch'] as const;
+export type SceneSound = (typeof SCENE_SOUNDS)[number];
+
 export type SceneElement = {
   /** Lowercase letters, digits and dashes; tweens target it by this. */
   id: string;
@@ -46,6 +50,8 @@ export type SceneTween = {
   yoyo?: boolean;
   /** Thrown like a real object (Physics2D): speed in px/s, direction in degrees, gravity in px/s². */
   physics?: { velocity: number; angle: number; gravity?: number; friction?: number };
+  /** The sound on its frame when *Sound on every move* is on; left out, it's picked from the move. */
+  sound?: SceneSound;
 };
 
 export type SceneSpec = {
@@ -55,6 +61,9 @@ export type SceneSpec = {
   background: 'none' | 'dim' | string;
   elements: SceneElement[];
   tweens: SceneTween[];
+  /** A scene from the library (shared/scene-library.ts): built again from its words whenever the edit changes. */
+  preset?: string;
+  fill?: { text: string; sub: string; items: string[] };
 };
 
 /** CSS properties a scene element may set, and whether a bare number means pixels. */
@@ -386,14 +395,33 @@ export function normalizeScene(input: unknown, length: number, problems: string[
     // Finite repeats only: the render has to know when the scene ends.
     if (typeof t.repeat === 'number') tween.repeat = Math.round(num(t.repeat, 0, 0, 20));
     if (t.yoyo === true) tween.yoyo = true;
+    const sound = SCENE_SOUNDS.find((x) => x === t.sound);
+    if (sound) tween.sound = sound;
+    else if (t.sound !== undefined) problems.push(`${where}: unknown sound "${String(t.sound).slice(0, 20)}"`);
     tweens.push(tween);
   }
 
   const bg = typeof s.background === 'string' ? s.background : 'none';
-  return {
+  const scene: SceneSpec = {
     name: typeof s.name === 'string' && s.name.trim() ? s.name.trim().slice(0, 60) : 'Scene',
     background: bg === 'dim' || /^#[0-9a-f]{6}$/i.test(bg) ? bg.toLowerCase() : 'none',
     elements,
     tweens,
+  };
+  if (typeof s.preset === 'string' && ID.test(s.preset)) {
+    scene.preset = s.preset;
+    scene.fill = normalizeFill(s.fill);
+  }
+  return scene;
+}
+
+/** A library scene's words: a main line, a second line and a list. */
+export function normalizeFill(input: unknown): NonNullable<SceneSpec['fill']> {
+  const f = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+  const line = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  return {
+    text: line(f.text, 300),
+    sub: line(f.sub, 200),
+    items: (Array.isArray(f.items) ? f.items : []).map((i) => line(i, 120)).filter(Boolean).slice(0, 8),
   };
 }

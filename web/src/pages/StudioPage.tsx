@@ -2,7 +2,7 @@ import { ArrowLeft, Clapperboard, History, Save, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { EDIT_FORMATS, SHORT_MAX_SECONDS, editDuration, type EditSpec } from '@shared/edit';
+import { EDIT_FORMATS, SHORT_MAX_SECONDS, editDuration, fitLibraryScenes, type EditSpec } from '@shared/edit';
 import { CaptionsPanel } from '@/components/studio/CaptionsPanel';
 import { ClipsPanel } from '@/components/studio/ClipsPanel';
 import { StudioContext, type Selection, type StudioState } from '@/components/studio/context';
@@ -181,7 +181,8 @@ function Studio({ edit, piece }: { edit: EditDetail; piece: PieceDetail | undefi
   const update = useCallback(
     (fn: (s: EditSpec) => EditSpec) => {
       setSpec((s) => {
-        const next = fn(s);
+        // Library scenes follow their words, length, frame and accent as they change.
+        const next = fitLibraryScenes(fn(s));
         clearTimeout(timer.current);
         timer.current = setTimeout(() => flush(next), 600);
         return next;

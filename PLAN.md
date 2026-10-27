@@ -136,7 +136,7 @@ versionCode from the tag (`v1.2.3` → 10203).
    - [x] Step 5 — My own voice, cloned, for voiceovers
 10. **Hosted generation** — built 2026-10-19 against a stand-in (see *Phase 10 build plan*)
 11. **Ideas canvas and save-from-anywhere** — built 2026-10-21 (see *Phase 11*)
-12. **Viral quality, knowledge base, toolbox** — in progress: steps 1–2 built 2026-10-27, step 0 waits on me (see *Phase 12*)
+12. **Viral quality, knowledge base, toolbox** — in progress: steps 1–4 built 2026-10-27 (step 3's recorded library waits on my pick), step 0 waits on me (see *Phase 12*)
 
 ## Waiting on me
 
@@ -145,6 +145,7 @@ versionCode from the tag (`v1.2.3` → 10203).
   first. Then delete `scripts/cleanup-clipping.mts`.
 - Phase 12 step 3: pick the recorded SFX source (licence must allow commercial use), and listen to a motion video with
   *Sound on every move* on.
+- Phase 12 step 4: try a few library scenes in the editor (Overlays → Scene) and say which look off.
 - Phase 0 on the platforms' sites, then connect real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
   Listen to the first clips from a source with background music (the music check was only tried on stand-ins).
@@ -474,5 +475,28 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
     3.25, 3.50, 3.75, 4.50, 5.97, 7.53 and 9.09 s, each on its planned frame. Sound tab looked at in headless Chrome,
     desktop and phone width. Not heard by ear yet.
   - Left: the recorded library (real SFX, screened as non-melodic, licence noted, tagged by kind) joining the pools.
+- [x] Step 4 — Motion scene library (2026-10-27): 19 ready-made scenes (`shared/scene-library.ts`), each a technique
+  from the awesome-opus5-5-videos prompts redone as scene data (plain elements and GSAP tweens with explicit start
+  states, nothing random, so every frame seeks): *Kinetic lines* (a speech staged in type, stacking onto a floor),
+  *Shape morph* (one shape: button → loader → tick → result card), *Cursor click*, *Phone island*, *Growth line* (a
+  chart that draws itself with a dot on its tip), *Orbit*, *Flow*, *Card deck*, *Rolling number*, *Iris reveal*,
+  *Before / after wipe*, *Fly through*, *Shards*, *Shine title*, *Burst*, *Word rows*, *Terminal*, *Route*, *Time
+  passing*. A library scene keeps its preset and words (`preset`, `fill`) and is built again whenever the edit changes
+  (`normalizeEdit` → `fitLibraryScenes`; the editor does the same as I type): its length (shorter than it wants, it
+  plays faster), the frame (9:16, 4:5, 1:1) and the accent colour. Rewriting one with `write_scene` makes it custom.
+  - Claude: `add_library_scene` (preset, words, start, optional end/background; changes one with its sceneId),
+    `get_arsenal` kind `scene` lists each with when it fits and its words, the chat prompt looks there before
+    `write_scene`; `get_edit` shows library scenes as their words, not their design. Editor: Overlays → *Scene* menu, the
+    scene's words and *Behind it* (the video, darkened, plain dark) in its panel.
+  - Sound: a tween can name its sound (`sound`: a kind or `none`; Claude's `write_scene` too). Steady motion (ease
+    `none`: spins, drifts, scrolls) makes no sound; a shape changing size by 150 px or more gets a swish.
+  - Fixed on the way: scenes tweened a line's dash offset as CSS, which GSAP rounds to whole pixels, so every drawn
+    line (Claude's scenes too) stayed hidden and snapped on halfway; it's tweened as the SVG attribute now, like the
+    graphics.
+  - Tried: every scene built with its example words (no dropped styles), stills of each rendered over test footage in
+    9:16 and seven in 1:1 and looked at (fixed: clipped serif lines, a lost space beside accent words, a seam in *Fly
+    through*); the sounds each gets listed; `add_library_scene` called directly (missing words refused, add, change,
+    faster when shorter, rebuilt for 1:1 on save, `get_edit`); the editor's *Scene* menu and fields in headless Chrome,
+    desktop and phone width. Not tried: `add_library_scene` from a real chat; not heard by ear.
 
 Open: the Islamic page's name, niche and language; the mascots' look; which SFX source (licence).
