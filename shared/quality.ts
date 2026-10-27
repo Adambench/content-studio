@@ -3,6 +3,7 @@
 // here; the hook and the payoff are also judged by one model call against the Knowledge rules (server/src/studio/
 // quality.ts). Below the bar, Claude fixes the edit before it renders.
 import { clipLength, clipStarts, editDuration, transitionWindows, type EditSpec, type EditStory, type TimelineWord } from './edit';
+import { allSounds, editMoves, entranceWantsSound } from './sound-design';
 
 export const QUALITY_CRITERIA = ['hook', 'payoff', 'pacing', 'motion', 'sfx', 'captions', 'firstFrame'] as const;
 export type QualityCriterion = (typeof QUALITY_CRITERIA)[number];
@@ -62,7 +63,7 @@ const clip = (s: string, n = 60) => (s.length > n ? `${s.slice(0, n - 1)}…` : 
 
 /** Everything that appears or changes on screen, in order: cuts, transitions, overlays (and a list's points), a format video's lines. */
 export function screenEvents(spec: EditSpec): ScreenEvent[] {
-  const cues = spec.audio.sfx.map((s) => s.at);
+  const cues = allSounds(spec).map((s) => s.at);
   const out: ScreenEvent[] = [];
   const starts = clipStarts(spec);
   const windows = new Map(transitionWindows(spec).map((w) => [w.index, w]));
@@ -81,8 +82,8 @@ export function screenEvents(spec: EditSpec): ScreenEvent[] {
         const span = (o.end - o.start) * 0.7;
         o.items.slice(1).forEach((item, k) => out.push({ at: r1(o.start + ((k + 1) * span) / o.items.length), what: `point “${clip(item, 30)}”`, motion: true, sound: o.sound || near(cues, o.start + ((k + 1) * span) / o.items.length) }));
       }
-    } else if (o.type === 'text') out.push({ at: o.start, what: `text “${clip(o.text, 40)}”`, motion: o.animation !== 'none', sound: near(cues, o.start) });
-    else if (o.type === 'image') out.push({ at: o.start, what: 'picture', motion: o.animation !== 'none', sound: near(cues, o.start) });
+    } else if (o.type === 'text') out.push({ at: o.start, what: `text “${clip(o.text, 40)}”`, motion: entranceWantsSound(o.animation), sound: near(cues, o.start) });
+    else if (o.type === 'image') out.push({ at: o.start, what: 'picture', motion: entranceWantsSound(o.animation), sound: near(cues, o.start) });
     else if (o.type === 'broll') out.push({ at: o.start, what: 'b-roll cutaway', motion: false, sound: near(cues, o.start) });
     else if (o.type === 'scene') out.push({ at: o.start, what: `scene${o.name ? ` “${clip(o.name, 30)}”` : ''}`, motion: true, sound: near(cues, o.start) });
   }
@@ -90,6 +91,9 @@ export function screenEvents(spec: EditSpec): ScreenEvent[] {
   if (rec?.kind === 'chat') rec.messages.forEach((m) => out.push({ at: m.at, what: `message “${clip(m.text, 30)}”`, motion: true, sound: true }));
   if (rec?.kind === 'dialogue') rec.lines.forEach((l, i) => i > 0 && rec.lines[i - 1].who !== l.who && out.push({ at: l.at, what: `${rec.cast[l.who].name} speaks`, motion: false, sound: true }));
   if (rec?.kind === 'story' && rec.titleEnd > 0) out.push({ at: rec.titleEnd, what: 'post card goes', motion: true, sound: near(cues, rec.titleEnd) });
+  // The moves inside scenes and the camera's snaps, unless an overlay already starts on that frame.
+  for (const m of editMoves(spec))
+    if (m.from !== 'overlay' && !out.some((e) => Math.abs(e.at - m.at) < 0.1)) out.push({ at: m.at, what: m.what, motion: true, sound: near(cues, m.at) });
   return out.sort((a, b) => a.at - b.at);
 }
 
@@ -217,7 +221,7 @@ export function measureEdit(spec: EditSpec, words: TimelineWord[]): QualityItem[
     sfxScore,
     moves.length ? `${hit} of ${moves.length} motion events have a sound on their frame` : 'no motion events',
     !moves.length ? 'Nothing moves, so there is nothing to hit.' : cover >= 0.8 ? 'Motion lands with sound.' : 'Motion without sound feels flat.',
-    missed.length && cover < 0.8 ? `Add a non-musical effect on: ${missed.map((e) => `${e.what} at ${r1(e.at)} s`).join('; ')}.` : '',
+    missed.length && cover < 0.8 ? `${spec.audio.autoSfx ? 'Add' : 'Turn on Sound on every move (audio.autoSfx), or add'} a non-musical effect on: ${missed.map((e) => `${e.what} at ${r1(e.at)} s`).join('; ')}.` : '',
   );
 
   // Captions.

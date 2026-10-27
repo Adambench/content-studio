@@ -143,6 +143,8 @@ versionCode from the tag (`v1.2.3` → 10203).
 - Phase 12 step 0: run the clipping cleanup (auto mode blocked the deletes):
   `cd server && ../node_modules/.bin/tsx ../scripts/cleanup-clipping.mts` with the app idle; it backs the database up
   first. Then delete `scripts/cleanup-clipping.mts`.
+- Phase 12 step 3: pick the recorded SFX source (licence must allow commercial use), and listen to a motion video with
+  *Sound on every move* on.
 - Phase 0 on the platforms' sites, then connect real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
   Listen to the first clips from a source with background music (the music check was only tried on stand-ins).
@@ -457,5 +459,20 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
     now, and GitHub's 403s wait and retry): 40 judged, 6 shown (herk-edit-kit, anything2explainer, motionmaxxing,
     claude-video-vision, lemo-opuscar, MOSS-TTS). Page looked at in headless Chrome, desktop and phone width. Not tried:
     the packaged app's `libraries.json`/`skills-lock.json` (next `npm run install-app`).
+- [ ] Step 3 — SFX library and frame-synced placement. Placement done (2026-10-27), the recorded library waits on
+  my pick of a source:
+  - **Sound on every move** (`audio.autoSfx`, on by default, editor → Sound; Claude's `update_edit` can turn it off for
+    a serious or religious video): `shared/sound-design.ts` reads every move of the edit and puts a built-in sound on
+    its frame unless one is there: scene tweens (spring in → pop, slide or fly → swish/whoosh, slam from big or a big
+    word → hit, turn → whip, a line drawing → scribble, letters → typing, a few words or items → a tick each), text
+    and picture entrances (fades stay silent), snap zooms and impact shakes. Two moves on one frame get one sound (the
+    stronger), each kind takes turns between its sounds, quiet (0.3–0.55). Worked out at compose and render like the
+    graphics' and transitions' own sounds, so timings follow every change; the timeline shows them as hollow dots. The
+    quality score counts scene moves and snaps as motion events now. The playbook's sound reference has a *Motion
+    videos* section (talking-head clips stay sparse).
+  - Tried: a test render (voice off) with a punch, a zoom title and a scene of 5 tweens: the sounds start at 3.00,
+    3.25, 3.50, 3.75, 4.50, 5.97, 7.53 and 9.09 s, each on its planned frame. Sound tab looked at in headless Chrome,
+    desktop and phone width. Not heard by ear yet.
+  - Left: the recorded library (real SFX, screened as non-melodic, licence noted, tagged by kind) joining the pools.
 
 Open: the Islamic page's name, niche and language; the mascots' look; which SFX source (licence).

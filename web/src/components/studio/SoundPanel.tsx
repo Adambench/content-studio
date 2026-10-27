@@ -1,7 +1,9 @@
 import { Plus, Trash2 } from 'lucide-react';
+import { useMemo } from 'react';
 import { Link } from 'react-router';
 import { editDuration, LOUDNESS_TARGET, NASHEED_DEFAULTS, newEditId, type EditAudio, type NasheedTrack, type SfxCue } from '@shared/edit';
 import { builtinSfxId } from '@shared/sfx';
+import { motionSounds } from '@shared/sound-design';
 import { mediaFileUrl } from '@/lib/api';
 import { sfxUrl } from '@/lib/sfx';
 import { Button } from '@/components/ui/button';
@@ -36,6 +38,7 @@ export function SoundPanel() {
   const nasheeds = assets.filter((m) => m.assetType === 'nasheed');
   const sfx = assets.filter((m) => m.assetType === 'sfx' && m.kind === 'audio');
   const duration = editDuration(spec);
+  const auto = useMemo(() => motionSounds({ ...spec, audio: { ...spec.audio, autoSfx: true } }).length, [spec]);
   const wsAssets = `/w/${edit.workspaceId}/assets`;
 
   return (
@@ -91,6 +94,13 @@ export function SoundPanel() {
             <Plus /> At playhead
           </Button>
         </div>
+        <Toggle
+          id="auto-sfx"
+          label="Sound on every move"
+          hint={auto ? `${auto} move${auto === 1 ? '' : 's'} get a pop, swish, hit or typing on their frame` : 'Pops, swishes and hits on the frame of each move, once something moves'}
+          checked={a.autoSfx}
+          onChange={(autoSfx) => set({ autoSfx })}
+        />
         {!a.sfx.length && (
           <p className="text-xs text-muted-foreground">
             Whooshes, pops, hits, risers and dings: the app has its own, and yours from{' '}

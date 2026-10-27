@@ -23,6 +23,7 @@ import {
   type EditSpec,
 } from '../../../shared/edit';
 import { BUILTIN_SFX, builtinSfxId, SFX_GROUPS } from '../../../shared/sfx';
+import { motionSounds } from '../../../shared/sound-design';
 import { ASSET_TYPES } from '../../../shared/types';
 import { config } from '../config';
 import { db, newId, schema } from '../db';
@@ -192,6 +193,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
       captions: spec.captions,
       overlays: spec.overlays,
       audio: spec.audio,
+      soundsOnMoves: spec.audio.autoSfx ? motionSounds(spec).length : undefined,
       grade: spec.grade,
       watermark: spec.watermark,
       story: spec.story,
@@ -243,6 +245,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
             voiceVolume: z.number().min(0).max(2).optional(),
             enhanceVoice: z.boolean().optional(),
             normalize: z.boolean().optional(),
+            autoSfx: z.boolean().optional().describe('A sound effect on the frame of every move (scene tweens, overlay entrances, snap zooms) that has none. On by default; off for a serious or religious video'),
             sfx: z
               .array(
                 z.object({

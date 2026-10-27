@@ -66,7 +66,7 @@ export const ARSENAL: ArsenalItem[] = [
   ready('cut', 'broll', 'B-roll cutaway', 'Cover a jump cut or show what the speaker names', 'update_edit: an overlay { type: "broll" } (layout full, top or pip)'),
   ready('cut', 'grade', 'Colour grade', 'One look across shots from different cameras', 'update_edit: grade.lutMediaId (a LUT from list_assets)'),
   ...(Object.keys(SFX_GROUPS) as (keyof typeof SFX_GROUPS)[]).map((g) =>
-    ready('sound', g, SFX_GROUPS[g], 'Sound effects only, never music; a few well placed beat more than one on every cut', `update_edit: audio sfx cues with list_assets ids (builtin:…) of this group`),
+    ready('sound', g, SFX_GROUPS[g], 'Sound effects only, never music. Every move already gets its sound on its frame (audio.autoSfx); add these for the story’s beats', `update_edit: audio sfx cues with list_assets ids (builtin:…) of this group`),
   ),
   ...(Object.keys(MATTE_EFFECT_INFO) as (keyof typeof MATTE_EFFECT_INFO)[]).map((e) =>
     ready('effect', `matte-${e}`, MATTE_EFFECT_INFO[e].label, MATTE_EFFECT_INFO[e].hint, `apply_effect effect="${e}" on a clip's video that has a person in it (a few minutes, runs in the background)`),

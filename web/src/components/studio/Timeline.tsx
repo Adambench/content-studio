@@ -1,6 +1,7 @@
 import { AudioLines, Video } from 'lucide-react';
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { TRANSITION_INFO, clipLength, clipStarts, editDuration, transitionWindows } from '@shared/edit';
+import { motionSounds } from '@shared/sound-design';
 import { mediaThumbUrl } from '@/lib/api';
 import { sfxName } from '@/lib/sfx';
 import { cn } from '@/lib/utils';
@@ -12,6 +13,7 @@ const STEPS = [1, 2, 5, 10, 15, 30, 60, 120];
 /** The whole edit at a glance: click or drag to move the playhead, click a block to select it. */
 export function Timeline({ className }: { className?: string }) {
   const { spec, time, seek, selection, select, media } = useStudio();
+  const autoSounds = useMemo(() => motionSounds(spec), [spec]);
   const duration = Math.max(editDuration(spec), 0.5);
   const starts = clipStarts(spec);
   const area = useRef<HTMLDivElement>(null);
@@ -113,6 +115,9 @@ export function Timeline({ className }: { className?: string }) {
               <span className="truncate">{media.get(spec.audio.nasheed.mediaId)?.originalName ?? 'Nasheed'}</span>
             </div>
           )}
+          {autoSounds.map((s) => (
+            <span key={s.id} className="absolute top-0.5 size-2 -translate-x-1/2 rounded-full border border-orange-400/70" style={{ left: pct(s.at) }} title={`On a move: ${sfxName(s.mediaId, media)}`} />
+          ))}
           {spec.audio.sfx.map((s) => (
             <button
               key={s.id}

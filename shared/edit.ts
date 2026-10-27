@@ -544,6 +544,8 @@ export type EditAudio = {
   /** Normalise the final mix to −14 LUFS, what TikTok, Instagram and YouTube play at. */
   normalize: boolean;
   sfx: SfxCue[];
+  /** A sound effect on the frame of every move that has none (shared/sound-design.ts). */
+  autoSfx: boolean;
 };
 
 /** A LUT (graded with FFmpeg), a colour look over the footage and film textures over the whole video. */
@@ -606,7 +608,7 @@ export function emptyEdit(): EditSpec {
       font: null,
     },
     overlays: [],
-    audio: { nasheed: null, voiceover: null, voiceVolume: 1, enhanceVoice: false, normalize: true, sfx: [] },
+    audio: { nasheed: null, voiceover: null, voiceVolume: 1, enhanceVoice: false, normalize: true, sfx: [], autoSfx: true },
     grade: { lutMediaId: null, intensity: 1, filter: 'none', textures: { ...NO_TEXTURES } },
     watermark: { mediaId: null, corner: 'tr', opacity: 0.85, size: 0.16 },
     recipe: null,
@@ -668,6 +670,7 @@ function normalizeAudio(input: unknown, base = emptyEdit().audio): EditAudio {
     voiceVolume: round(num(a.voiceVolume, base.voiceVolume, 0, 2)),
     enhanceVoice: typeof a.enhanceVoice === 'boolean' ? a.enhanceVoice : base.enhanceVoice,
     normalize: typeof a.normalize === 'boolean' ? a.normalize : base.normalize,
+    autoSfx: typeof a.autoSfx === 'boolean' ? a.autoSfx : base.autoSfx,
     sfx: list(a.sfx ?? base.sfx)
       .filter((s) => typeof s.mediaId === 'string')
       .map((s) => ({ id: str(s.id, '') || newEditId(), mediaId: s.mediaId as string, at: round(num(s.at, 0, 0)), volume: round(num(s.volume, 0.8, 0, 2)) })),

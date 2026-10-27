@@ -33,10 +33,25 @@ A sound effect marks a moment that already matters. It doesn't create importance
 - **On the frame:** the cue's time is the frame where the thing happens (text appears, the cut lands). Risers end on
   that frame, so they start their own length earlier.
 - **Between words where possible.** An effect over a key word hides it. Put it in the gap just before or after.
-- **Never on every cut.** A 30-second clip usually wants 2 to 5 effects, and an effect more often than every 5 to 8
-  seconds turns into noise. Leave whole stretches with only the voice.
+- **Never on every cut.** A cut isn't a move. A 30-second talking-head clip usually wants 2 to 5 effects, and an
+  effect more often than every 5 to 8 seconds turns into noise there. Leave whole stretches with only the voice.
+  Motion videos are different (below).
 - **Consistency per page.** The same pop for the hook card, the same whoosh for cutaways: it becomes part of the
   page's look.
+
+## Motion videos: a sound on every move
+
+In a designed motion video (faceless explainers, kinetic type, scenes, graphics) every move gets a short sound on its
+frame: a pop as something springs in, a swish as it slides, a hit as a big word slams down, typing as letters appear,
+a scribble as a line draws itself. That's what makes the motion feel physical, and it's what the best motion pages do.
+
+- The app does this by itself: *Sound on every move* (`audio.autoSfx`, on by default) reads every move of the edit and
+  puts a matching sound on its frame unless one is there already, so it follows every change of timing. Don't place
+  cues by hand for moves.
+- Add cues by hand only for the story's beats: the riser that ends on the payoff, the boom on the reveal, a ding on the
+  result.
+- Keep move sounds quiet (0.3–0.5): texture under the voice, never over a key word.
+- A serious or religious video: turn it off and place a few by hand, or none.
 
 ## Levels
 
@@ -57,7 +72,7 @@ A sound effect marks a moment that already matters. It doesn't create importance
 - music, instruments, beats, stingers, jingles, drum hits, bass drops, record scratches
 - a "sound effect" that is really a slice of a song
 - effects covering words
-- an effect on every cut
+- an effect on every cut of a talking-head clip
 
 ## Sources
 

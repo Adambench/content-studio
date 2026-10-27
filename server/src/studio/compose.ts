@@ -8,9 +8,6 @@ import {
   fillGeometry,
   speechSpans,
   timelineWords,
-  graphicSounds,
-  recipeSounds,
-  transitionSounds,
   transitionWindows,
   type BrollOverlay,
   type EditSpec,
@@ -20,6 +17,7 @@ import { captionCss, captionHtml, CAPTION_STYLE, captionTweens } from './caption
 import { animateIn, filterCss, lookStyle, motionState, motionStyle, motionTweens, splitChars, textureLayers } from './motion';
 import { LEAK_LAYER, OUTGOING_ON_TOP, transitionTweens, WHITE_LAYER } from './transitions';
 import { builtinSfx } from '../../../shared/sfx';
+import { allSounds } from '../../../shared/sound-design';
 import { composeGraphic, graphicsCss, STAT_HELPER } from './graphics';
 import { composeRecipe } from './recipe-layers';
 import { composeScene, sceneCss } from './scene';
@@ -322,7 +320,7 @@ export function composeEdit(input: ComposeInput) {
       offset = 0;
     }
   }
-  [...spec.audio.sfx, ...transitionSounds(spec), ...graphicSounds(spec), ...recipeSounds(spec)].forEach((s, i) => {
+  allSounds(spec).forEach((s, i) => {
     const builtin = builtinSfx(s.mediaId);
     const m = media.get(s.mediaId);
     if (s.at >= duration || (!builtin && m?.assetType !== 'sfx')) return;
