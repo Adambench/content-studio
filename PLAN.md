@@ -24,6 +24,9 @@ checklist, halal screen, I confirm) or from a business's brief. Today is the hom
 playbook and skills are shared. Same clip on two pages = a variant each. No direct clients. Still unknown: how many
 businesses and what they are.
 
+2026-10-27: the pages to post on next are the personal brand (Muslim entrepreneurship, lifestyle) and a separate Islamic
+page; Vetto is dropped and clipping is paused (see *Phase 12*).
+
 ### Halal (2026-10-15)
 
 | Topic | Decision |
@@ -61,7 +64,7 @@ the signed-in desktop window.
 | Voiceover | Only speech made here (`tts`) or an in-app voice memo (`capture`), never an upload (a way in for music) |
 | Backgrounds | My own footage muted, else a generated gradient; no stock gameplay (copyright) |
 | Characters | Four built-in SVG busts (Sam, Max, Lina in a hijab, Bolt); mouths from loudness; drawn, simple, modest |
-| UGC | I film it; Claude writes script, shot list, requirements, captions from the brief |
+| UGC | I film it; Claude writes script, shot list, requirements, captions from the brief. Or (phase 12) the page's 2D outline mascot acts it out |
 
 ### Publishing (2026-10-14)
 
@@ -133,6 +136,7 @@ versionCode from the tag (`v1.2.3` → 10203).
    - [x] Step 5 — My own voice, cloned, for voiceovers
 10. **Hosted generation** — built 2026-10-19 against a stand-in (see *Phase 10 build plan*)
 11. **Ideas canvas and save-from-anywhere** — built 2026-10-21 (see *Phase 11*)
+12. **Viral quality, knowledge base, toolbox** — decided 2026-10-27, not started (see *Phase 12*)
 
 ## Waiting on me
 
@@ -373,3 +377,32 @@ pictures, board import, saved TikTok and YouTube posts (details, thumbnails, × 
 flesh-out, a real Episodes call, the chat tools, and the canvas, panel and phone list in headless Chrome. Not tried:
 the Android parts (no SDK here: CI builds them), Instagram saves, Whisper on saved TikToks (the test had no Whisper).
 Also fixed: thumbnails of still JPEGs (FFmpeg skipped their one frame when asked to seek).
+
+## Phase 12 (2026-10-27): videos that go viral, a knowledge base I can edit, a toolbox
+
+Why: the app makes videos, but not ones that go viral consistently. Weak spots: the hook, graphics and pictures,
+animation, no enforced content model (hook → content → payoff), sound design, no quality bar, UGC. References:
+damianodesu's reels (Claude + HyperFrames motion; 240 recorded SFX, each on the exact frame of its motion),
+palmier.io's launch video, motionloved, pavelfucksu's 3D breakdown; yihui-dev/awesome-opus5-5-videos (703
+single-HTML motion prompts: GSAP, Three.js, WebGL, Canvas; MIT); charlesdove977/UGC-Factory (beat sheet hook →
+problem → reveal → demo → CTA, 15 genre styles; its AI personas break the no-people rule, so only the structure is
+reused).
+
+| Topic | Decision |
+|---|---|
+| Pages | Personal brand (Muslim entrepreneurship, lifestyle) and a new Islamic page; posting starts later. Vetto dropped. Clipping paused: its videos, sources, moments, renders and campaigns deleted, the cache cleared, the empty page kept |
+| First focus | Faceless motion explainers: designed animation, kinetic type, graphics and 3D, frame-synced SFX, voiceover |
+| Content model | Every video has a hook (a promise in the first 1–3 s: picture, words, on-screen text), content that builds toward it, and a payoff (what the viewer waited for) near the end. The plan names the promise and where it's paid; checked before render. Clips follow it too when clipping resumes |
+| Quality score | Before render each edit gets a score with reasons and fixes: hook, promise → payoff, pacing, motion density, SFX coverage, captions, first frame; measured where it can be, judged against the knowledge base. Below the bar Claude fixes it first. (Not colour grading) |
+| Knowledge | A Knowledge page: the playbook as rules I can read, edit and add to (seeded from `.claude/skills/playbook`), a reference library (paste a link → downloaded and measured: hook, beats, cuts per second, motion, SFX timing; Claude drafts the lessons, I approve them) and lessons from my own results once posting. Every video's prompts use it. No fine-tuning |
+| Toolbox | A page listing skills, MCP servers, models, binaries and libraries: installed, version, licence, source, how often each was used. A weekly scout finds new repos, skills, MCPs and models and lists them with licence, what they'd add and risks (music advice, paid services); installing is my click |
+| Character | One recurring 2D outline mascot per page, Dani-style (simple body, blank or dot face): a vector rig (poses, gestures, walk, point, react) animated in the edit. Drawn, not generated, so the no-people rule for generated pictures stands |
+| Sound | A real recorded SFX library (non-melodic, screened, licence noted), placed on the frame of every motion event |
+| Motion | A scene library drawn from the awesome-opus5-5-videos prompts, ported to seek-safe HyperFrames scenes |
+| Budget | kie.ai cap unchanged ($10 a day) |
+
+Steps: to be detailed when building. Rough order: (0) clipping cleanup and Vetto removal; (1) Knowledge page, content
+model and quality score; (2) Toolbox and the weekly scout; (3) SFX library and frame-synced placement; (4) motion scene
+library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
+
+Open: the Islamic page's name, niche and language; the mascots' look; which SFX source (licence).
