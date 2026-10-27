@@ -136,6 +136,9 @@ function apply(event: LiveEvent) {
         // Saved posts' details and breakdowns.
         inv(['idea']);
         break;
+      case 'knowledge':
+        inv(keys.knowledge);
+        break;
       case 'ideas':
         refreshIdeas(wid ?? null);
         if (event.id) inv(keys.idea(event.id));

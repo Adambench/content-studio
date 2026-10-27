@@ -58,13 +58,19 @@ export function getRender(id: string) {
   return r;
 }
 
-function setRender(r: Pick<RenderRow, 'id' | 'workspaceId' | 'pieceId'>, values: Partial<RenderRow>) {
+/** What else stops when a waiting render is cancelled (the quality check's fix, studio/quality.ts). */
+export const onCancel = new Map<string, () => void>();
+
+export function setRender(r: Pick<RenderRow, 'id' | 'workspaceId' | 'pieceId'>, values: Partial<RenderRow>) {
   db.update(schema.renders).set(values).where(eq(schema.renders.id, r.id)).run();
   emit({ type: 'changed', entity: 'renders', workspaceId: r.workspaceId, id: r.id, pieceId: r.pieceId });
 }
 
-/** Snapshot the edit as a version (if it changed) and queue a render of exactly that version. */
-export function queueRender(editId: string, by: Author) {
+/**
+ * Snapshot the edit as a version (if it changed) and queue a render of exactly that version. `check`: the quality
+ * check runs first (`edit.check`, studio/quality.ts), with Claude's fix when it's below the bar, then the render.
+ */
+export function queueRender(editId: string, by: Author, opts: { check?: boolean } = {}) {
   const edit = getEdit(editId);
   const spec = normalizeEdit(edit.working);
   if (!spec.clips.length) throw badRequest('Add some footage to the edit first.');
@@ -77,10 +83,20 @@ export function queueRender(editId: string, by: Author) {
   const { version } = saveEditVersion(editId, { author: by, message: 'Rendered' });
   const id = newId();
   db.insert(schema.renders)
-    .values({ id, workspaceId: edit.workspaceId, editId, pieceId: edit.pieceId, versionId: version.id, versionNumber: version.number, durationMs: Math.round(editDuration(spec) * 1000) })
+    .values({
+      id,
+      workspaceId: edit.workspaceId,
+      editId,
+      pieceId: edit.pieceId,
+      versionId: version.id,
+      versionNumber: version.number,
+      durationMs: Math.round(editDuration(spec) * 1000),
+      stage: opts.check ? 'Checking quality' : 'Waiting',
+    })
     .run();
   // One attempt: a failed render shows its reason; trying again is a click.
-  enqueue('video.render', { renderId: id }, { maxAttempts: 1 });
+  if (opts.check) enqueue('edit.check', { renderId: id }, { maxAttempts: 1 });
+  else enqueue('video.render', { renderId: id }, { maxAttempts: 1 });
   emit({ type: 'changed', entity: 'renders', workspaceId: edit.workspaceId, id, pieceId: edit.pieceId });
   return getRender(id);
 }
@@ -114,6 +130,7 @@ export function rerenderLatest(editId: string, by: Author) {
 export function cancelRender(id: string) {
   const r = getRender(id);
   if (r.status === 'queued') setRender(r, { status: 'cancelled', stage: 'Cancelled', finishedAt: now() });
+  onCancel.get(id)?.();
   running.get(id)?.abort();
 }
 

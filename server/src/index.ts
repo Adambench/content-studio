@@ -10,6 +10,8 @@ import { startResearch, stopResearch } from './research/schedule';
 import { startFinderSchedule, stopFinderSchedule } from './finder/schedule';
 import { finderRoutes } from './routes/finder';
 import { ideaRoutes } from './routes/ideas';
+import { knowledgeRoutes } from './routes/knowledge';
+import { syncKnowledge } from './knowledge/knowledge';
 import { purgeDeletedIdeas } from './ideas/ideas';
 import { stopAllSources } from './campaigns/sources';
 import { preparePlugin } from './claude/plugin';
@@ -44,6 +46,12 @@ import { workspaceRoutes } from './routes/workspaces';
 runMigrations();
 initPush();
 preparePlugin();
+// The playbook's references as Knowledge rules, refreshed for this version (my edits stay).
+try {
+  syncKnowledge();
+} catch (err) {
+  console.error('Knowledge: could not read the playbook', err);
+}
 
 const app = Fastify({
   logger: { level: config.isProd ? 'info' : 'warn' },
@@ -137,6 +145,7 @@ await app.register(computeRoutes);
 await app.register(aiRoutes);
 await app.register(voiceRoutes);
 await app.register(ideaRoutes);
+await app.register(knowledgeRoutes);
 
 registerHandlers();
 startWorker();

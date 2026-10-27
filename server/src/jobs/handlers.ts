@@ -28,6 +28,7 @@ import { createPiece, getWorkspace } from '../services/pieces';
 import { makeProxy, onProxyFailed } from '../studio/proxy';
 import { onPublishFailed, publishPost } from '../publish/publisher';
 import { renderJob } from '../studio/render';
+import { checkJob } from '../studio/quality';
 import { onReframeFailed, reframeEdit } from '../studio/reframe';
 import { buildFormat, onFormatBuildFailed } from '../studio/formats';
 import { onUgcScriptFailed, writeUgcScript } from '../campaigns/ugc';
@@ -213,6 +214,8 @@ export function registerHandlers() {
   registerJob('media.proxy', makeProxy, 1);
   onJobFailed('media.proxy', onProxyFailed);
   registerJob('video.render', renderJob, 1);
+  // The quality check before a render (one call, and Claude's fix in the video's chat when it's below the bar).
+  registerJob('edit.check', checkJob, 1);
   // "Follow the speaker": OpenCV over the footage (a minute or so per few minutes of video), then a new edit version.
   registerJob('edit.reframe', reframeEdit, 1);
   onJobFailed('edit.reframe', onReframeFailed);

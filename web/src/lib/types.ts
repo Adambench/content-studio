@@ -1,6 +1,7 @@
 import type { Campaign, CampaignOrigin, CampaignResults, Submission } from '@shared/campaigns';
 import type { DayPart, PostStats, ReviewBody, ReviewStatus, WeeklyReviewSetting } from '@shared/analytics';
 import type { EditSpec, EditTemplate } from '@shared/edit';
+import type { QualityReport } from '@shared/quality';
 import type { PieceDirections } from '@shared/direction';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostProblem, PostStatus, PublishPlatform, QueueSlot } from '@shared/publish';
 import type { AssetType, ChatPart, ClaudeUsage, DraftContent, InboxSuggestion, MediaKind, MediaSource, ModuleId, ProxyStatus, RenderStatus, Stage, Transcript, TranscriptStatus, WorkspaceColor, WorkspaceKind } from '@shared/types';
@@ -178,6 +179,8 @@ export type EditDetail = {
   headVersionId: string | null;
   createdAt: number;
   versions: EditVersionMeta[];
+  /** The newest quality check of its versions. */
+  quality: QualityReport | null;
   media: Media[];
   transcripts: Record<string, Transcript | null>;
 };

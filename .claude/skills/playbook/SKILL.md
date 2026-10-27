@@ -39,6 +39,7 @@ free, local tools and Claude on the user's own login.
 | Sound effects: which, where, how loud | [references/sound-design.md](references/sound-design.md) |
 | No music, nasheeds, haram topics, religious content, screening | [references/halal.md](references/halal.md) |
 | What TikTok, Reels and Shorts reward now: length, originality, safe zones | [references/platforms.md](references/platforms.md) |
+| The shape of every video: the promise, building toward it, the payoff and where it lands | [references/content-model.md](references/content-model.md) |
 
 Most jobs need two: a clip needs `clipping.md` and `hooks.md`; a caption needs `packaging.md` and `platforms.md`.
 

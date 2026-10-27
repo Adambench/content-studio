@@ -9,6 +9,7 @@ import {
   GRAPHIC_INFO,
   GRAPHICS,
   SHORT_MAX_SECONDS,
+  STORY_TEXT_MAX,
   TIGHTEN_PRESETS,
   TRANSITION_INFO,
   TRANSITION_MAX,
@@ -29,6 +30,8 @@ import { extractFrames } from '../lib/ffmpeg';
 import { formatTime, mediaPath } from '../services/media';
 import { createEdit, findEditForPiece, listEditVersions, listRenders, saveEditVersion, specMedia, specTranscripts } from '../studio/edits';
 import { queueRender } from '../studio/render';
+import { checkEdit } from '../studio/quality';
+import { QUALITY_BAR, qualityText } from '../../../shared/quality';
 import { previewOverlay } from '../studio/preview';
 import { normalizeScene, SCENE_FONTS, SCENE_MAX_ELEMENTS, SCENE_MAX_SECONDS, SCENE_MAX_TWEENS } from '../../../shared/scene';
 import { CHARACTERS, normalizeRecipe, RECIPE_INFO, recipeNeedsBuild, VOICES } from '../../../shared/recipe';
@@ -119,6 +122,8 @@ export function studioToolLabel(name: string, input: Record<string, any>): strin
       return 'Cut the pauses';
     case 'render_edit':
       return 'Started a render';
+    case 'check_edit':
+      return 'Checked the video’s quality';
     case 'view_render':
       return 'Watched the rendered video';
     case 'follow_speaker':
@@ -189,6 +194,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
       audio: spec.audio,
       grade: spec.grade,
       watermark: spec.watermark,
+      story: spec.story,
       recentVersions: listEditVersions(edit.id).slice(0, 5).map((v) => `v${v.number} (${v.author}): ${v.message}`),
       lastRender: last ? { status: last.status, version: last.versionNumber, error: last.error ?? undefined } : undefined,
       warnings: warnings.length ? warnings : undefined,
@@ -273,8 +279,16 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         watermark: z
           .object({ mediaId: z.string().nullable().optional(), corner: z.enum(['tl', 'tr', 'bl', 'br']).optional(), opacity: z.number().min(0.1).max(1).optional(), size: z.number().min(0.05).max(0.5).optional() })
           .optional(),
+        story: z
+          .object({
+            promise: z.string().max(STORY_TEXT_MAX).optional().describe('What the hook promises the viewer, in one concrete line'),
+            payoff: z.string().max(STORY_TEXT_MAX).optional().describe('What they get for staying: the answer, the reveal, the result'),
+            payoffAt: z.number().min(0).nullable().optional().describe('The second on the finished video where the payoff lands (second half, near the end)'),
+          })
+          .optional()
+          .describe('The content model: hook (a promise) → content that builds toward it → payoff. Set it whenever you build or change an edit; the quality check reads it'),
       },
-      safe(async ({ pieceId, message, format, clips, overlays, captions, audio, grade, watermark }) => {
+      safe(async ({ pieceId, message, format, clips, overlays, captions, audio, grade, watermark, story }) => {
         const edit = editFor(pieceId) ?? createEdit(pieceId, 'claude');
         const spec = normalizeEdit(edit.working);
         // Scenes come back as id + times: their design is only changed by write_scene.
@@ -294,6 +308,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
           audio: { ...spec.audio, ...(audio as Partial<EditSpec['audio']>), nasheed: spec.audio.nasheed },
           grade: { ...spec.grade, ...grade, textures: { ...spec.grade.textures, ...grade?.textures } },
           watermark: { ...spec.watermark, ...watermark },
+          story: { ...spec.story, ...story },
         };
         const { version, unchanged } = saveEditVersion(edit.id, { author: 'claude', message, spec: next });
         if (unchanged) return ok('No changes — the edit already looked like that.');
@@ -479,12 +494,31 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
     ),
 
     tool(
-      'render_edit',
-      'Render a piece’s video edit to an MP4 on this computer (takes a few minutes). The finished video appears in the piece’s footage. Never posts anything.',
+      'check_edit',
+      'The quality check of a piece’s video edit as it is now (saved as a version first): a score out of 100 for the hook, promise → payoff, pacing, motion, sound on motion, captions and the first frame, with what was measured and the fixes. ' +
+        `Below ${QUALITY_BAR} it gets fixed before it renders. Takes up to half a minute.`,
       { pieceId: z.string() },
       safe(async ({ pieceId }) => {
         const edit = editFor(pieceId);
         if (!edit) throw new ToolError('This piece has no video edit yet.');
+        return ok(qualityText(await checkEdit(edit.id, 'claude')));
+      }),
+    ),
+
+    tool(
+      'render_edit',
+      'Render a piece’s video edit to an MP4 on this computer (takes a few minutes). The finished video appears in the piece’s footage. Never posts anything. ' +
+        `It runs the quality check first: below ${QUALITY_BAR}/100 nothing renders and you get the fixes; make them with update_edit and call render_edit again. anyway: true renders it as it is.`,
+      { pieceId: z.string(), anyway: z.boolean().optional().describe('Render even below the bar (after one round of fixes, or when the creator says so)') },
+      safe(async ({ pieceId, anyway }) => {
+        const edit = editFor(pieceId);
+        if (!edit) throw new ToolError('This piece has no video edit yet.');
+        if (!anyway) {
+          const report = await checkEdit(edit.id, 'claude');
+          if (report.score < report.bar) return ok(`Not rendered yet.\n\n${qualityText(report)}\n\nFix it with update_edit, then call render_edit again (anyway: true renders it as it is).`);
+          const r = queueRender(edit.id, 'claude');
+          return ok(`Quality ${report.score}/100. Render of v${r.versionNumber} queued. The creator can watch its progress in the video editor.`);
+        }
         const r = queueRender(edit.id, 'claude');
         return ok(`Render of v${r.versionNumber} queued. The creator can watch its progress in the video editor.`);
       }),

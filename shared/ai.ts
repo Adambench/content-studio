@@ -2,12 +2,13 @@
 // worker, or any address set in Settings). Each task is set to Claude, local, or auto; auto stays on Claude until its
 // usage passes a limit (or Claude refuses for usage), then uses the local model. *Local only* overrides everything.
 
-export const AI_TASKS = ['chat', 'directions', 'clips', 'ugc', 'review', 'research', 'inbox', 'ideas', 'pages', 'pictures'] as const;
+export const AI_TASKS = ['chat', 'directions', 'quality', 'clips', 'ugc', 'review', 'research', 'inbox', 'ideas', 'pages', 'pictures'] as const;
 export type AiTask = (typeof AI_TASKS)[number];
 
 export const AI_TASK_INFO: Record<AiTask, { label: string; hint: string }> = {
   chat: { label: 'Chat and video chats', hint: 'Writing, editing videos, everything you ask in a chat' },
   directions: { label: 'Creative directions', hint: 'The 2–3 directions pitched for a new video' },
+  quality: { label: 'Quality check', hint: 'Judging an edit’s hook and payoff before it renders' },
   clips: { label: 'Clip picking', hint: 'Choosing moments in long videos and checking the cut frames' },
   ugc: { label: 'UGC scripts', hint: 'Scripts for UGC videos from a campaign brief' },
   review: { label: 'Weekly review', hint: 'Reading the week’s results and suggesting what to change' },

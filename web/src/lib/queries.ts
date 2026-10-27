@@ -10,6 +10,7 @@ import type { CreatorInfo } from '@shared/publish';
 import type { Campaign, CampaignDetail } from '@shared/campaigns';
 import type { ResearchOverview } from '@shared/research';
 import type { IdeaDetail, IdeaNode } from '@shared/ideas';
+import type { KnowledgeRule } from '@shared/knowledge';
 import type { SubmissionsSyncState } from './types';
 import type { ReviewClip } from '@shared/clipping';
 import type { SitesStatus } from '@shared/sites';
@@ -82,6 +83,7 @@ export const keys = {
   finder: (wid: string) => ['finder', wid] as const,
   compute: ['compute'] as const,
   ai: ['ai'] as const,
+  knowledge: ['knowledge'] as const,
 };
 
 export type AuthStatus = { setupRequired: boolean; authenticated: boolean; desktopManaged: boolean };
@@ -128,6 +130,7 @@ export const useSubmissionsSync = () =>
   useQuery({ queryKey: keys.submissionsSync, queryFn: () => api<SubmissionsSyncState>('/submissions/sync'), refetchInterval: (q) => (q.state.data?.running ? 5000 : false) });
 
 /** A page's research: what it watches, its latest brief, outliers and analyses. Polls while something runs. */
+export const useKnowledge = () => useQuery({ queryKey: keys.knowledge, queryFn: () => api<KnowledgeRule[]>('/knowledge') });
 export const useIdeas = (wid: string) => useQuery({ queryKey: keys.ideas(wid), queryFn: () => api<IdeaNode[]>(`/workspaces/${wid}/ideas`), enabled: !!wid });
 export const useIdea = (id: string | null) => useQuery({ queryKey: keys.idea(id ?? ''), queryFn: () => api<IdeaDetail>(`/ideas/${id}`), enabled: !!id });
 export const useResearch = (wid: string) =>

@@ -1,4 +1,4 @@
-import { CalendarDays, Clapperboard, Lightbulb, MoreHorizontal, Mic, Search, Settings, Sparkles, Sun } from 'lucide-react';
+import { BookOpen, CalendarDays, Clapperboard, Lightbulb, MoreHorizontal, Mic, Search, Settings, Sparkles, Sun } from 'lucide-react';
 import { NavLink, Outlet, useMatch } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -133,6 +133,9 @@ export function AppShell() {
           <SideLink to="/capture" icon={Mic}>
             Capture an idea
           </SideLink>
+          <SideLink to="/knowledge" icon={BookOpen}>
+            Knowledge
+          </SideLink>
           <SideLink to="/settings" icon={Settings}>
             Settings
           </SideLink>
@@ -175,6 +178,11 @@ export function AppShell() {
                       </NavLink>
                     </DropdownMenuItem>
                   ))}
+                <DropdownMenuItem asChild>
+                  <NavLink to="/knowledge">
+                    <BookOpen /> Knowledge
+                  </NavLink>
+                </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <NavLink to={wid ? `/w/${wid}/settings` : '/settings'}>
                     <Settings /> Settings

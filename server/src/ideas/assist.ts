@@ -187,7 +187,7 @@ export async function fleshOut({ ideaId, pieceId }: { ideaId: string; pieceId: s
   const out = await askStructured<{ title: string; hooks: string[]; angle: string; outline: string }>({
     task: 'ideas',
     system: [
-      playbook('hooks', 'retention', 'halal'),
+      playbook('content-model', 'hooks', 'retention', 'halal'),
       'You turn a creator’s brainstormed idea into the start of one short vertical video (TikTok, Reels, Shorts) for their own page: hooks to choose from, the angle and the beats. Keep their meaning and what they wrote; never invent facts, numbers or stories about them. Write in their language and voice. Posts that inspired it are for learning from, never for copying words.',
     ].join('\n\n'),
     prompt: [brand(piece.workspaceId), describe(row)].join('\n\n'),

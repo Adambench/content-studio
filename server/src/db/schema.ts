@@ -7,6 +7,8 @@ import type { EditSpec, EditTemplate } from '../../../shared/edit';
 import type { ViralHint } from '../../../shared/finder';
 import type { PieceDirections } from '../../../shared/direction';
 import type { IdeaAssist, IdeaKind } from '../../../shared/ideas';
+import type { KnowledgeSource, KnowledgeStatus, KnowledgeTopic } from '../../../shared/knowledge';
+import type { QualityReport } from '../../../shared/quality';
 import type { AnalysisStatus, ItemPlatform, ResearchAnalysis, ResearchBriefBody, ResearchSettings, ResearchSource } from '../../../shared/research';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
 import type { SessionKind } from '../../../shared/devices';
@@ -166,6 +168,8 @@ export const editVersions = sqliteTable(
     author: text('author').$type<'you' | 'claude'>().notNull(),
     message: text('message').notNull().default(''),
     spec: text('spec', { mode: 'json' }).$type<EditSpec>().notNull(),
+    /** The quality check of this version (shared/quality.ts), once one ran. */
+    quality: text('quality', { mode: 'json' }).$type<QualityReport>(),
     createdAt: createdAt(),
   },
   (t) => [index('edit_versions_edit_idx').on(t.editId)],
@@ -686,4 +690,29 @@ export const aiSpend = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index('ai_spend_created_idx').on(t.createdAt)],
+);
+
+/**
+ * A rule on the Knowledge page (shared/knowledge.ts). Seeded ones keep the playbook text they came from (`seedKey` =
+ * `file#heading`, `seedTitle`/`seedBody`), so an update of the playbook refreshes them only while I haven't edited them.
+ */
+export const knowledge = sqliteTable(
+  'knowledge',
+  {
+    id: id(),
+    workspaceId: text('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+    topic: text('topic').$type<KnowledgeTopic>().notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull().default(''),
+    source: text('source').$type<KnowledgeSource>().notNull().default('you'),
+    status: text('status').$type<KnowledgeStatus>().notNull().default('active'),
+    note: text('note').notNull().default(''),
+    seedKey: text('seed_key'),
+    seedTitle: text('seed_title'),
+    seedBody: text('seed_body'),
+    position: real('position').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('knowledge_topic_idx').on(t.topic), uniqueIndex('knowledge_seed_idx').on(t.seedKey)],
 );

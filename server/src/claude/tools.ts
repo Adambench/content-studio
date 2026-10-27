@@ -25,6 +25,8 @@ import { piecePosts, upcomingPosts } from '../publish/posts';
 import { studioTools, studioToolLabel } from './studio-tools';
 import { createIdea, getIdea, hasIdeas, listIdeas } from '../ideas/ideas';
 import { ok, safe, ToolError } from './tool-helpers';
+import { KNOWLEDGE_TOPIC_INFO, KNOWLEDGE_TOPICS } from '../../../shared/knowledge';
+import { createRule, knowledgeText } from '../knowledge/knowledge';
 
 export const SERVER_NAME = 'studio';
 
@@ -104,6 +106,10 @@ export function toolLabel(fullName: string, input: Record<string, any>): string 
       return 'Read the research brief';
     case 'get_ideas':
       return 'Read the Ideas canvas';
+    case 'get_knowledge':
+      return `Read the Knowledge rules${input.topics?.length ? `: ${input.topics.join(', ')}` : ''}`;
+    case 'suggest_rule':
+      return `Suggested a rule: ${input.title ?? ''}`;
     case 'add_ideas':
       return `Added ${input.items?.length ?? ''} card${input.items?.length === 1 ? '' : 's'} to Ideas`;
     case 'WebSearch':
@@ -646,6 +652,30 @@ export function buildTools(workspaceId: string) {
         if (parentId && getIdea(parentId).workspaceId !== workspaceId) throw new ToolError('That card is on another page.');
         const made = items.map((i) => createIdea(workspaceId, { parentId: parentId ?? null, title: i.title, body: i.notes ?? '', by: 'claude' }));
         return ok(`Added ${made.length} card${made.length === 1 ? '' : 's'} to Ideas.`);
+      }),
+    ),
+
+    tool(
+      'get_knowledge',
+      'The live rules from the Knowledge page: the playbook as the creator keeps it (edited, turned off, added to). Where they differ from the playbook skill’s files, these win. ' +
+        `Topics: ${KNOWLEDGE_TOPICS.map((t) => `${t} (${KNOWLEDGE_TOPIC_INFO[t].hint})`).join('; ')}.`,
+      { topics: z.array(z.enum(KNOWLEDGE_TOPICS)).min(1).max(KNOWLEDGE_TOPICS.length) },
+      safe(async ({ topics }) => ok(knowledgeText(topics, workspaceId) || 'No rules on those topics yet.')),
+    ),
+
+    tool(
+      'suggest_rule',
+      'Suggest a new rule for the Knowledge page, something worth applying to every video (learned from results, a reference or the creator’s feedback). ' +
+        'It waits as Suggested until the creator approves it; it changes nothing before that. Only when it’s new and specific, never a restatement of an existing rule.',
+      {
+        topic: z.enum(KNOWLEDGE_TOPICS),
+        title: z.string().min(3).max(120).describe('The rule in a few words'),
+        body: z.string().min(10).max(2000).describe('The rule, how to apply it, and an example'),
+        why: z.string().min(5).max(600).describe('Where it comes from: the result, reference or feedback behind it'),
+      },
+      safe(async ({ topic, title, body, why }) => {
+        createRule({ topic, title, body, note: why, source: 'claude', status: 'proposed' });
+        return ok('Suggested. It shows on the Knowledge page under Suggested until the creator approves or dismisses it.');
       }),
     ),
 

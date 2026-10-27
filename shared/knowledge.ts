@@ -1,0 +1,54 @@
+// Knowledge: the playbook as rules the creator can read, edit and add to. Seeded from the playbook skill's
+// references (one rule per `##` section); every background prompt and the chat read the live rules, so an edit here
+// changes what Claude does. Lessons from references and from results land here too (later steps of phase 12).
+
+export const KNOWLEDGE_TOPICS = ['content-model', 'hooks', 'retention', 'packaging', 'sound-design', 'motion', 'platforms', 'halal', 'clipping'] as const;
+export type KnowledgeTopic = (typeof KNOWLEDGE_TOPICS)[number];
+
+export const KNOWLEDGE_TOPIC_INFO: Record<KnowledgeTopic, { label: string; hint: string }> = {
+  'content-model': { label: 'Content model', hint: 'Hook → content → payoff: the shape every video has' },
+  hooks: { label: 'Hooks', hint: 'The first 1–3 seconds: picture, words and on-screen text' },
+  retention: { label: 'Retention', hint: 'Pacing, value per second, endings, length' },
+  packaging: { label: 'Packaging', hint: 'First frame, on-screen text, titles, captions, hashtags' },
+  'sound-design': { label: 'Sound design', hint: 'Which effect, where, how loud (never music)' },
+  motion: { label: 'Motion', hint: 'Animation, graphics and kinetic type' },
+  platforms: { label: 'Platforms', hint: 'What TikTok, Reels and Shorts reward now' },
+  halal: { label: 'Halal', hint: 'No music, nothing haram: before everything else' },
+  clipping: { label: 'Clipping', hint: 'Picking moments from long videos, campaign rules' },
+};
+
+/** Where a rule came from: the playbook, me, Claude's suggestion, my results, a reference I measured. */
+export type KnowledgeSource = 'playbook' | 'you' | 'claude' | 'results' | 'reference';
+export const KNOWLEDGE_SOURCE_LABELS: Record<KnowledgeSource, string> = {
+  playbook: 'Playbook',
+  you: 'Mine',
+  claude: 'Claude',
+  results: 'From results',
+  reference: 'From a reference',
+};
+
+/** `proposed`: suggested (by Claude, or from results), waiting for my OK. `off`: kept but left out of prompts. */
+export type KnowledgeStatus = 'active' | 'proposed' | 'off';
+
+export type KnowledgeRule = {
+  id: string;
+  /** null = every page. */
+  workspaceId: string | null;
+  topic: KnowledgeTopic;
+  title: string;
+  body: string;
+  source: KnowledgeSource;
+  status: KnowledgeStatus;
+  /** A seeded rule I've changed (an update of the playbook leaves it alone). */
+  edited: boolean;
+  /** Seeded halal rules: shown, never changed or turned off. */
+  locked: boolean;
+  /** Why Claude suggested it, for a suggested rule. */
+  note: string;
+  position: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export const RULE_TITLE_MAX = 120;
+export const RULE_BODY_MAX = 6000;

@@ -11,6 +11,7 @@ import { EditHistory } from '@/components/studio/EditHistory';
 import { LookPanel } from '@/components/studio/LookPanel';
 import { OverlaysPanel } from '@/components/studio/OverlaysPanel';
 import { Player, type PlayerHandle } from '@/components/studio/Player';
+import { QualityBadge, QualityPanel } from '@/components/studio/QualityPanel';
 import { RenderButton, RendersPanel } from '@/components/studio/RendersPanel';
 import { SoundPanel } from '@/components/studio/SoundPanel';
 import { Timeline } from '@/components/studio/Timeline';
@@ -28,7 +29,7 @@ import type { EditDetail, Media, PieceDetail } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
-type Tab = 'script' | 'clips' | 'captions' | 'text' | 'sound' | 'look' | 'renders';
+type Tab = 'script' | 'quality' | 'clips' | 'captions' | 'text' | 'sound' | 'look' | 'renders';
 const TAB_FOR: Record<NonNullable<Selection>['kind'], Tab> = { clip: 'clips', overlay: 'text', sfx: 'sound' };
 const same = (a: EditSpec, b: EditSpec) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -265,6 +266,7 @@ function Studio({ edit, piece }: { edit: EditDetail; piece: PieceDetail | undefi
           <Button variant="ghost" size="sm" onClick={saveVersion} className="hidden sm:inline-flex">
             <Save /> Save version
           </Button>
+          {edit.quality && <QualityBadge score={edit.quality.score} onClick={() => setTab('quality')} />}
           <RenderButton onShow={() => setTab('renders')} />
         </StudioHeader>
 
@@ -319,6 +321,9 @@ function Studio({ edit, piece }: { edit: EditDetail; piece: PieceDetail | undefi
                     Script
                   </TabsTrigger>
                 )}
+                <TabsTrigger value="quality" className="flex-none">
+                  Quality
+                </TabsTrigger>
                 <TabsTrigger value="clips" className="flex-none">
                   Clips
                 </TabsTrigger>
@@ -341,6 +346,9 @@ function Studio({ edit, piece }: { edit: EditDetail; piece: PieceDetail | undefi
               <div className="p-4">
                 <TabsContent value="script">
                   <ScriptPanel />
+                </TabsContent>
+                <TabsContent value="quality">
+                  <QualityPanel />
                 </TabsContent>
                 <TabsContent value="clips">
                   <ClipsPanel />

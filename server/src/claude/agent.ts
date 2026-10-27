@@ -1,5 +1,5 @@
 import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import type { ChatPart, ChatStreamEvent } from '../../../shared/types';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
@@ -26,6 +26,15 @@ export const isRunning = (threadId: string) => running.has(threadId);
 
 export function stopChat(threadId: string) {
   running.get(threadId)?.abort();
+}
+
+/** A video's own chat: its latest, started on first use. */
+export function pieceThread(piece: { id: string; workspaceId: string; title: string }) {
+  const found = db.select().from(schema.chatThreads).where(eq(schema.chatThreads.pieceId, piece.id)).orderBy(desc(schema.chatThreads.updatedAt)).get();
+  if (found) return found;
+  const id = newId();
+  db.insert(schema.chatThreads).values({ id, workspaceId: piece.workspaceId, pieceId: piece.id, title: piece.title.slice(0, 100) }).run();
+  return db.select().from(schema.chatThreads).where(eq(schema.chatThreads.id, id)).get()!;
 }
 
 export async function runChat(input: {

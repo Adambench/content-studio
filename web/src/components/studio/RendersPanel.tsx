@@ -1,8 +1,10 @@
-import { AlertCircle, CheckCircle2, Clapperboard, Download, Play, RotateCcw, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, Clapperboard, Download, Play, RotateCcw, X } from 'lucide-react';
+import { QUALITY_BAR } from '@shared/quality';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { MediaDialog } from '@/components/MediaDialog';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Spinner } from '@/components/ui/spinner';
 import { api, errorMessage, fileUrl } from '@/lib/api';
 import { duration, timeAgo } from '@/lib/format';
@@ -23,32 +25,46 @@ export function RenderButton({ onShow }: { onShow: () => void }) {
   if (active) {
     return (
       <Button size="sm" variant="secondary" onClick={onShow} className="tabular-nums">
-        <Spinner /> {active.status === 'queued' ? 'Waiting…' : `${Math.round(active.progress * 100)}%`}
+        <Spinner /> {active.status === 'queued' ? (checkingStage(active) ? 'Checking…' : 'Waiting…') : `${Math.round(active.progress * 100)}%`}
       </Button>
     );
   }
+  async function render(check: boolean) {
+    setBusy(true);
+    try {
+      const r = await serverAction(() => api<RenderRow>(`/edits/${edit.id}/render`, { body: { check } }));
+      queryClient.invalidateQueries({ queryKey: keys.renders(edit.pieceId) });
+      if (r) toast.success(check ? `Checking v${r.versionNumber}, then rendering` : `Rendering v${r.versionNumber}`, { description: check ? `Below ${QUALITY_BAR}/100 Claude fixes it first. Keep editing — you’ll be told when it’s ready.` : 'Keep editing — you’ll be told when it’s ready.' });
+      onShow();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
-    <Button
-      size="sm"
-      disabled={busy || !spec.clips.length}
-      onClick={async () => {
-        setBusy(true);
-        try {
-          const r = await serverAction(() => api<RenderRow>(`/edits/${edit.id}/render`, { body: {} }));
-          queryClient.invalidateQueries({ queryKey: keys.renders(edit.pieceId) });
-          if (r) toast.success(`Rendering v${r.versionNumber}`, { description: 'Keep editing — you’ll be told when it’s ready.' });
-          onShow();
-        } catch (err) {
-          toast.error(errorMessage(err));
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      {busy ? <Spinner /> : <Clapperboard />} Render
-    </Button>
+    <div className="flex">
+      <Button size="sm" className="rounded-r-none" disabled={busy || !spec.clips.length} onClick={() => render(true)}>
+        {busy ? <Spinner /> : <Clapperboard />} Render
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-1.5" disabled={busy || !spec.clips.length} aria-label="More ways to render">
+            <ChevronDown />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => render(false)}>
+            <Clapperboard /> Render without the check
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
+
+/** A waiting render that's still in its quality check (or Claude's fix). */
+const checkingStage = (r: RenderRow) => r.status === 'queued' && r.stage !== 'Waiting' && !r.stage.includes('waiting for the renderer');
 
 export function RendersPanel() {
   const { edit } = useStudio();
@@ -115,7 +131,7 @@ export function RendersPanel() {
                   <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                     <div className="h-full rounded-full bg-brand transition-[width] duration-500" style={{ width: `${Math.max(2, r.progress * 100)}%` }} />
                   </div>
-                  <p className="text-xs text-muted-foreground">{r.status === 'queued' ? 'Waiting for the renderer…' : r.stage}</p>
+                  <p className="text-xs text-muted-foreground">{r.status === 'queued' && r.stage === 'Waiting' ? 'Waiting for the renderer…' : r.stage}</p>
                 </div>
               )}
               {r.status === 'error' && (

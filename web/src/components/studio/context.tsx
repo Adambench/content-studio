@@ -23,7 +23,7 @@ export type StudioState = {
   footage: Media[];
   assets: Media[];
   /** Switch the side panel to a tab (e.g. the script once a format video is started). */
-  showTab: (tab: 'script' | 'clips' | 'captions' | 'text' | 'sound' | 'look' | 'renders') => void;
+  showTab: (tab: 'script' | 'quality' | 'clips' | 'captions' | 'text' | 'sound' | 'look' | 'renders') => void;
 };
 
 export const StudioContext = createContext<StudioState | null>(null);

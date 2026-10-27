@@ -126,6 +126,13 @@ export function Timeline({ className }: { className?: string }) {
           ))}
         </div>
 
+        {/* where the payoff lands (the edit's story) */}
+        {spec.story.payoffAt !== null && (
+          <div className="pointer-events-none absolute inset-y-0 z-10 w-px bg-emerald-400/70" style={{ left: pct(spec.story.payoffAt) }} title="Payoff">
+            <span className="absolute -top-0.5 left-1 rounded bg-emerald-500/30 px-1 text-[9px] leading-tight text-emerald-200">Payoff</span>
+          </div>
+        )}
+
         {/* playhead */}
         <div className="pointer-events-none absolute inset-y-0 z-20 w-px bg-brand" style={{ left: pct(time) }}>
           <div className="absolute -top-0.5 -left-1 size-2 rotate-45 bg-brand" />

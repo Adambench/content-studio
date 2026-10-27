@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import type { HookCallback, Options } from '@anthropic-ai/claude-agent-sdk';
+import type { KnowledgeTopic } from '../../../shared/knowledge';
 import { config } from '../config';
+import { hasKnowledge, knowledgeText } from '../knowledge/knowledge';
 
 /**
  * The skills in `.claude/skills` reach the app's Claude as a local plugin: a folder with `.claude-plugin/plugin.json`
@@ -169,31 +171,30 @@ export function readSkillFile(name: string, file = 'SKILL.md'): string {
   return readFileSync(path, 'utf8');
 }
 
-export type PlaybookFile = 'hooks' | 'retention' | 'clipping' | 'packaging' | 'sound-design' | 'halal' | 'platforms';
+export type PlaybookFile = KnowledgeTopic;
 const playbookCache = new Map<PlaybookFile, string>();
 
 /**
- * Playbook references pasted into background prompts, which don't load skills, under a heading; empty when the
- * skills are missing. Put it first in the system prompt (it's the same text every time, so it caches). Their source
- * lists are left out.
+ * The playbook pasted into background prompts, which don't load skills, under a heading: the live rules from the
+ * Knowledge page (the playbook's references as I edited them); the shipped files only until those are seeded. Empty
+ * when there's nothing. Put it first in the system prompt (it's the same text until a rule changes, so it caches).
  */
 export function playbook(...files: PlaybookFile[]) {
-  const text = files
-    .map((name) => {
-      let text = playbookCache.get(name);
-      if (text === undefined) {
-        try {
-          text = readFileSync(join(config.pluginDir, 'skills/playbook/references', `${name}.md`), 'utf8')
-            .replace(/\n## Sources\n[\s\S]*$/, '')
-            .trim();
-        } catch {
-          text = '';
-        }
-        playbookCache.set(name, text);
-      }
-      return text;
-    })
-    .filter(Boolean)
-    .join('\n\n---\n\n');
+  const text = hasKnowledge() ? knowledgeText(files) : files.map(playbookFile).filter(Boolean).join('\n\n---\n\n');
   return text && `# The playbook (Content Studio's rules for every piece; the halal rules come before everything)\n\n${text}`;
+}
+
+function playbookFile(name: PlaybookFile) {
+  let text = playbookCache.get(name);
+  if (text === undefined) {
+    try {
+      text = readFileSync(join(config.pluginDir, 'skills/playbook/references', `${name}.md`), 'utf8')
+        .replace(/\n## Sources\n[\s\S]*$/, '')
+        .trim();
+    } catch {
+      text = '';
+    }
+    playbookCache.set(name, text);
+  }
+  return text;
 }

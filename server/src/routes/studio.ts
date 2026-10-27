@@ -21,6 +21,7 @@ import { getPiece } from '../services/pieces';
 import { BUNDLED_FONTS, composeEdit } from '../studio/compose';
 import { createEdit, editDetail, findEditForPiece, getEdit, listRenders, restoreEditVersion, saveEditVersion, specMedia, specTranscripts, updateEditWorking } from '../studio/edits';
 import { proxyPath } from '../studio/proxy';
+import { checkEdit } from '../studio/quality';
 import { builtinSfxPath, cancelRender, getRender, GSAP_FILES, gsapFilePath, queueRender, runtimePath } from '../studio/render';
 import { tightenEdit } from '../studio/tighten';
 import { bearerToken } from './auth';
@@ -76,7 +77,14 @@ export async function studioRoutes(app: FastifyInstance) {
     return tightenEdit(req.params.id, opts, 'you');
   });
 
-  app.post<{ Params: { id: string } }>('/api/edits/:id/render', async (req) => queueRender(req.params.id, 'you'));
+  // The quality check runs first unless `check: false` (Render without the check).
+  app.post<{ Params: { id: string } }>('/api/edits/:id/render', async (req) => {
+    const body = z.object({ check: z.boolean().default(true) }).parse(req.body ?? {});
+    return queueRender(req.params.id, 'you', { check: body.check });
+  });
+
+  // The quality check on its own: the edit as it is now, saved as a version if it changed.
+  app.post<{ Params: { id: string } }>('/api/edits/:id/check', async (req) => checkEdit(getEdit(req.params.id).id, 'you'));
 
   // A format video's voice: speak the recipe, time it, lay out the edit (a new version).
   app.post<{ Params: { id: string } }>('/api/edits/:id/build', async (req) => {

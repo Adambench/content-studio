@@ -38,7 +38,7 @@ export function DirectionPanel({ piece }: { piece: PieceDetail }) {
       refresh();
       sendToVideoChat(
         piece.id,
-        `I pick this direction. Write the script to it if there isn't one yet, then build the edit with it (use the moves it names, keep it to what the footage allows), and tell me in a line what you did.\n\n${directionText(d)}`,
+        `I pick this direction. Write the script to it if there isn't one yet, then build the edit with it (use the moves it names, keep it to what the footage allows, set its story: the promise, the payoff and the second it lands), and tell me in a line what you did.\n\n${directionText(d)}`,
       );
     } catch (err) {
       toast.error(errorMessage(err));
@@ -73,6 +73,18 @@ export function DirectionPanel({ piece }: { piece: PieceDetail }) {
                   <span className="text-muted-foreground">Hook · </span>
                   {d.hook}
                 </p>
+                {d.promise && (
+                  <p>
+                    <span className="text-muted-foreground">Promise · </span>
+                    {d.promise}
+                  </p>
+                )}
+                {d.payoff && (
+                  <p>
+                    <span className="text-muted-foreground">Payoff · </span>
+                    {d.payoff}
+                  </p>
+                )}
                 {d.structure && <p className="whitespace-pre-line text-muted-foreground">{d.structure}</p>}
                 {d.look && (
                   <p>

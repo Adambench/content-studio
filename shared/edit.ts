@@ -561,7 +561,20 @@ export type EditSpec = {
   watermark: Watermark;
   /** A format video's words and voices (shared/recipe.ts); null for a filmed edit. */
   recipe: Recipe | null;
+  /** The content model: what the hook promises and where it's paid (shared/quality.ts checks it before render). */
+  story: EditStory;
 };
+
+/** Every video has a hook (a promise), content that builds toward it and a payoff: named here, checked before render. */
+export type EditStory = {
+  /** What the first 1–3 s promise the viewer. */
+  promise: string;
+  /** What they get for staying: the answer, the reveal, the result. */
+  payoff: string;
+  /** The second on the finished video where it lands; null = not placed yet. */
+  payoffAt: number | null;
+};
+export const STORY_TEXT_MAX = 300;
 
 /** The reusable look of a brand's videos, saved per workspace. Never a nasheed: that's agreed edit by edit. */
 export type EditTemplate = {
@@ -597,6 +610,7 @@ export function emptyEdit(): EditSpec {
     grade: { lutMediaId: null, intensity: 1, filter: 'none', textures: { ...NO_TEXTURES } },
     watermark: { mediaId: null, corner: 'tr', opacity: 0.85, size: 0.16 },
     recipe: null,
+    story: { promise: '', payoff: '', payoffAt: null },
   };
 }
 
@@ -788,6 +802,17 @@ export function normalizeEdit(input: unknown): EditSpec {
     grade: normalizeGrade(e.grade),
     watermark: normalizeWatermark(e.watermark),
     recipe: normalizeRecipe(e.recipe),
+    story: normalizeStory(e.story),
+  };
+}
+
+function normalizeStory(input: unknown): EditStory {
+  const s = obj(input);
+  const at = s.payoffAt;
+  return {
+    promise: str(s.promise, '').trim().slice(0, STORY_TEXT_MAX),
+    payoff: str(s.payoff, '').trim().slice(0, STORY_TEXT_MAX),
+    payoffAt: typeof at === 'number' && Number.isFinite(at) && at >= 0 ? round(Math.min(at, EDIT_MAX_SECONDS)) : null,
   };
 }
 

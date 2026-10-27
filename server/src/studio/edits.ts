@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, inArray, isNull, max, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, max, ne } from 'drizzle-orm';
 import { applyTemplate, emptyEdit, normalizeEdit, normalizeTemplate, type EditClip, type EditSpec } from '../../../shared/edit';
+import { normalizeDirections } from '../../../shared/direction';
 import { builtinSfx, isBuiltinSfx } from '../../../shared/sfx';
 import type { Transcript } from '../../../shared/types';
 import { db, newId, now, schema } from '../db';
@@ -50,6 +51,9 @@ export function createEdit(pieceId: string, by: Author) {
   let spec = emptyEdit();
   if (ws.editTemplate) spec = applyTemplate(spec, normalizeTemplate(ws.editTemplate));
   spec.clips = pieceFootage(pieceId).map(clipFromMedia);
+  // The chosen direction already names the promise and the payoff.
+  const chosen = normalizeDirections(piece.directions)?.chosen;
+  if (chosen) spec.story = { promise: chosen.promise, payoff: chosen.payoff, payoffAt: null };
   const id = newId();
   db.insert(schema.edits).values({ id, workspaceId: ws.id, pieceId, working: spec }).run();
   saveEditVersion(id, { author: by, message: spec.clips.length ? `Started from ${spec.clips.length} clip${spec.clips.length === 1 ? '' : 's'}` : 'Started' });
@@ -230,6 +234,18 @@ export function listRenders(editId: string, limit = 20) {
   return db.select().from(schema.renders).where(eq(schema.renders.editId, editId)).orderBy(desc(schema.renders.createdAt)).limit(limit).all();
 }
 
+/** The newest quality report among an edit's versions (studio/quality.ts), for the editor. */
+export function latestQuality(editId: string) {
+  return (
+    db
+      .select({ quality: schema.editVersions.quality })
+      .from(schema.editVersions)
+      .where(and(eq(schema.editVersions.editId, editId), isNotNull(schema.editVersions.quality)))
+      .orderBy(desc(schema.editVersions.number))
+      .get()?.quality ?? null
+  );
+}
+
 /** Everything the editor needs in one go. */
 export async function editDetail(editId: string) {
   const edit = getEdit(editId);
@@ -239,6 +255,7 @@ export async function editDetail(editId: string) {
     ...edit,
     working: spec,
     versions: listEditVersions(edit.id),
+    quality: latestQuality(edit.id),
     renders: listRenders(edit.id),
     media: rows,
     transcripts: await specTranscripts(spec, rows),

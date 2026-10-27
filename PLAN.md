@@ -136,10 +136,13 @@ versionCode from the tag (`v1.2.3` → 10203).
    - [x] Step 5 — My own voice, cloned, for voiceovers
 10. **Hosted generation** — built 2026-10-19 against a stand-in (see *Phase 10 build plan*)
 11. **Ideas canvas and save-from-anywhere** — built 2026-10-21 (see *Phase 11*)
-12. **Viral quality, knowledge base, toolbox** — decided 2026-10-27, not started (see *Phase 12*)
+12. **Viral quality, knowledge base, toolbox** — in progress: step 1 built 2026-10-27, step 0 waits on me (see *Phase 12*)
 
 ## Waiting on me
 
+- Phase 12 step 0: run the clipping cleanup (auto mode blocked the deletes):
+  `cd server && ../node_modules/.bin/tsx ../scripts/cleanup-clipping.mts` with the app idle; it backs the database up
+  first. Then delete `scripts/cleanup-clipping.mts`.
 - Phase 0 on the platforms' sites, then connect real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
   Listen to the first clips from a source with background music (the music check was only tried on stand-ins).
@@ -404,5 +407,32 @@ reused).
 Steps: to be detailed when building. Rough order: (0) clipping cleanup and Vetto removal; (1) Knowledge page, content
 model and quality score; (2) Toolbox and the weekly scout; (3) SFX library and frame-synced placement; (4) motion scene
 library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
+
+- [ ] Step 0 — Clipping cleanup and Vetto removal. Data only, no code. A script (backs the database up to
+  `backups/2026-10-27-before-clipping-cleanup.sqlite` first) deletes the Clipping page's videos, files, renders and every
+  campaign (sources, moments), finished jobs, the finder's state, the HyperFrames frame cache and source downloads, and
+  the Vetto page; the empty Clipping page stays. Auto mode wouldn't run the deletes: on me (see *Waiting on me*).
+- [x] Step 1 — Knowledge, content model, quality score (2026-10-27):
+  - **Knowledge** (`knowledge` table; a rule = topic, title, body, source, on/off; `workspaceId` null = every page).
+    Seeded from the playbook's references, one rule per `##` section, plus a new `content-model.md`; an app update
+    refreshes seeded rules I haven't changed and never touches the ones I have. Seeded halal rules can't be changed or
+    turned off (I can add more). `playbook(...)` reads the live rules, so every background prompt uses my edits; the
+    chat gets `get_knowledge` and `suggest_rule` (lands as *Suggested*, approving is my click). Page: `/knowledge`
+    (sidebar; phone: More), topics down the side, rules as cards edited in place, search, Suggested on top.
+  - **Content model**: an edit has a `story` (the promise, the payoff, the second it's paid). Directions pitch both;
+    Claude fills them when it builds an edit; the editor shows them over the timeline (*Paid here* from the playhead).
+  - **Quality score** (`edit_versions.quality`, task `quality`): hook, promise → payoff, pacing, motion, SFX coverage,
+    captions, first frame, each 0–10 with what was measured, why and the fix. Measured from the edit (first words and
+    text in the first 3 s, longest stretch with nothing changing on screen, events per 10 s, motion events with a
+    sound on their frame, caption coverage of speech, what's on screen at 0 s); the hook and the payoff are judged by
+    one call against the knowledge rules. Bar 70/100. Render = check first: below the bar Claude fixes it in the
+    video's own chat (one round), it's checked again, then it renders whatever the score. *Check* on its own;
+    *Render without the check* in the render menu. Claude's `render_edit` runs the check and hands it the fixes
+    first. Clip renders skip it while clipping is paused.
+  - Tried on a test server: seeding (65 rules), edits, the halal lock, delete/undo, an update of the playbook (untouched
+    rules follow it, mine stay, dropped sections go), *Back to the playbook*, `playbook()` with my edits; a real check
+    (71/100 in 9 s) and a real render with the check: 40/100 → Claude fixed it in the video's chat (v5) → 80/100 →
+    rendered. Knowledge page and the editor's Quality tab looked at in headless Chrome, desktop and phone width. Not
+    tried: `get_knowledge`/`suggest_rule` and `render_edit`'s gate from a real chat.
 
 Open: the Islamic page's name, niche and language; the mascots' look; which SFX source (licence).

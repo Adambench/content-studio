@@ -54,10 +54,12 @@ const DIRECTION_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['name', 'hook', 'structure', 'look', 'moves', 'pacing'],
+        required: ['name', 'hook', 'promise', 'payoff', 'structure', 'look', 'moves', 'pacing'],
         properties: {
           name: { type: 'string', description: '2–4 words, a feeling or a style, not "Option 1"' },
           hook: { type: 'string', description: 'What is said and shown in the first 1–2 seconds' },
+          promise: { type: 'string', description: 'What the hook promises the viewer, in one concrete line' },
+          payoff: { type: 'string', description: 'What they get for staying, near the end, and how it is shown' },
           structure: { type: 'string', description: 'The beats in order, a few short lines' },
           look: { type: 'string', description: 'Framing, captions, colour, graphics: how it looks and feels' },
           moves: { type: 'array', items: { type: 'string' }, description: 'Arsenal ids this direction leans on (e.g. transition:whip, graphic:stat). Only ready ones.' },
@@ -69,7 +71,7 @@ const DIRECTION_SCHEMA = {
 };
 
 const INSTRUCTIONS = `You are pitching creative directions for ONE short vertical video (TikTok, Reels, Shorts) before it is edited.
-Pitch 2 or 3 directions that are genuinely different from each other (not three variations of one idea): a different hook, a different structure, a different look. Each must be doable with the moves in the arsenal and the footage the creator has (or will film). Prefer moves the page's recent videos did NOT use, so its videos differ from each other, unless one clearly fits the idea better.
+Pitch 2 or 3 directions that are genuinely different from each other (not three variations of one idea): a different hook, a different structure, a different look. Each follows the content model: the hook makes one concrete promise, the structure builds toward it, and the payoff keeps it late in the video. Each must be doable with the moves in the arsenal and the footage the creator has (or will film). Prefer moves the page's recent videos did NOT use, so its videos differ from each other, unless one clearly fits the idea better.
 Rules: no music, no instruments, no trending sounds (sound effects only). Do not invent facts, numbers or personal stories about the creator. Write in plain words the creator can judge in ten seconds. If the creator asked for a change or a mix, every direction must respect it.`;
 
 /** The `direction.pitch` job. */
@@ -128,7 +130,7 @@ export async function pitchDirections({ pieceId }: { pieceId: string }) {
   try {
     const out = await askStructured<{ directions: unknown[] }>({
       task: 'directions',
-      system: [playbook('hooks', 'retention', 'packaging', 'sound-design', 'halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'),
+      system: [playbook('content-model', 'hooks', 'retention', 'packaging', 'sound-design', 'halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'),
       prompt,
       schema: DIRECTION_SCHEMA,
       model: 'sonnet',

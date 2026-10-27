@@ -6,6 +6,10 @@ export type Direction = {
   name: string;
   /** The first seconds: what's said and shown. */
   hook: string;
+  /** What the hook promises (the content model, shared/quality.ts). */
+  promise: string;
+  /** What the viewer gets for staying, near the end. */
+  payoff: string;
   /** How the video runs, beat by beat, in a few lines. */
   structure: string;
   /** The look and feel: framing, captions, colour, pace. */
@@ -38,6 +42,8 @@ export function normalizeDirection(input: unknown, fallbackId: string): Directio
     id: str(d.id, 20) || fallbackId,
     name,
     hook,
+    promise: str(d.promise, 300),
+    payoff: str(d.payoff, 300),
     structure: str(d.structure, 900),
     look: str(d.look, 600),
     moves: Array.isArray(d.moves) ? d.moves.filter((m): m is string => typeof m === 'string').slice(0, 12) : [],
@@ -61,7 +67,7 @@ export function normalizeDirections(input: unknown): PieceDirections | null {
 
 /** The chosen direction as text for a chat message or the piece's notes. */
 export function directionText(d: Direction) {
-  return [`Direction: ${d.name}`, `Hook: ${d.hook}`, d.structure && `Structure: ${d.structure}`, d.look && `Look: ${d.look}`, d.pacing && `Pacing: ${d.pacing}`, d.moves.length && `Moves from the arsenal: ${d.moves.join(', ')}`]
+  return [`Direction: ${d.name}`, `Hook: ${d.hook}`, d.promise && `Promise: ${d.promise}`, d.payoff && `Payoff: ${d.payoff}`, d.structure && `Structure: ${d.structure}`, d.look && `Look: ${d.look}`, d.pacing && `Pacing: ${d.pacing}`, d.moves.length && `Moves from the arsenal: ${d.moves.join(', ')}`]
     .filter(Boolean)
     .join('\n');
 }

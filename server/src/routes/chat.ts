@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { isRunning, runChat, stopChat } from '../claude/agent';
+import { isRunning, pieceThread, runChat, stopChat } from '../claude/agent';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { notFound } from '../lib/http';
@@ -40,12 +40,8 @@ export async function chatRoutes(app: FastifyInstance) {
 
   /** A video's own chat: its latest, started on first use. */
   app.get<{ Params: { id: string } }>('/api/pieces/:id/thread', async (req) => {
-    const piece = getPiece(req.params.id);
-    const found = db.select().from(schema.chatThreads).where(eq(schema.chatThreads.pieceId, piece.id)).orderBy(desc(schema.chatThreads.updatedAt)).get();
-    if (found) return { ...found, running: isRunning(found.id) };
-    const id = newId();
-    db.insert(schema.chatThreads).values({ id, workspaceId: piece.workspaceId, pieceId: piece.id, title: piece.title.slice(0, 100) }).run();
-    return { ...getThread(id), running: false };
+    const thread = pieceThread(getPiece(req.params.id));
+    return { ...thread, running: isRunning(thread.id) };
   });
 
   app.patch<{ Params: { id: string } }>('/api/threads/:id', async (req) => {
