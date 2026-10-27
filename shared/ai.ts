@@ -2,7 +2,7 @@
 // worker, or any address set in Settings). Each task is set to Claude, local, or auto; auto stays on Claude until its
 // usage passes a limit (or Claude refuses for usage), then uses the local model. *Local only* overrides everything.
 
-export const AI_TASKS = ['chat', 'directions', 'quality', 'clips', 'ugc', 'review', 'research', 'inbox', 'ideas', 'pages', 'pictures', 'scout'] as const;
+export const AI_TASKS = ['chat', 'directions', 'quality', 'clips', 'ugc', 'review', 'research', 'lessons', 'inbox', 'ideas', 'pages', 'pictures', 'scout'] as const;
 export type AiTask = (typeof AI_TASKS)[number];
 
 export const AI_TASK_INFO: Record<AiTask, { label: string; hint: string }> = {
@@ -13,6 +13,7 @@ export const AI_TASK_INFO: Record<AiTask, { label: string; hint: string }> = {
   ugc: { label: 'UGC scripts', hint: 'Scripts for UGC videos from a campaign brief' },
   review: { label: 'Weekly review', hint: 'Reading the week’s results and suggesting what to change' },
   research: { label: 'Research', hint: 'Why outliers worked, and the daily brief' },
+  lessons: { label: 'Lessons from references', hint: 'Reading a reference video you measured and drafting rules for Knowledge' },
   inbox: { label: 'Inbox filing', hint: 'Which idea a shared file belongs to' },
   ideas: { label: 'Ideas and voice', hint: 'Help on Ideas cards, fleshing out a locked-in idea, voice memos into cards, learning from your rewrites' },
   pages: { label: 'Reading pages', hint: 'Campaign rules, submissions and listings read from sites' },

@@ -40,6 +40,8 @@ export const config = {
   rendererDir: join(dataDir, 'renderer'),
   cacheDir: join(dataDir, 'cache'),
   tmpDir: join(dataDir, 'tmp'),
+  // References' frames (the first one and a contact sheet), a folder each.
+  referencesDir: join(dataDir, 'references'),
   logsDir: join(dataDir, 'logs'),
   // Claude's working directory (sessions are stored per cwd). Its only file tool, Read, is limited to the skills.
   claudeDir: join(dataDir, 'claude'),
@@ -57,6 +59,6 @@ export const config = {
   vapidSubject: process.env.VAPID_SUBJECT ?? 'mailto:content-studio@example.com',
 };
 
-for (const dir of [config.dataDir, config.mediaDir, config.thumbsDir, config.transcriptsDir, config.framesDir, config.proxiesDir, config.rendersDir, config.cacheDir, config.tmpDir, config.logsDir, config.claudeDir, config.sourcesDir]) {
+for (const dir of [config.dataDir, config.mediaDir, config.thumbsDir, config.transcriptsDir, config.framesDir, config.proxiesDir, config.rendersDir, config.cacheDir, config.tmpDir, config.logsDir, config.claudeDir, config.sourcesDir, config.referencesDir]) {
   mkdirSync(dir, { recursive: true });
 }

@@ -87,6 +87,7 @@ const TOKEN_IN_QUERY = [
   /^\/api\/studio\/(vendor|fonts|sfx|characters)\/[^/]+$/,
   /^\/api\/tts\/voices\/[a-z_]+\.wav$/,
   /^\/api\/voice\/reference\.wav$/,
+  /^\/api\/references\/[^/]+\/(first|sheet)\.jpg$/,
 ];
 
 /** The device token a request carries, if any. */

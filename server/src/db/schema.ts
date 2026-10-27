@@ -9,6 +9,7 @@ import type { PieceDirections } from '../../../shared/direction';
 import type { IdeaAssist, IdeaKind } from '../../../shared/ideas';
 import type { KnowledgeSource, KnowledgeStatus, KnowledgeTopic } from '../../../shared/knowledge';
 import type { QualityReport } from '../../../shared/quality';
+import type { ReferenceMeasures, ReferencePlatform, ReferenceRead, ReferenceStatus } from '../../../shared/references';
 import type { FindKind, FindStatus, ToolKind } from '../../../shared/toolbox';
 import type { AnalysisStatus, ItemPlatform, ResearchAnalysis, ResearchBriefBody, ResearchSettings, ResearchSource } from '../../../shared/research';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
@@ -694,6 +695,36 @@ export const aiSpend = sqliteTable(
 );
 
 /**
+ * A video I pasted on the Knowledge page to learn from (shared/references.ts): measured (`measures`), read by the model
+ * (`read`), its lessons drafted as suggested rules (`knowledge.referenceId`). `workspaceId` null = for every page.
+ */
+export const referenceVideos = sqliteTable(
+  'reference_videos',
+  {
+    id: id(),
+    workspaceId: text('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+    platform: text('platform').$type<ReferencePlatform>().notNull(),
+    externalId: text('external_id').notNull(),
+    url: text('url').notNull(),
+    title: text('title').notNull().default(''),
+    channel: text('channel').notNull().default(''),
+    views: integer('views'),
+    postedAt: integer('posted_at'),
+    status: text('status').$type<ReferenceStatus>().notNull().default('queued'),
+    step: text('step').notNull().default(''),
+    error: text('error'),
+    measures: text('measures', { mode: 'json' }).$type<ReferenceMeasures>(),
+    read: text('read', { mode: 'json' }).$type<ReferenceRead>(),
+    /** What's said, a line per sentence ({ at, text }). */
+    lines: text('lines', { mode: 'json' }).$type<{ at: number; text: string }[]>().notNull().default(sql`'[]'`),
+    hasFrames: integer('has_frames', { mode: 'boolean' }).notNull().default(false),
+    createdAt: createdAt(),
+    measuredAt: integer('measured_at'),
+  },
+  (t) => [uniqueIndex('reference_videos_key_idx').on(t.platform, t.externalId), index('reference_videos_created_idx').on(t.createdAt)],
+);
+
+/**
  * A rule on the Knowledge page (shared/knowledge.ts). Seeded ones keep the playbook text they came from (`seedKey` =
  * `file#heading`, `seedTitle`/`seedBody`), so an update of the playbook refreshes them only while I haven't edited them.
  */
@@ -708,6 +739,8 @@ export const knowledge = sqliteTable(
     source: text('source').$type<KnowledgeSource>().notNull().default('you'),
     status: text('status').$type<KnowledgeStatus>().notNull().default('active'),
     note: text('note').notNull().default(''),
+    /** The reference it was drafted from. */
+    referenceId: text('reference_id').references(() => referenceVideos.id, { onDelete: 'set null' }),
     seedKey: text('seed_key'),
     seedTitle: text('seed_title'),
     seedBody: text('seed_body'),

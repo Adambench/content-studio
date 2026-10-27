@@ -66,6 +66,7 @@ function apply(event: LiveEvent) {
         inv(['edit']);
         break;
       case 'edits':
+        inv(['own-measures']);
         inv(event.pieceId ? keys.edit(event.pieceId) : ['edit']);
         break;
       case 'renders':
@@ -138,6 +139,9 @@ function apply(event: LiveEvent) {
         break;
       case 'knowledge':
         inv(keys.knowledge);
+        break;
+      case 'references':
+        inv(keys.references);
         break;
       case 'toolbox':
         inv(keys.toolbox);

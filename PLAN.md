@@ -136,7 +136,7 @@ versionCode from the tag (`v1.2.3` → 10203).
    - [x] Step 5 — My own voice, cloned, for voiceovers
 10. **Hosted generation** — built 2026-10-19 against a stand-in (see *Phase 10 build plan*)
 11. **Ideas canvas and save-from-anywhere** — built 2026-10-21 (see *Phase 11*)
-12. **Viral quality, knowledge base, toolbox** — in progress: steps 1–4 built 2026-10-27 (step 3's recorded library waits on my pick), step 0 waits on me (see *Phase 12*)
+12. **Viral quality, knowledge base, toolbox** — in progress: steps 1–4 and 7 built 2026-10-27 (step 3's recorded library waits on my pick), step 0 waits on me, steps 5–6 wait on the account review (see *Phase 12*)
 
 ## Waiting on me
 
@@ -146,6 +146,10 @@ versionCode from the tag (`v1.2.3` → 10203).
 - Phase 12 step 3: pick the recorded SFX source (licence must allow commercial use), and listen to a motion video with
   *Sound on every move* on.
 - Phase 12 step 4: try a few library scenes in the editor (Overlays → Scene) and say which look off.
+- Phase 12 step 7: Knowledge → References: paste 2–3 shorts I like (one TikTok, one Reel: only YouTube was tried),
+  read the lessons and approve or dismiss them.
+- After the last buildable step: go over each account with Claude (name, goal, niche, language, its own mascot's
+  look) — that unblocks steps 5 and 6.
 - Phase 0 on the platforms' sites, then connect real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
   Listen to the first clips from a source with background music (the music check was only tried on stand-ins).
@@ -402,7 +406,7 @@ reused).
 | Quality score | Before render each edit gets a score with reasons and fixes: hook, promise → payoff, pacing, motion density, SFX coverage, captions, first frame; measured where it can be, judged against the knowledge base. Below the bar Claude fixes it first. (Not colour grading) |
 | Knowledge | A Knowledge page: the playbook as rules I can read, edit and add to (seeded from `.claude/skills/playbook`), a reference library (paste a link → downloaded and measured: hook, beats, cuts per second, motion, SFX timing; Claude drafts the lessons, I approve them) and lessons from my own results once posting. Every video's prompts use it. No fine-tuning |
 | Toolbox | A page listing skills, MCP servers, models, binaries and libraries: installed, version, licence, source, how often each was used. A weekly scout finds new repos, skills, MCPs and models and lists them with licence, what they'd add and risks (music advice, paid services); installing is my click |
-| Character | One recurring 2D outline mascot per page, Dani-style (simple body, blank or dot face): a vector rig (poses, gestures, walk, point, react) animated in the edit. Drawn, not generated, so the no-people rule for generated pictures stands |
+| Character | One recurring 2D outline mascot per page (each page its own), Dani-style (simple body, blank or dot face): a vector rig (poses, gestures, walk, point, react) animated in the edit. Drawn, not generated, so the no-people rule for generated pictures stands |
 | Sound | A real recorded SFX library (non-melodic, screened, licence noted), placed on the frame of every motion event |
 | Motion | A scene library drawn from the awesome-opus5-5-videos prompts, ported to seek-safe HyperFrames scenes |
 | Budget | kie.ai cap unchanged ($10 a day) |
@@ -499,4 +503,35 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
     faster when shorter, rebuilt for 1:1 on save, `get_edit`); the editor's *Scene* menu and fields in headless Chrome,
     desktop and phone width. Not tried: `add_library_scene` from a real chat; not heard by ear.
 
-Open: the Islamic page's name, niche and language; the mascots' look; which SFX source (licence).
+- [x] Step 7 — Reference measuring (2026-10-27): Knowledge → *References*. I paste a link (YouTube, TikTok, Instagram;
+  for every page or one), job `reference.measure` downloads it (yt-dlp, the research downloader) and measures it with
+  no model (`server/src/knowledge/measure.ts`): hard cuts (FFmpeg scene detection), every change on screen (a cut, or the
+  picture starting to move or moving much more than just before, from the frame-to-frame difference of a small grey
+  copy at 30 fps, judged against the video's own usual level so a talking head's small moves don't count), the longest
+  still stretch, how much of it moves, the sound-effect hits (the sound jumping 10 dB in 150 ms, found in what isn't
+  voice: Demucs splits it when something is said; without the clip tools only the pauses count), music's beat (8+ hits
+  on a steady grid are music, taken out of the hits and flagged), a bed under the voice, sounds on the changes (−0.12 to
+  +0.25 s, as the quality score counts), words a second, the first word, the first 3 s. Then job `reference.lessons`
+  (task `lessons`, one call with the numbers, every 2 s, what's said, the first frame and a 12-frame contact sheet,
+  against the live Knowledge rules) writes its read (hook, promise → payoff and its second, the beats, motion, sound,
+  cautions) and up to 4 lessons, which land as Suggested rules (`knowledge.referenceId`, source *From a reference*):
+  approving is my click. The card shows the numbers beside my own latest edits' (same measures from the edits:
+  changes per 10 s, longest still, sound on moves, first word), a strip (motion, changes, cuts, sounds, the payoff),
+  the read, the frames, the lessons and what's said; *Read it again*, *Try again*, *Delete* (approved lessons stay as
+  rules). Suggested rules link back to their reference. The chat gets `get_references` (for "make it like that one").
+  - Calibrated on three real videos (a 13 s sound-design explainer, a 63 s 2D explainer, a 50 s talking head with jump
+    cuts): cuts found on every jump cut, the hits checked on a waveform and spectrogram (the whooshes land where the
+    hits are), a music beat every 0.53 s caught and taken out, music beds flagged. Demucs takes ~1.2× the video's length
+    on this CPU. Tried on a test server: a real paste through measure and read (one Claude call; the first try returned
+    no JSON, the retry worked: the read was grounded in the numbers, 2 good lessons), a dead link (error, *Try again*),
+    the same link twice (not measured again), approve, delete, `get_references` called directly; the page in headless
+    Chrome at desktop and phone width (fixed: a badge too wide for a phone, the payoff label off the strip's edge).
+    Not tried: a TikTok or Instagram link; the chat calling `get_references`.
+  - Not done: the quality score doesn't use the references' numbers as its targets yet (they're beside my numbers on
+    the card); *Measure as a reference* from Research or a saved post on Ideas.
+
+Accounts (2026-10-27): each page gets its own mascot (not one shared). Once every buildable step is done, I go over
+each account with Claude (name, goal, niche, language, the mascot's look): steps 5 and 6 are built after that.
+
+Open: the account review (each page's name, goal, niche, language and its own mascot's look; the Islamic page's too);
+which SFX source (licence).

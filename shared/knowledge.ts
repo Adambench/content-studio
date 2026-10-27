@@ -1,6 +1,7 @@
 // Knowledge: the playbook as rules the creator can read, edit and add to. Seeded from the playbook skill's
 // references (one rule per `##` section); every background prompt and the chat read the live rules, so an edit here
-// changes what Claude does. Lessons from references and from results land here too (later steps of phase 12).
+// changes what Claude does. Lessons from references (shared/references.ts) land here as suggestions, and later ones
+// from my results.
 
 export const KNOWLEDGE_TOPICS = ['content-model', 'hooks', 'retention', 'packaging', 'sound-design', 'motion', 'platforms', 'halal', 'clipping'] as const;
 export type KnowledgeTopic = (typeof KNOWLEDGE_TOPICS)[number];
@@ -45,6 +46,8 @@ export type KnowledgeRule = {
   locked: boolean;
   /** Why Claude suggested it, for a suggested rule. */
   note: string;
+  /** The reference video it was drafted from. */
+  referenceId: string | null;
   position: number;
   createdAt: number;
   updatedAt: number;

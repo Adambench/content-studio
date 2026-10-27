@@ -2,10 +2,8 @@
 // numbers are measured (length, cuts per second from FFmpeg's scene detection, words per second from the captions or
 // Whisper); Claude looks at the transcript, four frames and those numbers and explains the hook, structure and edit,
 // and what the page can borrow. It never copies the words.
-import { execFile as execFileCb } from 'node:child_process';
 import { mkdir, readdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { eq } from 'drizzle-orm';
 import type { ResearchAnalysis } from '../../../shared/research';
 import { KIND_INFO, type Transcript } from '../../../shared/types';
@@ -16,7 +14,6 @@ import { waitForUsage } from '../claude/usage';
 import { run, youtubeCaptions, ytdlp } from '../campaigns/sources';
 import { config } from '../config';
 import { db, newId, now, schema } from '../db';
-import { requireBinary } from '../lib/bin';
 import { emit } from '../lib/events';
 import { extractAudio, extractFrames, probe } from '../lib/ffmpeg';
 import { badRequest } from '../lib/http';
@@ -26,9 +23,8 @@ import { getMedia, mediaPath, readTranscript, whisperInstalled } from '../servic
 import { getWorkspace } from '../services/pieces';
 import { emitResearch, getItem, updateItem } from './research';
 import { runTool } from '../compute/run';
+import { hardCuts } from '../knowledge/measure';
 import { downloadTiktok, tiktokPost } from './tiktok';
-
-const execFile = promisify(execFileCb);
 
 /** Which platform a pasted link is on, and the post's id there; null for anything else. */
 export function postOf(url: string): { platform: 'youtube' | 'tiktok' | 'instagram'; id: string; url: string } | null {
@@ -115,7 +111,8 @@ async function downloadFromEmbed(url: string, dir: string): Promise<{ file: stri
   return { file, info: { title: p.caption, channel: p.handle ? `@${p.handle}` : p.name, uploader_url: p.handle ? `https://www.tiktok.com/@${p.handle}` : undefined, view_count: p.views ?? undefined, timestamp: p.postedAt ? p.postedAt / 1000 : undefined } };
 }
 
-async function download(url: string, dir: string) {
+/** A post's video (720p at most) and what yt-dlp says about it, into `dir`. Also used for references. */
+export async function downloadPost(url: string, dir: string) {
   const y = ytdlp();
   const out = await run(
     y.bin,
@@ -134,7 +131,8 @@ async function download(url: string, dir: string) {
   return { file: join(dir, file), info };
 }
 
-async function whisper(file: string, dir: string): Promise<Transcript | null> {
+/** What's said in a video, by Whisper (null when it isn't installed). */
+export async function whisper(file: string, dir: string): Promise<Transcript | null> {
   if (!whisperInstalled()) return null;
   const wav = join(dir, 'audio.wav');
   const out = join(dir, 'transcript.json');
@@ -143,14 +141,6 @@ async function whisper(file: string, dir: string): Promise<Transcript | null> {
   return JSON.parse(await readFile(out, 'utf8')) as Transcript;
 }
 
-/** Hard cuts, from FFmpeg's scene detection on a small copy of the picture. */
-async function countCuts(file: string) {
-  const { stderr } = await execFile(requireBinary('ffmpeg'), ['-hide_banner', '-i', file, '-an', '-vf', "scale=320:-2,select='gt(scene,0.32)',showinfo", '-f', 'null', '-'], {
-    maxBuffer: 50 * 1024 * 1024,
-    timeout: 10 * 60_000,
-  });
-  return (stderr.match(/pts_time:/g) ?? []).length;
-}
 
 const ANALYSIS_SCHEMA = {
   type: 'object',
@@ -221,7 +211,7 @@ export async function analyseItem({ itemId }: { itemId: string }) {
       file = mediaPath(m);
       transcript = await readTranscript(m.id);
     } else {
-      ({ file, info } = await download(item.url, dir));
+      ({ file, info } = await downloadPost(item.url, dir));
       updateItem(itemId, {
         title: (info.title && !/^Video by /.test(info.title) ? info.title : info.description || item.title).slice(0, 500),
         views: info.view_count ?? item.views,
@@ -235,7 +225,9 @@ export async function analyseItem({ itemId }: { itemId: string }) {
     if (!p.hasVideo) throw new JobError('It has no picture to analyse.', { retry: false });
     if (!transcript && p.hasAudio) transcript = await whisper(file, dir).catch(() => null);
     const seconds = p.durationMs ? p.durationMs / 1000 : null;
-    const cuts = await countCuts(file).catch(() => null);
+    const cuts = await hardCuts(file)
+      .then((c) => c.length)
+      .catch(() => null);
     const words = transcript ? transcript.segments.flatMap((s) => s.words ?? []) : [];
     const wordCount = words.length || (transcript?.text.split(/\s+/).filter(Boolean).length ?? 0);
     const firstWords = (words.length ? words.filter((w) => w.start < 3.5).map((w) => w.word).join('') : (transcript?.segments[0]?.text ?? '')).replace(/\s+/g, ' ').trim().slice(0, 200);

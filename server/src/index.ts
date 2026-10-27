@@ -12,8 +12,10 @@ import { startScoutSchedule, stopScoutSchedule } from './toolbox/scout';
 import { finderRoutes } from './routes/finder';
 import { ideaRoutes } from './routes/ideas';
 import { knowledgeRoutes } from './routes/knowledge';
+import { referenceRoutes } from './routes/references';
 import { toolboxRoutes } from './routes/toolbox';
 import { syncKnowledge } from './knowledge/knowledge';
+import { sweepReferenceFolders } from './knowledge/references';
 import { purgeDeletedIdeas } from './ideas/ideas';
 import { stopAllSources } from './campaigns/sources';
 import { preparePlugin } from './claude/plugin';
@@ -54,6 +56,7 @@ try {
 } catch (err) {
   console.error('Knowledge: could not read the playbook', err);
 }
+void sweepReferenceFolders();
 
 const app = Fastify({
   logger: { level: config.isProd ? 'info' : 'warn' },
@@ -148,6 +151,7 @@ await app.register(aiRoutes);
 await app.register(voiceRoutes);
 await app.register(ideaRoutes);
 await app.register(knowledgeRoutes);
+await app.register(referenceRoutes);
 await app.register(toolboxRoutes);
 
 registerHandlers();

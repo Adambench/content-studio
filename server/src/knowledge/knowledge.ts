@@ -24,6 +24,7 @@ export function toRule(r: Row): KnowledgeRule {
     edited: !!r.seedKey && (r.title !== r.seedTitle || r.body !== r.seedBody),
     locked: isLocked(r),
     note: r.note,
+    referenceId: r.referenceId,
     position: r.position,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
@@ -107,7 +108,7 @@ function getRow(id: string) {
   return r;
 }
 
-export function createRule(input: { topic: KnowledgeTopic; title: string; body: string; source?: KnowledgeSource; status?: KnowledgeStatus; note?: string; workspaceId?: string | null }) {
+export function createRule(input: { topic: KnowledgeTopic; title: string; body: string; source?: KnowledgeSource; status?: KnowledgeStatus; note?: string; workspaceId?: string | null; referenceId?: string | null }) {
   const last = db.select({ n: max(schema.knowledge.position) }).from(schema.knowledge).where(eq(schema.knowledge.topic, input.topic)).get();
   const id = newId();
   db.insert(schema.knowledge)
@@ -120,6 +121,7 @@ export function createRule(input: { topic: KnowledgeTopic; title: string; body: 
       source: input.source ?? 'you',
       status: input.status ?? 'active',
       note: input.note?.trim() ?? '',
+      referenceId: input.referenceId ?? null,
       position: (last?.n ?? 0) + 1,
     })
     .run();
@@ -164,8 +166,10 @@ export function deleteRule(id: string) {
 /** A rule deleted by mistake, back (the app keeps the card until the undo toast goes). */
 export function restoreRule(rule: KnowledgeRule) {
   if (db.select({ id: schema.knowledge.id }).from(schema.knowledge).where(eq(schema.knowledge.id, rule.id)).get()) return updateRule(rule.id, { status: rule.status });
+  // Its reference may have gone meanwhile.
+  const referenceId = rule.referenceId && db.select({ id: schema.referenceVideos.id }).from(schema.referenceVideos).where(eq(schema.referenceVideos.id, rule.referenceId)).get() ? rule.referenceId : null;
   db.insert(schema.knowledge)
-    .values({ id: rule.id, workspaceId: rule.workspaceId, topic: rule.topic, title: rule.title, body: rule.body, source: rule.source, status: rule.status, note: rule.note, position: rule.position, createdAt: rule.createdAt })
+    .values({ id: rule.id, workspaceId: rule.workspaceId, topic: rule.topic, title: rule.title, body: rule.body, source: rule.source, status: rule.status, note: rule.note, referenceId, position: rule.position, createdAt: rule.createdAt })
     .run();
   emit({ type: 'changed', entity: 'knowledge', id: rule.id });
   return toRule(getRow(rule.id));

@@ -27,6 +27,7 @@ import { createIdea, getIdea, hasIdeas, listIdeas } from '../ideas/ideas';
 import { ok, safe, ToolError } from './tool-helpers';
 import { KNOWLEDGE_TOPIC_INFO, KNOWLEDGE_TOPICS } from '../../../shared/knowledge';
 import { createRule, knowledgeText } from '../knowledge/knowledge';
+import { referencesText } from '../knowledge/references';
 
 export const SERVER_NAME = 'studio';
 
@@ -108,6 +109,8 @@ export function toolLabel(fullName: string, input: Record<string, any>): string 
       return 'Read the Ideas canvas';
     case 'get_knowledge':
       return `Read the Knowledge rules${input.topics?.length ? `: ${input.topics.join(', ')}` : ''}`;
+    case 'get_references':
+      return 'Read the measured references';
     case 'suggest_rule':
       return `Suggested a rule: ${input.title ?? ''}`;
     case 'add_ideas':
@@ -661,6 +664,17 @@ export function buildTools(workspaceId: string) {
         `Topics: ${KNOWLEDGE_TOPICS.map((t) => `${t} (${KNOWLEDGE_TOPIC_INFO[t].hint})`).join('; ')}.`,
       { topics: z.array(z.enum(KNOWLEDGE_TOPICS)).min(1).max(KNOWLEDGE_TOPICS.length) },
       safe(async ({ topics }) => ok(knowledgeText(topics, workspaceId) || 'No rules on those topics yet.')),
+    ),
+
+    tool(
+      'get_references',
+      'The reference videos the creator measured on the Knowledge page (for every page or this one), newest first: each one’s measured numbers (changes on screen per 10 s, the longest still stretch, cuts, sound effects and how many land on a change, speech pace) and how it hooks, its promise and payoff, its beats, motion and sound. ' +
+        'Use it when they ask for a video like a reference, or to set a pace and a sound density. Learn the moves, never the words; never copy a reference’s music.',
+      {},
+      safe(async () => {
+        const list = referencesText(workspaceId);
+        return ok(list.length ? list.join('\n\n') : 'No references measured yet. The creator pastes links on the Knowledge page → References.');
+      }),
     ),
 
     tool(

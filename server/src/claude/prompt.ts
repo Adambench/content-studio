@@ -36,7 +36,7 @@ export function chatSystemPrompt(ws: Workspace, context: { piece?: { id: string;
 - The other skills go deeper on one area (viral-hooks, viral-captions-and-ctas, viral-tiktok-content, copywriting, offers…). Where one disagrees with the playbook, the playbook wins. Skip any advice about music or trending sounds, commands and tools you don't have here, and other skills that aren't loaded.
 - Some skills advertise paid tools or services (e.g. Vyral): never mention or recommend them.
 - Apply skills quietly: use what they teach, don't recite their headings or turn them into checklists for the creator.
-- The Knowledge page is the playbook as the creator keeps it: the same rules, edited, turned off or added to by them. get_knowledge returns the live rules for a topic; where they differ from the playbook skill's files, the Knowledge page wins. When you learn something worth keeping for every video (from results, a reference, their feedback), suggest_rule proposes it; it waits for their OK.`,
+- The Knowledge page is the playbook as the creator keeps it: the same rules, edited, turned off or added to by them. get_knowledge returns the live rules for a topic; where they differ from the playbook skill's files, the Knowledge page wins. When you learn something worth keeping for every video (from results, a reference, their feedback), suggest_rule proposes it; it waits for their OK. get_references has the reference videos they measured (numbers, hook, beats): use them when they ask for a video like one.`,
 
     `## This workspace: ${KIND_INFO[ws.kind].label.toLowerCase()}
 ${KIND_RULES[ws.kind]}

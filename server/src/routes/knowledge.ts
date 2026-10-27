@@ -37,6 +37,7 @@ export async function knowledgeRoutes(app: FastifyInstance) {
         source: z.enum(['playbook', 'you', 'claude', 'results', 'reference']),
         status,
         note: z.string().max(2000),
+        referenceId: z.string().max(64).nullable().default(null),
         position: z.number(),
         createdAt: z.number(),
       })

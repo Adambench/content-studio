@@ -24,6 +24,8 @@ const JOB_LABELS: Record<string, string> = {
   'research.sweep': 'Looking at what’s working in the niche',
   'research.brief': 'Writing the research brief',
   'research.analyse': 'Analysing a video',
+  'reference.measure': 'Measuring a reference',
+  'reference.lessons': 'Drafting lessons from a reference',
 };
 
 /**
