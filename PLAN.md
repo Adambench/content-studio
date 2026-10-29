@@ -54,7 +54,7 @@ clipping data; the three clipping pages start clean.
 | Audience | All Muslims |
 | Sources | The Quran, sahih hadith and well-known scholars, always cited on screen; no fatwas |
 | Mix | 1 a day: about half lecture clips, half originals. Modules: ideas & scripts, clipping, research |
-| Originals | I pick the ayah, hadith or story; Claude writes the script, with citations. AI voice: Kokoro, calm male |
+| Originals | I pick the ayah, hadith or story; Claude writes the script, with citations. My own voice (a voice memo); no AI voice |
 | Lecture clips | Only channels that allow clips (they say so, or Creative Commons), the speaker always named on screen. The lecture footage when it's strong, else the voice over scenery, picked per clip. Any music in the source removed |
 | Ayat | Arabic on screen with the English meaning; the voice speaks English only (no recitation audio) |
 | Look | Picked per video: Islamic geometry (gold on deep green or navy, calligraphy), night and lantern light, empty landscapes. Clean sentence captions |
@@ -77,9 +77,11 @@ proposal was tech, AI and apps).
 Both clipping pages: big word-by-word captions. Brands (2026-10-29): Claude drafts every page's brand (mascot, profile
 picture, palette, fonts, captions, voice, bio) and I approve or ask for changes. Drafts in
 `~/Documents/content-studio-brand/` (open `index.html`; rebuilt by `node src/build.mjs` there, mascots drawn in
-`src/rig.mjs` as one posed outline rig): personal brand amber on paper and ink (me simplified: beard, amber hoodie);
-Gentle Return emerald and gold (the Traveller: faceless, thobe and kufi, a lantern); Blox Moments cyan (Blok, a cube);
-Long Story Short orange on charcoal (Bub, a speech bubble). Once approved they go into the app: page colours, brand
+`src/rig.mjs` as one posed outline rig). Round 2 (2026-10-29): the Traveller (Gentle Return: faceless, thobe and kufi,
+a lantern) approved; personal brand (amber, paper and ink): A me as a character (beanie, pencil behind the ear, beard,
+loud brows) or B Stub, a pencil worn short by every attempt; Blox Moments (cyan): Blok, a classic blocky avatar
+(yellow head, simple smile, rigid block limbs); Long Story Short (orange on charcoal): A Mic, a podcast mic in
+headphones, or B Cass, a cassette whose reels are its eyes. Once approved they go into the app: page colours, brand
 guides, caption styles, and the mascot SVGs become step 5's rig.
 
 ### Halal (2026-10-15)
@@ -204,8 +206,8 @@ versionCode from the tag (`v1.2.3` → 10203).
 - Phase 12 step 7: Knowledge → References: paste 2–3 shorts I like (one TikTok, one Reel: only YouTube was tried),
   read the lessons and approve or dismiss them.
 - Account review: decided (*Pages (account review)*). Approve or change the brand drafts in
-  `~/Documents/content-studio-brand/index.html` (mascots, profile pictures, palettes, captions, Gentle Return's voice
-  from the 3 samples); that unblocks steps 5 and 6. Still open: the personal brand's name; the third clipping page.
+  `~/Documents/content-studio-brand/index.html` (round 2: pick the personal brand's and Long Story Short's mascot, OK
+  Blok); that unblocks steps 5 and 6. Still open: the personal brand's name; the third clipping page.
 - Phase 0 on the platforms' sites, then connect real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
   Listen to the first clips from a source with background music (the music check was only tried on stand-ins).
