@@ -27,6 +27,61 @@ businesses and what they are.
 2026-10-27: the pages to post on next are the personal brand (Muslim entrepreneurship, lifestyle) and a separate Islamic
 page; Vetto is dropped and clipping is paused (see *Phase 12*).
 
+### Pages (account review, 2026-10-27)
+
+Five pages: a personal brand, an Islamic page and three clipping pages (Whop clipping and Whop UGC campaigns). All in
+English, Instagram Reels first (TikTok and Shorts later; settings stay ready for them). Step 0 still wipes the old
+clipping data; the three clipping pages start clean.
+
+| Personal brand | |
+|---|---|
+| Name | Not decided |
+| Goal | Document now and share what I know: an entrepreneurial reputation first. The business comes later (a real model AI can't copy, not a vibe-coded app; maybe a startup, not decided) |
+| Topics | Halal business; lifestyle and discipline. Real experience: selling products, services, content/clipping |
+| Audience | Anyone, through a Muslim lens (how visible the lens is, and the call to action, are in my scripts) |
+| Scripts | I write them. Claude never rewrites my words; it offers 2–3 alternative first lines I can take or leave |
+| Format | Faceless. My voice (a voice memo), the AI voice as backup. Mascot explainers for lessons, my own faceless B-roll for lifestyle |
+| Tone | Changes with the video: calm for lessons, blunt for opinions, energetic, funny for the relatable ones |
+| Look | Paper / sketch (off-white paper, ink lines); clean sentence captions, a line at a time; accent picked by Claude |
+| Cadence | 3 a week |
+| References | Later, through Knowledge → References |
+
+| Islamic page | |
+|---|---|
+| Name | Gentle Return |
+| Goal | Reminders at scale: reach as many Muslims as possible, for the reward |
+| Topics | Reminders (akhirah, patience, tawakkul, the heart); stories of the prophets, sahaba, seerah and history (told, never shown); one ayah or hadith explained, names of Allah, du'as; practical deen (salah, habits; contested fiqh left out) |
+| Audience | All Muslims |
+| Sources | The Quran, sahih hadith and well-known scholars, always cited on screen; no fatwas |
+| Mix | 1 a day: about half lecture clips, half originals. Modules: ideas & scripts, clipping, research |
+| Originals | I pick the ayah, hadith or story; Claude writes the script, with citations. AI voice: Kokoro, calm male |
+| Lecture clips | Only channels that allow clips (they say so, or Creative Commons), the speaker always named on screen. The lecture footage when it's strong, else the voice over scenery, picked per clip. Any music in the source removed |
+| Ayat | Arabic on screen with the English meaning; the voice speaks English only (no recitation audio) |
+| Look | Picked per video: Islamic geometry (gold on deep green or navy, calligraphy), night and lantern light, empty landscapes. Clean sentence captions |
+| Mascot | A faceless figure (no eyes, no mouth). Never a prophet or companion |
+| References | Later |
+
+Clipping pages: one niche each, Whop campaigns only (nothing between campaigns), 1–2 clips a day each, every clip
+reviewed by me. UGC is faceless only (mascot, motion, screen recordings, AI voice). A third clipping page waits (my
+proposal was tech, AI and apps).
+
+| Blox Moments (Roblox) | |
+|---|---|
+| Does | Clips only: Roblox creators' videos and game campaigns' own footage. No UGC that needs me to play |
+| Out | Games built on gambling mechanics (spins, crates, betting), on top of the halal screen. Game music always removed |
+
+| Long Story Short (podcasts) | |
+|---|---|
+| Does | Clips from interview, life-story and business podcasts; faceless UGC campaigns when they fit (business, apps), acted by its mascot |
+
+Both clipping pages: big word-by-word captions. Brands (2026-10-29): Claude drafts every page's brand (mascot, profile
+picture, palette, fonts, captions, voice, bio) and I approve or ask for changes. Drafts in
+`~/Documents/content-studio-brand/` (open `index.html`; rebuilt by `node src/build.mjs` there, mascots drawn in
+`src/rig.mjs` as one posed outline rig): personal brand amber on paper and ink (me simplified: beard, amber hoodie);
+Gentle Return emerald and gold (the Traveller: faceless, thobe and kufi, a lantern); Blox Moments cyan (Blok, a cube);
+Long Story Short orange on charcoal (Bub, a speech bubble). Once approved they go into the app: page colours, brand
+guides, caption styles, and the mascot SVGs become step 5's rig.
+
 ### Halal (2026-10-15)
 
 | Topic | Decision |
@@ -148,8 +203,9 @@ versionCode from the tag (`v1.2.3` → 10203).
 - Phase 12 step 4: try a few library scenes in the editor (Overlays → Scene) and say which look off.
 - Phase 12 step 7: Knowledge → References: paste 2–3 shorts I like (one TikTok, one Reel: only YouTube was tried),
   read the lessons and approve or dismiss them.
-- After the last buildable step: go over each account with Claude (name, goal, niche, language, its own mascot's
-  look) — that unblocks steps 5 and 6.
+- Account review: decided (*Pages (account review)*). Approve or change the brand drafts in
+  `~/Documents/content-studio-brand/index.html` (mascots, profile pictures, palettes, captions, Gentle Return's voice
+  from the 3 samples); that unblocks steps 5 and 6. Still open: the personal brand's name; the third clipping page.
 - Phase 0 on the platforms' sites, then connect real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
   Listen to the first clips from a source with background music (the music check was only tried on stand-ins).
@@ -533,5 +589,5 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
 Accounts (2026-10-27): each page gets its own mascot (not one shared). Once every buildable step is done, I go over
 each account with Claude (name, goal, niche, language, the mascot's look): steps 5 and 6 are built after that.
 
-Open: the account review (each page's name, goal, niche, language and its own mascot's look; the Islamic page's too);
-which SFX source (licence).
+Open: my OK on the brand drafts (the account review itself is done, see *Pages (account review)*); which SFX source
+(licence).
