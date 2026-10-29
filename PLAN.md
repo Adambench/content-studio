@@ -77,13 +77,13 @@ proposal was tech, AI and apps).
 Both clipping pages: big word-by-word captions. Brands (2026-10-29): Claude drafts every page's brand (mascot, profile
 picture, palette, fonts, captions, voice, bio) and I approve or ask for changes. Drafts in
 `~/Documents/content-studio-brand/` (open `index.html`; rebuilt by `node src/build.mjs` there, mascots drawn in
-`src/rig.mjs` as one posed outline rig). Round 3 (2026-10-29): approved: the Traveller (Gentle Return: faceless,
-thobe and kufi, a lantern) and Blok (Blox Moments, cyan: a classic blocky avatar, yellow head, plain shirt, sideways
-cap). To pick: the personal brand (amber, paper and ink) is me as a faceless character (no eyes or mouth, like the
-page; beard, oversized amber hoodie) in 4 variations: A beanie and shades, B cap, aviators and a crossbody bag, C hood
-up and shades, D sharp (fade, aviators on the head, overshirt, watch, tasbih). Long Story Short (orange on charcoal):
-A Snip, scissors whose finger loops are its eyes (it cuts long stories short), B Tick, a stopwatch, C Pop, a popcorn
-bucket. Once approved they go into the app: page colours, brand
+`src/rig.mjs` as one posed outline rig). Approved (2026-10-29): the Traveller (Gentle Return: faceless, thobe and
+kufi, a lantern); Blok (Blox Moments, cyan: a classic blocky avatar, yellow head, plain shirt, sideways cap); the
+personal brand's mascot (amber, paper and ink): me faceless (no eyes or mouth, like the page), a cap with an amber
+patch, gold aviators, a full beard, the oversized amber hoodie and a crossbody bag. To pick: Long Story Short (orange
+on charcoal) is a human podcast host in big orange headphones, signature pose at the desk mic with the page name on
+the desk: A the host (curly hair, beard, hoodie), B the interviewer (glasses, sweater), C the hype host (high-top,
+track jacket). Once approved they go into the app: page colours, brand
 guides, caption styles, and the mascot SVGs become step 5's rig.
 
 ### Halal (2026-10-15)
@@ -208,8 +208,7 @@ versionCode from the tag (`v1.2.3` → 10203).
 - Phase 12 step 7: Knowledge → References: paste 2–3 shorts I like (one TikTok, one Reel: only YouTube was tried),
   read the lessons and approve or dismiss them.
 - Account review: decided (*Pages (account review)*). Approve or change the brand drafts in
-  `~/Documents/content-studio-brand/index.html` (round 3: pick the personal brand's variation, A–D, and Long Story
-  Short's mascot, A–C); that unblocks steps 5 and 6. Still open: the personal brand's name; the third clipping page.
+  `~/Documents/content-studio-brand/index.html` (left: Long Story Short's host, A–C); that unblocks steps 5 and 6. Still open: the personal brand's name; the third clipping page.
 - Phase 0 on the platforms' sites, then connect real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
   Listen to the first clips from a source with background music (the music check was only tried on stand-ins).
