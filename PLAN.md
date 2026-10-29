@@ -80,10 +80,12 @@ picture, palette, fonts, captions, voice, bio) and I approve or ask for changes.
 `src/rig.mjs` as one posed outline rig). Approved (2026-10-29): the Traveller (Gentle Return: faceless, thobe and
 kufi, a lantern); Blok (Blox Moments, cyan: a classic blocky avatar, yellow head, plain shirt, sideways cap); the
 personal brand's mascot (amber, paper and ink): me faceless (no eyes or mouth, like the page), a cap with an amber
-patch, gold aviators, a full beard, the oversized amber hoodie and a crossbody bag. To pick: Long Story Short (orange
-on charcoal) is a human podcast host in big orange headphones, signature pose at the desk mic with the page name on
-the desk: A the host (curly hair, beard, hoodie), B the interviewer (glasses, sweater), C the hype host (high-top,
-track jacket). Once approved they go into the app: page colours, brand
+patch, gold aviators, a full beard, the oversized amber hoodie and a crossbody bag. Long Story Short (orange on charcoal): a human podcast host (curly
+hair, short beard, orange hoodie, big orange headphones), signature pose at the desk mic with the page name on the
+desk. To pick (round 4): the personal brand's money cues (a growth-arrow patch on the cap, cash in the bag, a profile
+picture with a hand-drawn rising chart and $ behind him); Gentle Return's profile picture, flat with no gradients:
+A the open door with the Traveller silhouetted in its light, B the crescent he walks on, C a lantern mark with the
+Traveller inside. Once approved they go into the app: page colours, brand
 guides, caption styles, and the mascot SVGs become step 5's rig.
 
 ### Halal (2026-10-15)
@@ -208,7 +210,7 @@ versionCode from the tag (`v1.2.3` → 10203).
 - Phase 12 step 7: Knowledge → References: paste 2–3 shorts I like (one TikTok, one Reel: only YouTube was tried),
   read the lessons and approve or dismiss them.
 - Account review: decided (*Pages (account review)*). Approve or change the brand drafts in
-  `~/Documents/content-studio-brand/index.html` (left: Long Story Short's host, A–C); that unblocks steps 5 and 6. Still open: the personal brand's name; the third clipping page.
+  `~/Documents/content-studio-brand/index.html` (left: the personal brand's money cues and Gentle Return's profile picture); that unblocks steps 5 and 6. Still open: the personal brand's name; the third clipping page.
 - Phase 0 on the platforms' sites, then connect real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
   Listen to the first clips from a source with background music (the music check was only tried on stand-ins).
