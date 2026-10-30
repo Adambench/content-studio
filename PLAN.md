@@ -87,8 +87,15 @@ picture, palette, fonts, captions, voice, bio) and I approve or ask for changes.
 - Long Story Short (orange on charcoal): a human podcast host (curly hair, short beard, orange hoodie, big orange
   headphones); signature pose at the desk mic with the page name on the desk.
 
-Next they go into the app: page colours, brand
-guides, caption styles, and the mascot SVGs become step 5's rig.
+In the app (2026-10-30, a one-off script kept with the drafts, `src/to-app.mts`; database backed up to
+`backups/2026-10-30-before-brands.sqlite` first): four pages in this order: Personal brand (personal, amber), Gentle
+Return (personal kind for now, emerald; ideas, clipping, research), Blox Moments (the old Clipping page renamed, cyan)
+and Long Story Short (clipping, orange). Each has its niche, About (the bio), a brand guide (goal, topics, rules,
+look, palette with hex codes, fonts, captions, voice, mascot), five research keywords, the profile picture under
+Brand → Logos, and a video look for new edits: Personal brand *Clean* in ink with amber (dark words now get a paper
+box instead of a black one, so they read on footage and vanish on paper), Gentle Return *Subtitle* in cream with gold
+and no sound on every move, Blox Moments *Bold* in Fredoka with yellow, Long Story Short *Bold* in Montserrat with
+orange. No watermark yet (clipping campaigns often forbid one). The mascot SVGs become step 5's rig.
 
 ### Halal (2026-10-15)
 
@@ -203,16 +210,13 @@ versionCode from the tag (`v1.2.3` → 10203).
 
 ## Waiting on me
 
-- Phase 12 step 0: run the clipping cleanup (auto mode blocked the deletes):
-  `cd server && ../node_modules/.bin/tsx ../scripts/cleanup-clipping.mts` with the app idle; it backs the database up
-  first. Then delete `scripts/cleanup-clipping.mts`.
 - Phase 12 step 3: pick the recorded SFX source (licence must allow commercial use), and listen to a motion video with
   *Sound on every move* on.
 - Phase 12 step 4: try a few library scenes in the editor (Overlays → Scene) and say which look off.
 - Phase 12 step 7: Knowledge → References: paste 2–3 shorts I like (one TikTok, one Reel: only YouTube was tried),
   read the lessons and approve or dismiss them.
-- Account review and brands: done (*Pages (account review)*); steps 5 and 6 can start. Still open: the personal
-  brand's name; the third clipping page.
+- Account review and brands: done and in the app (*Pages (account review)*); steps 5 and 6 can start. Still open: the
+  personal brand's name; the third clipping page. Read each page's Settings → Brand guide once and fix anything off.
 
 - Phase 0 on the platforms' sites, then connect real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
@@ -479,7 +483,7 @@ Steps: to be detailed when building. Rough order: (0) clipping cleanup and Vetto
 model and quality score; (2) Toolbox and the weekly scout; (3) SFX library and frame-synced placement; (4) motion scene
 library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
 
-- [ ] Step 0 — Clipping cleanup and Vetto removal. Data only, no code. A script (backs the database up to
+- [x] Step 0 — Clipping cleanup and Vetto removal (run 2026-10-30, script deleted). Data only, no code. A script (backs the database up to
   `backups/2026-10-27-before-clipping-cleanup.sqlite` first) deletes the Clipping page's videos, files, renders and every
   campaign (sources, moments), finished jobs, the finder's state, the HyperFrames frame cache and source downloads, and
   the Vetto page; the empty Clipping page stays. Auto mode wouldn't run the deletes: on me (see *Waiting on me*).

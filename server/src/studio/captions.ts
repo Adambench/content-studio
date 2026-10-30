@@ -173,10 +173,12 @@ export function captionCss(preset: CaptionPreset, c: CaptionSettings, family: st
   text-transform: ${c.uppercase ? 'uppercase' : 'none'}; max-width: ${preset === 'subtitle' ? 88 : 84}%; }
 .cap .w { display: inline-block; margin: 0 ${['subtitle', 'clean', 'minimal', 'editorial', 'typewriter'].includes(preset) ? '0' : '0.07em'}; }`;
   const stroke = (em: number) => `-webkit-text-stroke: ${em}em #000; paint-order: stroke fill;`;
+  // Dark words (ink on a paper brand) sit on a paper box instead, so they read on footage too.
+  const box = isDark(c.color) ? 'rgba(242,236,223,.92)' : 'rgba(0,0,0,.62)';
   const extra: Record<CaptionPreset, string> = {
     bold: `.cap .w { ${stroke(0.16)} text-shadow: 0 0.05em 0.14em rgba(0,0,0,.55); }`,
     karaoke: `.cap .w { opacity: .5; ${stroke(0.12)} }`,
-    clean: `.cap .ci { background: rgba(0,0,0,.62); padding: .22em .55em; border-radius: .38em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }`,
+    clean: `.cap .ci { background: ${box}; padding: .22em .55em; border-radius: .38em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }`,
     subtitle: `.cap .ci { text-shadow: 0 2px 4px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.6); }`,
     pop: `.cap .w { ${stroke(0.14)} text-shadow: 0 0.06em 0.16em rgba(0,0,0,.6); color: ${c.color}; }`,
     box: `.cap .w { padding: 0 .14em; border-radius: .16em; text-shadow: 0 0.04em 0.12em rgba(0,0,0,.65); background-color: rgba(0,0,0,0); }`,
@@ -196,4 +198,10 @@ export function captionCss(preset: CaptionPreset, c: CaptionSettings, family: st
     arcade: `.cap .w { text-shadow: .12em .12em 0 #000; }`,
   };
   return `${base}\n${extra[preset]}`;
+}
+
+/** Perceived lightness of a #rrggbb colour below the middle. */
+function isDark(hex: string) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0);
+  return 0.299 * r + 0.587 * g + 0.114 * b < 110;
 }
