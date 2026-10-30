@@ -20,6 +20,7 @@ import { enqueue, JobError } from '../jobs/queue';
 import { clipToolsInstalled, toolsEnv } from '../services/cliptools';
 import { whisperInstalled, type UploadedFile } from '../services/media';
 import { campaignDir, emitCampaign, getCampaignRow, getSource, listSources, pagesOf, updateSource, type SourceRow } from './campaigns';
+import { isCreativeCommons, isLectureCampaign } from '../islamic/lectures';
 import { runTool } from '../compute/run';
 
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -109,6 +110,8 @@ type YtInfo = {
   live_status?: string;
   entries?: YtInfo[];
   subtitles?: Record<string, { ext: string; url: string }[]>;
+  /** YouTube's licence line, e.g. "Creative Commons Attribution license (reuse allowed)". */
+  license?: string;
   automatic_captions?: Record<string, { ext: string; url: string }[]>;
 };
 
@@ -244,9 +247,10 @@ function queueDownload(s: SourceRow, values: Partial<SourceRow> = {}) {
 
 /**
  * Get a source going: a single video is queued for download; a channel, playlist or Drive folder is listed instead
- * (its videos added as "not downloaded", to pick from) and the listing row itself goes away.
+ * (its videos added as "not downloaded", to pick from) and the listing row itself goes away. `confirmed`: my click on
+ * it (a lecture that isn't under Creative Commons waits for one).
  */
-export async function startSource(sourceId: string) {
+export async function startSource(sourceId: string, { confirmed = false }: { confirmed?: boolean } = {}) {
   const s = getSource(sourceId);
   // Its video was deleted (the campaign ended a while ago): download it again; the transcript is kept.
   if (s.status === 'ready' && !s.fileName && s.link) {
@@ -293,6 +297,18 @@ export async function startSource(sourceId: string) {
     // A channel link on Kick (or a /live page) opens the stream that's on now, which would never finish downloading.
     if (info.is_live || info.live_status === 'is_live' || info.live_status === 'is_upcoming')
       throw badRequest('That’s a live stream. Add the link of a past broadcast (its VOD) once it has ended.');
+    // A lecture is only clipped when its channel allows it: Creative Commons, or my click saying the channel does.
+    if (!confirmed && !isCreativeCommons(info.license) && isLectureCampaign(s.campaignId)) {
+      updateSource(s.id, {
+        status: 'found',
+        title: info.title ?? s.title,
+        durationMs: info.duration ? Math.round(info.duration * 1000) : s.durationMs,
+        creator: s.creator ?? info.channel ?? info.uploader ?? null,
+        uploadedAt: s.uploadedAt ?? uploadedAtOf(info),
+        detail: 'Not under Creative Commons: download it only if the channel says it allows clips.',
+      });
+      return [getSource(s.id)];
+    }
     queueDownload(s, {
       title: info.title ?? s.title,
       durationMs: info.duration ? Math.round(info.duration * 1000) : s.durationMs,

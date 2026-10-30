@@ -1,4 +1,4 @@
-import { BadgeDollarSign, CalendarDays, ChartColumn, Clapperboard, Inbox, Lightbulb, Palette, Telescope, type LucideIcon } from 'lucide-react';
+import { BadgeDollarSign, CalendarDays, ChartColumn, Clapperboard, Inbox, Lightbulb, Mic, Palette, Telescope, type LucideIcon } from 'lucide-react';
 import type { Workspace } from './types';
 
 export type NavItem = {
@@ -30,6 +30,8 @@ export function workspaceNav(ws: Pick<Workspace, 'kind' | 'modules' | 'inboxCoun
     : [
         has('ideas') && { to: 'ideas', label: 'Ideas', icon: Lightbulb },
         { to: 'board', label: 'Videos', icon: Clapperboard },
+        // An Islamic page clips lectures (its own campaign).
+        ws.kind === 'islamic' && has('clipping') && { to: 'lectures', label: 'Lectures', icon: Mic },
         { to: 'inbox', label: 'Inbox', icon: Inbox, badge: 'inbox' },
         has('research') && { to: 'research', label: 'Research', icon: Telescope },
         has('campaigns') && { to: '/campaigns', label: 'Campaigns', icon: BadgeDollarSign },

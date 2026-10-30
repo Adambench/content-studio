@@ -56,6 +56,8 @@ type Info = {
   solid?: string;
   /** It shows the words being said itself (an ayah's meaning): the captions step aside while it's on. */
   hidesCaptions?: boolean;
+  /** It can stay on longer than other scenes (a name tag held for a whole clip). */
+  maxSeconds?: number;
   /** The words a new one starts with in the editor. */
   example: Partial<SceneFill>;
   /** How long it wants to be with these words; shorter, everything runs faster to fit. */
@@ -1120,6 +1122,7 @@ export const SCENE_LIBRARY: Record<ScenePreset, Info> = {
     hint: 'A quiet name tag at the top for a lecture clip: who is speaking (a gold bar, the name, where it’s from). Keep it on for the whole clip',
     fields: { text: 'Who is speaking, e.g. Mufti Menk', sub: 'Where it’s from, e.g. the lecture or the channel (optional)' },
     example: { text: 'Mufti Menk', sub: 'Lecture: Hope in hard times' },
+    maxSeconds: 180,
     seconds: () => 5,
     build: (f, { W, H }, len): Built => {
       const size = fit(f.text, W * 0.62, 56, 34, 0.5);
@@ -1172,6 +1175,9 @@ function mascotSize(H: number, width: number, ground = 0.8) {
   return { mw, mh: r(mw * 1.19), feet: r(H * ground) };
 }
 
+/** The longest a scene can be: a library scene that's held (a name tag) may stay on longer than the rest. */
+export const sceneMaxSeconds = (preset: unknown) => (isScenePreset(preset) ? (SCENE_LIBRARY[preset].maxSeconds ?? SCENE_MAX_SECONDS) : SCENE_MAX_SECONDS);
+
 /** How long a library scene wants to be with these words. */
 export const sceneSeconds = (preset: ScenePreset, fill: SceneFill) => Math.min(SCENE_MAX_SECONDS, Math.round(SCENE_LIBRARY[preset].seconds(fill) * 10) / 10);
 
@@ -1183,7 +1189,7 @@ export function libraryScene(preset: ScenePreset, fill: Partial<SceneFill>, fram
   const info = SCENE_LIBRARY[preset];
   const f = normalizeFill(fill);
   const natural = sceneSeconds(preset, f);
-  const length = Math.min(SCENE_MAX_SECONDS, len ?? natural);
+  const length = Math.min(sceneMaxSeconds(preset), len ?? natural);
   const built = info.build(f, frame, Math.max(length, natural));
   const k = length < natural ? length / natural : 1;
   const tweens =

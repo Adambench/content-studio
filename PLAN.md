@@ -206,7 +206,7 @@ versionCode from the tag (`v1.2.3` → 10203).
    - [x] Step 5 — My own voice, cloned, for voiceovers
 10. **Hosted generation** — built 2026-10-19 against a stand-in (see *Phase 10 build plan*)
 11. **Ideas canvas and save-from-anywhere** — built 2026-10-21 (see *Phase 11*)
-12. **Viral quality, knowledge base, toolbox** — in progress: steps 1–4 and 7 built 2026-10-27 (step 3's recorded library waits on my pick), step 0 waits on me, steps 5–6 wait on the account review (see *Phase 12*)
+12. **Viral quality, knowledge base, toolbox** — built except step 3's recorded library (waits on my pick of a source): steps 0–7 done by 2026-10-30 (see *Phase 12*)
 
 ## Waiting on me
 
@@ -218,8 +218,15 @@ versionCode from the tag (`v1.2.3` → 10203).
 - Account review and brands: done and in the app (*Pages (account review)*); steps 5 and 6 can start. Still open: the
   personal brand's name; the third clipping page. Read each page's Settings → Brand guide once and fix anything off.
 - Phase 12 step 5: `npm run install-app`, then on each page Brand → Mascot pick its mascot (Personal brand: the founder,
-  Gentle Return: the Traveller, Blox Moments: Blok, Long Story Short: the host). Then ask Claude in a video's chat for a
-  mascot scene and look at it.
+  Gentle Return: the Traveller, Blox Moments: Blok, Long Story Short: the host; the clipping pages' Brand tab was
+  missing until 2026-10-30). Then ask Claude in a video's chat for a mascot scene and look at it.
+- Phase 12 step 6: Gentle Return → Settings: kind *Islamic page*, then *Use the Islamic page stages* (adds Record,
+  Clips making and Review). Lectures (sidebar): confirm the campaign once, paste a lecture (a Creative Commons one
+  downloads by itself; any other waits for *Get*, which means I checked the channel allows clips) and look at the
+  clips in Review: the speaker tag's name is the channel's, fix it where the channel isn't the speaker. An original:
+  ask Claude for a script on an ayah, record it in the editor (Sound → Your voice), ask Claude to build the video.
+  Check each ayah, translation and hadith before posting. The translation is Saheeh International from Tanzil, free
+  for non-commercial use: if the page is ever monetised, ask its publisher or switch translation.
 
 - Phase 0 on the platforms' sites, then connect real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
@@ -597,6 +604,41 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
     the timeline seeked in headless Chrome (each joint lands on its pose); Brand → Mascot at desktop and phone width,
     picking one and *No mascot* saved. Not tried: Claude writing a mascot scene from a real chat; a full render with
     sound.
+- [x] Step 6 — The Islamic page (2026-10-30):
+  - **Kind** *Islamic page* (`islamic`: ideas, clipping, research; stages Idea → Script → Record → Edit → Clips making
+    → Review → Ready). Claude's rules for it: only the Quran, sahih hadith and known scholars, cited on screen and in
+    the caption; ayat read with `get_quran` and shown with the ayah scene; no fatwas or contested fiqh; no prophet,
+    companion or named person shown; the creator's own voice only (`write_format_video` and computer-voice
+    voiceovers refused there); calm look.
+  - **Arabic**: Noto Naskh Arabic bundled (Fontsource, OFL; Arabic, Latin, Latin Extended), next in every font stack
+    so Arabic letters never fall back to a system font. Scenes may set `direction`.
+  - **The Quran text** (`server/src/islamic/quran.ts`): Tanzil's Simple text with its marks and the Saheeh
+    International translation, downloaded once into `quran/` in the data folder with their notices, checked complete
+    (6,236 ayat, 114 surahs). `lookupAyat("94:5-6")`: verbatim Arabic (the basmala taken off a first ayah, ayah
+    numbers in end marks when there are several), meaning, citation (`Ash-Sharh 94:5–6`); at most 6 ayat and 600
+    characters a card. `GET /api/quran?ref=`, Claude's `get_quran`.
+  - **Scenes**: *Ayah* (deep green, the Arabic in a gold arch that draws itself, stars, the meaning in Playfair italic,
+    the reference in gold capitals; only the reference is given, the rest is filled from the Quran text, Claude can't
+    pass Arabic), *Hadith* (navy, a fine gold frame, who said it, the words in turn, collection and number; Arabic only
+    if I paste it) and *Speaker* (a name tag at the top, held for a whole clip, up to 180 s). Ayah and hadith hide
+    the captions while they're on (no meaning twice). The editor looks an ayah up as I type its reference.
+  - **My voice**: the editor's Sound → *Your voice*: record, upload or pick a recording of the script; it's kept with
+    the video (`POST /api/pieces/:id/recording`, never an idea card) and becomes the voiceover, its words captioned.
+    Claude sees the video's recordings in `get_edit` and can set one as the voiceover. Browser recordings (WebM with
+    no length in the header) get their length by decoding.
+  - **Lecture clips** (`server/src/islamic/lectures.ts`): the page's *Lectures* opens its own campaign (origin
+    business, made and read the first time, waits for my OK) with the lecture rules as its brief; the clipping
+    pipeline does the rest (download, transcript, moments, music removed, Review). A pasted video downloads by itself
+    only under Creative Commons (yt-dlp's licence line); otherwise it waits as *not downloaded* with a note until I
+    click *Get*. Every clip gets the speaker tag (the channel's name, the lecture's title) after its hook card.
+  - Fixed on the way: scene text was cut at 300 characters (a long ayah lost its end).
+  - Tried on a test copy: lookups (94:5-6, 2:255, 112:1-4, first ayat, too long, too many, out of range), stills of
+    every new scene through the real overlay render (short and long ayat, hadith, speaker held 45 s), the probe on a
+    header-less WebM, the licence gate on a real standard and a real Creative Commons lecture, the lecture campaign
+    made once. Not tried: a lecture through to a clip in Review; Claude's `get_quran` and ayah scene from a real
+    chat; the editor's *Your voice* and ayah look-up clicked in a browser (built, typechecked); recording on the phone
+    app; a full render with a recorded voiceover.
+
 - [x] Step 7 — Reference measuring (2026-10-27): Knowledge → *References*. I paste a link (YouTube, TikTok, Instagram;
   for every page or one), job `reference.measure` downloads it (yt-dlp, the research downloader) and measures it with
   no model (`server/src/knowledge/measure.ts`): hard cuts (FFmpeg scene detection), every change on screen (a cut, or the

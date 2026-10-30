@@ -219,7 +219,7 @@ export function WorkspaceSettingsPage() {
                 </Button>
                 {!stagesMatchKind && (
                   <Button variant="ghost" size="sm" onClick={() => setStages(presetStages)}>
-                    Use the {KIND_INFO[kind].label.toLowerCase()} stages
+                    Use the {kind === 'islamic' ? KIND_INFO[kind].label : KIND_INFO[kind].label.toLowerCase()} stages
                   </Button>
                 )}
               </div>

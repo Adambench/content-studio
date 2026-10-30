@@ -100,6 +100,19 @@ export const CLIPPING_STAGES: Stage[] = [
   { id: 'posted', name: 'Posted' },
 ];
 
+/** An Islamic page's board: originals (idea → script → record → edit) and lecture clips (made → reviewed) meet in Ready. */
+export const ISLAMIC_STAGES: Stage[] = [
+  { id: 'idea', name: 'Idea' },
+  { id: 'script', name: 'Script' },
+  { id: 'film', name: 'Record' },
+  { id: 'edit', name: 'Edit' },
+  { id: 'making', name: 'Clips making' },
+  { id: 'review', name: 'Review' },
+  { id: 'ready', name: 'Ready' },
+  { id: 'scheduled', name: 'Scheduled' },
+  { id: 'posted', name: 'Posted' },
+];
+
 /** Where clips wait for my yes or no (Today lists them). */
 export const REVIEW_STAGE = 'review';
 
@@ -133,7 +146,7 @@ export const KIND_PRESETS: Record<WorkspaceKind, { modules: ModuleId[]; stages: 
   personal: { modules: ['ideas', 'filming', 'grading', 'research'], stages: DEFAULT_STAGES },
   business: { modules: ['ideas', 'filming', 'grading', 'campaigns', 'research'], stages: DEFAULT_STAGES },
   clipping: { modules: ['campaigns', 'clipping', 'research'], stages: CLIPPING_STAGES },
-  islamic: { modules: ['ideas', 'clipping', 'research'], stages: DEFAULT_STAGES },
+  islamic: { modules: ['ideas', 'clipping', 'research'], stages: ISLAMIC_STAGES },
 };
 
 /** Known modules only, in the usual order. */

@@ -4,8 +4,8 @@
 import { bundledFamily } from './fonts';
 import { BROLL_LAYOUTS, CLIP_MOTIONS, FILTER_LOOKS, NO_TEXTURES, OVERLAY_ANIMATIONS, type BrollLayout, type ClipMotion, type FilterLook, type OverlayAnimation, type Textures } from './looks';
 import { normalizeRecipe, type Recipe } from './recipe';
-import { normalizeScene, SCENE_MAX_SECONDS, type SceneSpec } from './scene';
-import { refitScene } from './scene-library';
+import { normalizeScene, type SceneSpec } from './scene';
+import { refitScene, sceneMaxSeconds } from './scene-library';
 import { builtinSfxId } from './sfx';
 import type { Transcript } from './types';
 
@@ -770,7 +770,7 @@ function normalizeOverlay(input: Loose): EditOverlay | null {
       };
     }
     case 'scene': {
-      const end = Math.min(base.end, base.start + SCENE_MAX_SECONDS);
+      const end = Math.min(base.end, base.start + sceneMaxSeconds(input.preset));
       return { ...base, end, type: 'scene', ...normalizeScene(input, end - base.start) };
     }
     case 'broll':

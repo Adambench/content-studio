@@ -13,6 +13,7 @@ import { badRequest } from '../lib/http';
 import { getSetting, setSetting } from '../lib/settings';
 import { enqueue } from '../jobs/queue';
 import { getWorkspace } from '../services/pieces';
+import { lectureCampaign } from '../islamic/lectures';
 import { inboxWhere } from '../services/inbox';
 
 const stageSchema = z.object({ id: z.string().min(1).max(40), name: z.string().trim().min(1).max(40) });
@@ -79,6 +80,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
     ...getWorkspace(req.params.id),
     pendingEdits: pendingEdits(req.params.id),
   }));
+
+  // An Islamic page's lecture clips: a campaign of its own, made the first time it's opened.
+  app.post<{ Params: { id: string } }>('/api/workspaces/:id/lectures', async (req) => ({ campaignId: lectureCampaign(req.params.id) }));
 
   app.patch<{ Params: { id: string } }>('/api/workspaces/:id', async (req) => {
     const ws = getWorkspace(req.params.id);

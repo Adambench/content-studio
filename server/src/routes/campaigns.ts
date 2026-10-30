@@ -168,7 +168,7 @@ export async function campaignRoutes(app: FastifyInstance) {
   // Download a source that's only listed (or try again after a failure); a channel or folder lists its videos.
   app.post('/api/sources/:id/start', async (req) => {
     const s = getSource(idParam.parse(req.params).id);
-    await startSource(s.id);
+    await startSource(s.id, { confirmed: true });
     return getCampaignDetail(s.campaignId);
   });
 

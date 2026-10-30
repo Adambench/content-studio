@@ -6,6 +6,7 @@ import { isApp } from '@/lib/native';
 import { AccountsPage } from '@/pages/AccountsPage';
 import { AnalyticsPage } from '@/pages/AnalyticsPage';
 import { AssetsPage } from '@/pages/AssetsPage';
+import { LecturesRedirect } from '@/pages/LecturesRedirect';
 import { BoardPage } from '@/pages/BoardPage';
 import { CalendarPage } from '@/pages/CalendarPage';
 import { CampaignPage } from '@/pages/CampaignPage';
@@ -65,6 +66,7 @@ export const router = createBrowserRouter([
               { path: 'accounts', element: <AccountsPage /> },
               { path: 'analytics', element: <AnalyticsPage /> },
               { path: 'research', element: <ResearchPage /> },
+              { path: 'lectures', element: <LecturesRedirect /> },
               { path: 'settings', element: <WorkspaceSettingsPage /> },
             ],
           },

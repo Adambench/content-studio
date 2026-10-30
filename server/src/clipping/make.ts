@@ -27,6 +27,7 @@ import { clipToolsInstalled } from '../services/cliptools';
 import { adoptFile, deleteMedia, whisperInstalled } from '../services/media';
 import { createPiece, getWorkspace } from '../services/pieces';
 import { applyLook, lookTag, pickLook } from '../studio/clip-looks';
+import { isLectureCampaign, speakerTag } from '../islamic/lectures';
 import { createEdit, saveEditVersion } from '../studio/edits';
 import { applyFocusSpans, focusSpans, scanSpeakers } from '../studio/reframe';
 import { cancelRender, queueRender } from '../studio/render';
@@ -310,6 +311,9 @@ export async function makeClip({ momentId }: { momentId: string }) {
     const look = pickLook(ws.id);
     const total = editDuration({ ...spec, clips });
     const next = applyLook({ ...spec, clips }, look, m.hookCard, total);
+    // A lecture names its speaker on screen for the whole clip.
+    const speaker = isLectureCampaign(c.id) ? speakerTag(next, s, m.hookCard ? 2.5 : 0, total) : null;
+    if (speaker) next.overlays.push(speaker);
     saveEditVersion(edit.id, { author: 'claude', message: `Clip of ${at}: tightened, hook card, captions${lookTag(look)}`, spec: next });
 
     // 8. Render; finishing moves it to Review.

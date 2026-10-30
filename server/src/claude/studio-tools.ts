@@ -38,7 +38,7 @@ import { QUALITY_BAR, qualityText } from '../../../shared/quality';
 import { previewOverlay } from '../studio/preview';
 import { normalizeScene, SCENE_FONTS, SCENE_MAX_ELEMENTS, SCENE_MAX_SECONDS, SCENE_MAX_TWEENS, SCENE_SOUNDS } from '../../../shared/scene';
 import { MASCOT_POSES, MASCOTS, POSE_INFO } from '../../../shared/mascots';
-import { libraryScene, SCENE_LIBRARY, SCENE_PRESETS, sceneSeconds, type SceneFill } from '../../../shared/scene-library';
+import { libraryScene, SCENE_LIBRARY, SCENE_PRESETS, sceneMaxSeconds, sceneSeconds, type SceneFill } from '../../../shared/scene-library';
 import { MAX_AYAT } from '../../../shared/quran';
 import { lookupAyat, TRANSLATION } from '../islamic/quran';
 import { CHARACTERS, normalizeRecipe, RECIPE_INFO, recipeNeedsBuild, VOICES } from '../../../shared/recipe';
@@ -484,7 +484,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         preset: z.enum(SCENE_PRESETS),
         sceneId: z.string().optional().describe('Change this library scene (its words, times or background) instead of adding one'),
         start: z.number().min(0).describe('Seconds on the finished video'),
-        end: z.number().optional().describe(`Leave it out for the length it wants with these words; at most ${SCENE_MAX_SECONDS} s after start. Shorter than it wants, it plays faster`),
+        end: z.number().optional().describe(`Leave it out for the length it wants with these words; at most ${SCENE_MAX_SECONDS} s after start (speaker: the whole clip, up to 180 s). Shorter than it wants, it plays faster`),
         text: z.string().max(300).optional(),
         sub: z.string().max(200).optional(),
         items: z.array(z.string().max(120)).max(8).optional(),
@@ -507,7 +507,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         const info = SCENE_LIBRARY[preset];
         const missing = (Object.keys(info.fields).filter((k) => k !== 'arabic') as ('text' | 'sub' | 'items')[]).filter((k) => !/optional/.test(info.fields[k] ?? '') && !(k === 'items' ? fill.items.length : fill[k].trim()));
         if (missing.length) throw new ToolError(`${info.label} needs ${missing.map((k) => `${k} (${info.fields[k]})`).join(' and ')}.`);
-        const stop = Math.min(end ?? start + sceneSeconds(preset, fill), start + SCENE_MAX_SECONDS);
+        const stop = Math.min(end ?? start + sceneSeconds(preset, fill), start + sceneMaxSeconds(preset));
         if (stop <= start) throw new ToolError('end must be after start.');
         const bg = background ?? (old?.type === 'scene' ? old.background : undefined);
         const scene = libraryScene(preset, fill, { W: EDIT_FORMATS[spec.format].width, H: EDIT_FORMATS[spec.format].height, color: spec.captions.highlight }, stop - start, bg);
