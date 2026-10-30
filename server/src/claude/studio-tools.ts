@@ -30,6 +30,7 @@ import { config } from '../config';
 import { db, newId, schema } from '../db';
 import { extractFrames } from '../lib/ffmpeg';
 import { formatTime, mediaPath } from '../services/media';
+import { getWorkspace } from '../services/pieces';
 import { createEdit, findEditForPiece, listEditVersions, listRenders, saveEditVersion, specMedia, specTranscripts } from '../studio/edits';
 import { queueRender } from '../studio/render';
 import { checkEdit } from '../studio/quality';
@@ -37,7 +38,9 @@ import { QUALITY_BAR, qualityText } from '../../../shared/quality';
 import { previewOverlay } from '../studio/preview';
 import { normalizeScene, SCENE_FONTS, SCENE_MAX_ELEMENTS, SCENE_MAX_SECONDS, SCENE_MAX_TWEENS, SCENE_SOUNDS } from '../../../shared/scene';
 import { MASCOT_POSES, MASCOTS, POSE_INFO } from '../../../shared/mascots';
-import { libraryScene, SCENE_LIBRARY, SCENE_PRESETS, sceneSeconds } from '../../../shared/scene-library';
+import { libraryScene, SCENE_LIBRARY, SCENE_PRESETS, sceneSeconds, type SceneFill } from '../../../shared/scene-library';
+import { MAX_AYAT } from '../../../shared/quran';
+import { lookupAyat, TRANSLATION } from '../islamic/quran';
 import { CHARACTERS, normalizeRecipe, RECIPE_INFO, recipeNeedsBuild, VOICES } from '../../../shared/recipe';
 import { ttsInstalled } from '../services/tts';
 import { clipToolsInstalled } from '../services/cliptools';
@@ -53,6 +56,8 @@ import { GEN_ASPECTS, GEN_PURPOSE_INFO, GEN_PURPOSES, NO_LIVING_BEINGS } from '.
 import { workerFor } from '../compute/workers';
 import { generationSettings, queueGeneration } from '../studio/generate';
 import { ok, safe, ToolError } from './tool-helpers';
+
+const OWN_VOICE = 'This page uses only the creator’s own recorded voice, never a computer voice: write the script for them to record (the editor’s Sound → Your voice), then set their recording as the voiceover.';
 
 const clipShape = z.object({
   id: z.string().optional().describe('Keep the id when changing an existing clip'),
@@ -138,6 +143,8 @@ export function studioToolLabel(name: string, input: Record<string, any>): strin
       return `Added a scene: ${SCENE_LIBRARY[input.preset as keyof typeof SCENE_LIBRARY]?.label ?? 'from the library'}`;
     case 'view_overlay':
       return 'Looked at a motion graphic';
+    case 'get_quran':
+      return `Looked up ${typeof input.ref === 'string' ? input.ref : 'an ayah'} in the Quran`;
     case 'write_format_video':
       return input.kind ? `Wrote a ${RECIPE_INFO[input.kind as keyof typeof RECIPE_INFO]?.label.toLowerCase() ?? 'format'} video` : 'Wrote a format video';
     case 'list_assets':
@@ -159,6 +166,17 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
     ownPiece(pieceId);
     return findEditForPiece(pieceId);
   };
+  // An Islamic page speaks only in the creator's own recorded voice.
+  const ownVoiceOnly = () => getWorkspace(workspaceId).kind === 'islamic';
+  /** The creator's voice memos for a video: what a voiceover can be. */
+  const recordings = (pieceId: string) =>
+    db
+      .select()
+      .from(schema.media)
+      .where(and(eq(schema.media.pieceId, pieceId), eq(schema.media.workspaceId, workspaceId), eq(schema.media.source, 'capture')))
+      .all()
+      .filter((m) => m.kind === 'audio' && !m.assetType)
+      .map((m) => ({ id: m.id, name: m.originalName, seconds: m.durationMs ? m.durationMs / 1000 : undefined, said: m.transcriptText ? m.transcriptText.slice(0, 400) : m.transcriptStatus === 'done' ? '' : `(transcript ${m.transcriptStatus})` }));
 
   async function describe(pieceId: string) {
     const edit = editFor(pieceId);
@@ -169,7 +187,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         .where(and(eq(schema.media.pieceId, pieceId), eq(schema.media.workspaceId, workspaceId)))
         .all()
         .filter((m) => !m.assetType && m.source !== 'render' && (m.kind === 'video' || m.kind === 'image'));
-      return { exists: false, note: 'No edit yet. update_edit (or tighten_edit) starts one from the piece’s footage.', footage: footage.map((m) => ({ id: m.id, name: m.originalName, kind: m.kind, seconds: m.durationMs ? m.durationMs / 1000 : undefined })) };
+      return { exists: false, note: 'No edit yet. update_edit (or tighten_edit) starts one from the piece’s footage.', footage: footage.map((m) => ({ id: m.id, name: m.originalName, kind: m.kind, seconds: m.durationMs ? m.durationMs / 1000 : undefined })), recordings: recordings(pieceId) };
     }
     const spec = normalizeEdit(edit.working);
     const rows = specMedia(spec);
@@ -199,6 +217,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
       // A library scene is built from its words, so its design isn't worth reading.
       overlays: spec.overlays.map((o) => (o.type === 'scene' && o.preset ? { id: o.id, type: o.type, start: o.start, end: o.end, name: o.name, preset: o.preset, fill: o.fill, background: o.background } : o)),
       audio: spec.audio,
+      recordings: recordings(pieceId),
       soundsOnMoves: spec.audio.autoSfx ? motionSounds(spec).length : undefined,
       grade: spec.grade,
       watermark: spec.watermark,
@@ -252,6 +271,11 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
             enhanceVoice: z.boolean().optional(),
             normalize: z.boolean().optional(),
             autoSfx: z.boolean().optional().describe('A sound effect on the frame of every move (scene tweens, overlay entrances, snap zooms) that has none. On by default; off for a serious or religious video'),
+            voiceover: z
+              .object({ mediaId: z.string(), volume: z.number().min(0).max(2).optional() })
+              .nullable()
+              .optional()
+              .describe('Narration from the start: the creator’s recording of the script (get_edit lists the video’s recordings), its words captioned. Build the clips and scenes to its length. null takes it off'),
             sfx: z
               .array(
                 z.object({
@@ -319,6 +343,12 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
           watermark: { ...spec.watermark, ...watermark },
           story: { ...spec.story, ...story },
         };
+        const vo = next.audio.voiceover;
+        if (vo && vo.mediaId !== spec.audio.voiceover?.mediaId) {
+          const m = db.select().from(schema.media).where(and(eq(schema.media.id, vo.mediaId), eq(schema.media.workspaceId, workspaceId))).get();
+          if (!m || m.kind !== 'audio' || m.assetType || (m.source !== 'capture' && m.source !== 'tts')) throw new ToolError('The voiceover must be one of the creator’s recordings (get_edit lists them).');
+          if (m.source === 'tts' && ownVoiceOnly()) throw new ToolError(OWN_VOICE);
+        }
         const { version, unchanged } = saveEditVersion(edit.id, { author: 'claude', message, spec: next });
         if (unchanged) return ok('No changes — the edit already looked like that.');
         const saved = normalizeEdit(version.spec);
@@ -446,8 +476,9 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
       'add_library_scene',
       'Put a ready-made motion scene from the library on a piece’s video, filled with your words and built for its frame and accent colour, or change one (pass its sceneId). ' +
         'Each is a designed animation with a sound on every move; when each fits and what its words are for: get_arsenal kind "scene". The library and the words each takes: ' +
-        SCENE_PRESETS.map((p) => `${p} (${Object.keys(SCENE_LIBRARY[p].fields).join(', ')})`).join(', ') +
-        '. It’s built again whenever the edit changes, so retime it with update_edit like any overlay. To redesign one by hand, write_scene with its sceneId (it becomes a custom scene). Check it with view_overlay.',
+        SCENE_PRESETS.map((p) => `${p} (${Object.keys(SCENE_LIBRARY[p].fields).filter((k) => k !== 'arabic').join(', ')})`).join(', ') +
+        '. It’s built again whenever the edit changes, so retime it with update_edit like any overlay. To redesign one by hand, write_scene with its sceneId (it becomes a custom scene). Check it with view_overlay. ' +
+        'ayah: give only sub, the reference (e.g. 94:5-6); its Arabic and meaning are filled in from the Quran text and its translation (get_quran shows them first). You never write Arabic: no scene takes Arabic from you.',
       {
         pieceId: z.string(),
         preset: z.enum(SCENE_PRESETS),
@@ -465,9 +496,16 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         const old = sceneId ? spec.overlays.find((o) => o.id === sceneId && o.type === 'scene') : undefined;
         if (sceneId && (!old || old.type !== 'scene' || !old.preset)) throw new ToolError(`There’s no library scene with id ${sceneId} on this edit (a custom one is changed with write_scene).`);
         const before = old?.type === 'scene' ? old.fill : undefined;
-        const fill = { text: text ?? before?.text ?? '', sub: sub ?? before?.sub ?? '', items: items ?? before?.items ?? [] };
+        // Arabic only ever comes from the Quran text (an ayah, by its reference) or from the creator, never from you.
+        let fill: SceneFill = { text: text ?? before?.text ?? '', sub: sub ?? before?.sub ?? '', items: items ?? before?.items ?? [], ...(before?.arabic && old?.type === 'scene' && old.preset === preset ? { arabic: before.arabic } : {}) };
+        if (preset === 'ayah') {
+          const ayah = await lookupAyat(fill.sub || fill.text).catch((err) => {
+            throw new ToolError(err instanceof Error ? err.message : String(err));
+          });
+          fill = { text: ayah.meaning, sub: ayah.citation, items: [], arabic: ayah.arabic };
+        }
         const info = SCENE_LIBRARY[preset];
-        const missing = (Object.keys(info.fields) as ('text' | 'sub' | 'items')[]).filter((k) => !/optional/.test(info.fields[k] ?? '') && !(k === 'items' ? fill.items.length : fill[k].trim()));
+        const missing = (Object.keys(info.fields).filter((k) => k !== 'arabic') as ('text' | 'sub' | 'items')[]).filter((k) => !/optional/.test(info.fields[k] ?? '') && !(k === 'items' ? fill.items.length : fill[k].trim()));
         if (missing.length) throw new ToolError(`${info.label} needs ${missing.map((k) => `${k} (${info.fields[k]})`).join(' and ')}.`);
         const stop = Math.min(end ?? start + sceneSeconds(preset, fill), start + SCENE_MAX_SECONDS);
         if (stop <= start) throw new ToolError('end must be after start.');
@@ -477,7 +515,20 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         const overlay = { id, type: 'scene' as const, start, end: stop, ...scene };
         const next: EditSpec = { ...spec, overlays: [...spec.overlays.filter((o) => o.id !== id), overlay].sort((a, b) => a.start - b.start) };
         const { version } = saveEditVersion(edit.id, { author: 'claude', message: `${sceneId ? 'Changed' : 'Added'} the scene “${info.label}”`, spec: next });
-        return ok(`Saved v${version.number}: scene ${id} (${info.label}), ${Math.round((stop - start) * 10) / 10} s from ${start} s${stop - start < sceneSeconds(preset, fill) - 0.05 ? `, faster than its own ${sceneSeconds(preset, fill)} s` : ''}. Check it with view_overlay.`);
+        const shown = preset === 'ayah' ? ` It shows ${fill.sub} (${TRANSLATION}): “${fill.text}” Tell the creator to check it before posting.` : '';
+        return ok(`Saved v${version.number}: scene ${id} (${info.label}), ${Math.round((stop - start) * 10) / 10} s from ${start} s${stop - start < sceneSeconds(preset, fill) - 0.05 ? `, faster than its own ${sceneSeconds(preset, fill)} s` : ''}.${shown} Check it with view_overlay.`);
+      }),
+    ),
+
+    tool(
+      'get_quran',
+      `An ayah or a few (up to ${MAX_AYAT}) exactly as the Quran text (Tanzil) and the ${TRANSLATION} translation have them, with the surah's name: read it before you quote an ayah in a script, a caption or a scene. Quote the meaning as it is here.`,
+      { ref: z.string().describe('surah:ayah or surah:from-to, e.g. 94:5-6') },
+      safe(async ({ ref }) => {
+        const p = await lookupAyat(ref).catch((err) => {
+          throw new ToolError(err instanceof Error ? err.message : String(err));
+        });
+        return ok(`${p.citation} (Surah ${p.name}, “${p.english}”). Arabic: ${p.arabic}\nMeaning (${p.translation}): ${p.meaning}\nOn screen: add_library_scene preset ayah with sub "${p.citation.replace(/–/g, '-')}".`);
       }),
     ),
 
@@ -526,6 +577,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         backgrounds: z.array(z.string()).max(10).optional().describe('Library videos to play muted underneath (gameplay the creator recorded); leave out to keep what’s there'),
       },
       safe(async ({ pieceId, kind, story, chat, dialogue, speed, backgrounds }) => {
+        if (ownVoiceOnly()) throw new ToolError(OWN_VOICE);
         const words = kind === 'story' ? story : kind === 'chat' ? chat : dialogue;
         if (!words) throw new ToolError(`Pass the ${kind} object with the words.`);
         const edit = editFor(pieceId) ?? createEdit(pieceId, 'claude');

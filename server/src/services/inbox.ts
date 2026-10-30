@@ -105,7 +105,7 @@ export async function suggestInbox({ workspaceId }: { workspaceId: string }) {
   const answer = await askStructured<Answer>({
     task: 'inbox',
     system: [
-      `You file a creator's loose footage into the right video in their "${ws.name}" workspace (${ws.kind === 'clipping' ? 'a clipping page' : ws.kind === 'business' ? 'a business page' : 'their personal brand'}).`,
+      `You file a creator's loose footage into the right video in their "${ws.name}" workspace (${ws.kind === 'clipping' ? 'a clipping page' : ws.kind === 'business' ? 'a business page' : ws.kind === 'islamic' ? 'an Islamic reminders page' : 'their personal brand'}).`,
       'Each video is a package: an idea or script being made into one short vertical video. Match a file to the video whose topic, script or wording it fits; when none fits, leave pieceId empty and name the new idea it could start (in their language, max 60 characters).',
       'Only match when the evidence is clear (what is said, what is shown, the file name). Never invent ids.',
       ws.niche && `The page's niche: ${ws.niche}`,

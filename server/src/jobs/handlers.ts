@@ -73,7 +73,7 @@ async function probeMedia({ mediaId }: { mediaId: string }) {
     transcriptStatus: transcribed ? 'done' : wantsTranscript ? (whisperInstalled() ? 'queued' : 'unavailable') : 'none',
   });
   if (wantsTranscript && whisperInstalled()) enqueue('media.transcribe', { mediaId }, { maxAttempts: 2 });
-  else if (row.source === 'capture') enqueue('capture.structure', { workspaceId: row.workspaceId, mediaId });
+  else if (row.source === 'capture' && !row.pieceId) enqueue('capture.structure', { workspaceId: row.workspaceId, mediaId });
   else if (isLoose(row)) queueInboxSort(row.workspaceId);
 }
 
@@ -89,7 +89,7 @@ async function transcribeMedia({ mediaId }: { mediaId: string }) {
   const transcript = JSON.parse(await readFile(transcriptPath(mediaId), 'utf8')) as Transcript;
   setMedia(mediaId, { transcriptStatus: 'done', transcriptText: transcript.text, transcriptLang: transcript.language });
   emit({ type: 'job', jobType: 'media.transcribe', status: 'done', workspaceId: row.workspaceId, message: `Transcribed ${row.originalName}` });
-  if (row.source === 'capture') enqueue('capture.structure', { workspaceId: row.workspaceId, mediaId });
+  if (row.source === 'capture' && !row.pieceId) enqueue('capture.structure', { workspaceId: row.workspaceId, mediaId });
   else if (isLoose(getMedia(mediaId))) queueInboxSort(row.workspaceId);
 }
 
@@ -98,7 +98,7 @@ onJobFailed('media.transcribe', ({ mediaId }: { mediaId: string }, message) => {
   if (isLoose(row)) queueInboxSort(row.workspaceId);
   emit({ type: 'job', jobType: 'media.transcribe', status: 'error', workspaceId: row.workspaceId, message });
   // A voice memo should never be lost: still turn it into a card, even without words.
-  if (row.source === 'capture') enqueue('capture.structure', { workspaceId: row.workspaceId, mediaId });
+  if (row.source === 'capture' && !row.pieceId) enqueue('capture.structure', { workspaceId: row.workspaceId, mediaId });
 });
 
 type CapturedIdea = { title: string; hook: string; outline: string; tags: string[] };

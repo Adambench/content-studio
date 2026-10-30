@@ -19,6 +19,7 @@ import { characterSvg } from '../studio/characters';
 import { JobError, enqueue, hasPendingJob } from '../jobs/queue';
 import { getPiece, getWorkspace } from '../services/pieces';
 import { BUNDLED_FONTS, composeEdit } from '../studio/compose';
+import { lookupAyat } from '../islamic/quran';
 import { createEdit, editDetail, findEditForPiece, getEdit, listRenders, restoreEditVersion, saveEditVersion, specMedia, specTranscripts, updateEditWorking } from '../studio/edits';
 import { proxyPath } from '../studio/proxy';
 import { checkEdit } from '../studio/quality';
@@ -198,6 +199,9 @@ export async function studioRoutes(app: FastifyInstance) {
     reply.header('Cache-Control', 'no-cache');
     return reply.type('text/javascript; charset=utf-8').sendFile(basename(path), dirname(path));
   });
+
+  // An ayah for a scene, exactly as the Quran text and its translation have it.
+  app.get<{ Querystring: { ref?: string } }>('/api/quran', async (req) => lookupAyat(req.query.ref ?? ''));
 
   app.get<{ Params: { file: string } }>('/api/studio/fonts/:file', async (req, reply) => {
     if (!FONT_FILES.has(req.params.file)) throw notFound();

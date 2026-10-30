@@ -11,8 +11,8 @@ export type NavItem = {
 
 /**
  * A workspace's pages in working order, so the first one is where to start. Clipping: find → clips → campaigns;
- * personal and business: ideas (the brainstorm canvas) → videos → loose footage, with research further down. Brand
- * assets don't apply to clipping pages (their look is in settings), and their Inbox only shows when something's in it.
+ * personal and business: ideas (the brainstorm canvas) → videos → loose footage, with research further down. Every
+ * page has Brand (mascot, logo, fonts); a clipping page's Inbox only shows when something's in it.
  */
 export function workspaceNav(ws: Pick<Workspace, 'kind' | 'modules' | 'inboxCount'>): NavItem[] {
   const has = (m: Workspace['modules'][number]) => ws.modules.includes(m);
@@ -25,6 +25,7 @@ export function workspaceNav(ws: Pick<Workspace, 'kind' | 'modules' | 'inboxCoun
         { to: 'calendar', label: 'Calendar', icon: CalendarDays, badge: 'attention' },
         { to: 'analytics', label: 'Analytics', icon: ChartColumn },
         !!ws.inboxCount && { to: 'inbox', label: 'Inbox', icon: Inbox, badge: 'inbox' },
+        { to: 'assets', label: 'Brand', icon: Palette },
       ]
     : [
         has('ideas') && { to: 'ideas', label: 'Ideas', icon: Lightbulb },

@@ -107,7 +107,7 @@ export const WORKSPACE_COLORS = ['violet', 'blue', 'cyan', 'emerald', 'amber', '
 export type WorkspaceColor = (typeof WORKSPACE_COLORS)[number];
 
 /** What a workspace is for. A kind presets modules, stages and Claude's instructions; it doesn't fence anything off. */
-export const WORKSPACE_KINDS = ['personal', 'business', 'clipping'] as const;
+export const WORKSPACE_KINDS = ['personal', 'business', 'clipping', 'islamic'] as const;
 export type WorkspaceKind = (typeof WORKSPACE_KINDS)[number];
 
 export const MODULES = ['ideas', 'filming', 'grading', 'campaigns', 'clipping', 'research'] as const;
@@ -117,6 +117,7 @@ export const KIND_INFO: Record<WorkspaceKind, { label: string; hint: string; nic
   personal: { label: 'Personal brand', hint: 'Your own voice and face: ideas, scripts, filming, a graded look', niche: 'e.g. Muslim entrepreneurship and everyday deen for young professionals' },
   business: { label: 'Business', hint: 'A business’s page: its offers and brand, its own footage', niche: 'e.g. Handmade leather goods for people who buy once and keep it for life' },
   clipping: { label: 'Clipping page', hint: 'A niche page fed by campaigns: streams and podcasts cut into clips', niche: 'e.g. Business and money advice from podcasts, for 18–30s starting out' },
+  islamic: { label: 'Islamic page', hint: 'Reminders, ayat and hadith with their sources on screen, lecture clips, your own voice', niche: 'e.g. Daily reminders for Muslims: patience, the akhirah, ayat and hadith explained' },
 };
 
 export const MODULE_INFO: Record<ModuleId, { label: string; hint: string }> = {
@@ -132,6 +133,7 @@ export const KIND_PRESETS: Record<WorkspaceKind, { modules: ModuleId[]; stages: 
   personal: { modules: ['ideas', 'filming', 'grading', 'research'], stages: DEFAULT_STAGES },
   business: { modules: ['ideas', 'filming', 'grading', 'campaigns', 'research'], stages: DEFAULT_STAGES },
   clipping: { modules: ['campaigns', 'clipping', 'research'], stages: CLIPPING_STAGES },
+  islamic: { modules: ['ideas', 'clipping', 'research'], stages: DEFAULT_STAGES },
 };
 
 /** Known modules only, in the usual order. */

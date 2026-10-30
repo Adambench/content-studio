@@ -1,7 +1,9 @@
 // Fonts that ship with the app (server/assets/fonts, Latin + Latin Extended, OFL or Apache 2.0): captions, titles,
 // motion graphics and scenes use them by family name. A workspace's own brand font comes in as 'Brand'.
 
-export type StudioFont = { family: string; weight: string; files: string[]; label: string; hint: string };
+export type FontSubset = 'latin' | 'latin-ext' | 'arabic';
+/** `subsets` names each file's characters (default Latin, then Latin Extended). */
+export type StudioFont = { family: string; weight: string; files: string[]; subsets?: FontSubset[]; label: string; hint: string };
 
 export const BUNDLED_FONTS: StudioFont[] = [
   { family: 'Montserrat', weight: '100 900', files: ['montserrat-latin-wght-normal.woff2', 'montserrat-latin-ext-wght-normal.woff2'], label: 'Montserrat', hint: 'Bold geometric sans: the default for punchy captions' },
@@ -17,7 +19,18 @@ export const BUNDLED_FONTS: StudioFont[] = [
   { family: 'Fredoka', weight: '300 700', files: ['fredoka-latin-wght-normal.woff2', 'fredoka-latin-ext-wght-normal.woff2'], label: 'Fredoka', hint: 'Round and friendly: kids, food, light topics' },
   { family: 'JetBrains Mono', weight: '100 800', files: ['jetbrains-mono-latin-wght-normal.woff2', 'jetbrains-mono-latin-ext-wght-normal.woff2'], label: 'JetBrains Mono', hint: 'Monospace: code, tech, typewriter text' },
   { family: 'Press Start 2P', weight: '400', files: ['press-start-2p-latin-400-normal.woff2', 'press-start-2p-latin-ext-400-normal.woff2'], label: 'Press Start 2P', hint: 'Pixel arcade letters: games, retro (use small)' },
+  {
+    family: 'Noto Naskh Arabic',
+    weight: '400 700',
+    files: ['noto-naskh-arabic-arabic-wght-normal.woff2', 'noto-naskh-arabic-latin-wght-normal.woff2', 'noto-naskh-arabic-latin-ext-wght-normal.woff2'],
+    subsets: ['arabic', 'latin', 'latin-ext'],
+    label: 'Noto Naskh Arabic',
+    hint: 'Arabic script (ayat, du’as, names of Allah); every other font draws Arabic letters with it too',
+  },
 ];
+
+/** The Arabic letters' file: every other family borrows it, so Arabic never falls back to a system font. */
+export const ARABIC_FONT = { family: 'Noto Naskh Arabic', file: 'noto-naskh-arabic-arabic-wght-normal.woff2' };
 
 export const FONT_FAMILIES = BUNDLED_FONTS.map((f) => f.family);
 export type FontFamily = string;

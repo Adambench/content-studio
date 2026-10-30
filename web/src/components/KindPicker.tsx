@@ -1,13 +1,13 @@
-import { Briefcase, Scissors, User } from 'lucide-react';
+import { Briefcase, MoonStar, Scissors, User } from 'lucide-react';
 import { KIND_INFO, WORKSPACE_KINDS, type WorkspaceKind } from '@shared/types';
 import { cn } from '@/lib/utils';
 
-export const KIND_ICONS: Record<WorkspaceKind, typeof User> = { personal: User, business: Briefcase, clipping: Scissors };
+export const KIND_ICONS: Record<WorkspaceKind, typeof User> = { personal: User, business: Briefcase, clipping: Scissors, islamic: MoonStar };
 
-/** The three kinds of workspace as cards to pick from. */
+/** The kinds of workspace as cards to pick from. */
 export function KindPicker({ value, onChange, labelledBy, compact }: { value: WorkspaceKind | null; onChange: (kind: WorkspaceKind) => void; labelledBy?: string; compact?: boolean }) {
   return (
-    <div role="radiogroup" aria-labelledby={labelledBy} className="grid gap-2 sm:grid-cols-3">
+    <div role="radiogroup" aria-labelledby={labelledBy} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
       {WORKSPACE_KINDS.map((k) => {
         const Icon = KIND_ICONS[k];
         const selected = value === k;

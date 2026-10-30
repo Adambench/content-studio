@@ -72,7 +72,8 @@ export type SceneSpec = {
   tweens: SceneTween[];
   /** A scene from the library (shared/scene-library.ts): built again from its words whenever the edit changes. */
   preset?: string;
-  fill?: { text: string; sub: string; items: string[] };
+  /** `arabic` (ayat, du'as) is only ever filled from the Quran text or typed by the creator, never by Claude. */
+  fill?: { text: string; sub: string; items: string[]; arabic?: string };
 };
 
 /** CSS properties a scene element may set, and whether a bare number means pixels. */
@@ -110,6 +111,8 @@ const STYLE_PROPS: Record<string, boolean> = {
   'align-items': false,
   'justify-content': false,
   'text-align': false,
+  direction: false,
+  'unicode-bidi': false,
   'white-space': false,
   'box-sizing': false,
   overflow: false,
@@ -442,13 +445,15 @@ export function normalizeScene(input: unknown, length: number, problems: string[
   return scene;
 }
 
-/** A library scene's words: a main line, a second line and a list. */
+/** A library scene's words: a main line, a second line, a list and (some scenes) Arabic. */
 export function normalizeFill(input: unknown): NonNullable<SceneSpec['fill']> {
   const f = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
   const line = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  const arabic = line(f.arabic, 1200);
   return {
-    text: line(f.text, 300),
+    text: line(f.text, 1000),
     sub: line(f.sub, 200),
     items: (Array.isArray(f.items) ? f.items : []).map((i) => line(i, 120)).filter(Boolean).slice(0, 8),
+    ...(arabic ? { arabic } : {}),
   };
 }

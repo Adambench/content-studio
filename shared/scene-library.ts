@@ -31,6 +31,9 @@ export const SCENE_PRESETS = [
   'mascot-explain',
   'mascot-says',
   'mascot-react',
+  'ayah',
+  'hadith',
+  'speaker',
 ] as const;
 export type ScenePreset = (typeof SCENE_PRESETS)[number];
 export const isScenePreset = (p: unknown): p is ScenePreset => SCENE_PRESETS.includes(p as ScenePreset);
@@ -48,7 +51,11 @@ type Info = {
   /** When it fits. */
   hint: string;
   /** What each field is for (unused ones are left out). */
-  fields: { text?: string; sub?: string; items?: string };
+  fields: { text?: string; sub?: string; items?: string; arabic?: string };
+  /** The plain colour it's designed on, for *Behind it* (else a near black). */
+  solid?: string;
+  /** It shows the words being said itself (an ayah's meaning): the captions step aside while it's on. */
+  hidesCaptions?: boolean;
   /** The words a new one starts with in the editor. */
   example: Partial<SceneFill>;
   /** How long it wants to be with these words; shorter, everything runs faster to fit. */
@@ -60,6 +67,12 @@ const DARK = '#0b0c10';
 const INK = '#0b0b0b';
 const PANEL = '#16181d';
 const EDGE = '2px solid rgba(255,255,255,.12)';
+// The Islamic scenes' palette (Gentle Return's brand guide).
+const DEEP = '#0E3A2D';
+const NAVY = '#0B1426';
+const GOLD = '#C9A45C';
+const CREAM = '#F3EAD3';
+const NASKH = 'Noto Naskh Arabic';
 const r = Math.round;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const plain = (t: string) => t.replace(/\*/g, '');
@@ -975,9 +988,184 @@ export const SCENE_LIBRARY: Record<ScenePreset, Info> = {
       };
     },
   },
+
+  // Islamic pages (Gentle Return's look): flat deep green or navy, gold lines and 8-point stars, cream words; slow
+  // fades and drifting light, nothing snappy, and no sounds. The Arabic is never typed by Claude: an ayah's comes
+  // from the Quran text by its reference (server/src/islamic/quran.ts), anything else from the creator.
+  ayah: {
+    label: 'Ayah',
+    hint: 'An ayah in Arabic inside a gold arch, its meaning under it and the reference in gold: give the reference, the Arabic and the meaning are filled in from the Quran text',
+    fields: { sub: 'The reference, e.g. 94:5-6 (the Arabic and the meaning are filled in from it)', text: 'The meaning (filled in from the translation)', arabic: 'The Arabic (filled in from the Quran text)' },
+    example: { sub: 'Ash-Sharh 94:5–6', text: 'For indeed, with hardship [will be] ease. Indeed, with hardship [will be] ease.', arabic: 'فَإِنَّ مَعَ الْعُسْرِ يُسْرًا ﴿٥﴾ إِنَّ مَعَ الْعُسْرِ يُسْرًا ﴿٦﴾' },
+    solid: DEEP,
+    hidesCaptions: true,
+    seconds: (f) => clamp(3.5 + wordCount(f.text) * 0.36 + letters(f.arabic ?? '') * 0.03, 6, 20),
+    build: (f, { W, H }, len): Built => {
+      const cx = r(W / 2);
+      const ah = r(H * 0.4);
+      const aw = r(Math.min(W * 0.8, ah * 1.12));
+      const top = r(H * 0.11);
+      const bottom = top + ah;
+      // The Arabic sits in the arch's straight part and the lower curve.
+      const boxT = r(top + aw * 0.4);
+      const boxW = aw - 110;
+      const boxH = bottom - 40 - boxT;
+      const n = Math.max(1, letters(f.arabic ?? ''));
+      const size = r(clamp(Math.sqrt((boxW * boxH) / (n * 0.95)), 36, 104));
+      const meanW = W - 160;
+      const meanT = bottom + r(H * 0.035);
+      const meanH = r(H * 0.75) - meanT - 60;
+      const meanSize = r(clamp(Math.sqrt((meanW * meanH) / (Math.max(1, plain(f.text).length) * 0.48 * 1.35)), 28, 60));
+      const stars = [
+        [0.12, 0.07, 16],
+        [0.86, 0.1, 12],
+        [0.08, 0.6, 10],
+        [0.92, 0.55, 14],
+        [0.2, 0.88, 11],
+        [0.8, 0.9, 13],
+      ];
+      return {
+        background: DEEP,
+        elements: [
+          ...stars.map(([x, y, R], i) => ({ id: `s${i}`, kind: 'path' as const, d: star8(W * x, H * y, R), style: { fill: GOLD, opacity: 0 } })),
+          { id: 'arch', kind: 'path', d: arch(cx, top, bottom, aw), draw: true, style: { fill: 'none', stroke: GOLD, 'stroke-width': 4 } },
+          { id: 'arch2', kind: 'path', d: arch(cx, top + 22, bottom, aw - 36), draw: true, style: { fill: 'none', stroke: GOLD, 'stroke-width': 1.5, opacity: 0.7 } },
+          { id: 'tip', kind: 'path', d: star8(cx, top - 34, 22), style: { fill: GOLD, 'transform-origin': `${cx}px ${top - 34}px` } },
+          { id: 'ar-box', kind: 'box', style: { left: cx - r(boxW / 2), top: boxT, width: boxW, height: boxH, ...centred } },
+          { id: 'ar', kind: 'text', parent: 'ar-box', text: f.arabic ?? '', style: { 'font-family': NASKH, 'font-size': size, 'line-height': 1.95, color: CREAM, direction: 'rtl', 'font-weight': 500 } },
+          { id: 'mean-box', kind: 'box', style: { left: 80, top: meanT, width: meanW, height: meanH, ...centred } },
+          { id: 'mean', kind: 'text', parent: 'mean-box', text: f.text, style: { 'font-family': 'Playfair Display', 'font-style': 'italic', 'font-size': meanSize, 'line-height': 1.35, color: CREAM } },
+          row(W, 'cite', meanT + meanH + 4, 56),
+          { id: 'cite-t', kind: 'text', parent: 'cite', text: f.sub, style: { 'font-family': 'Inter', 'font-weight': 600, 'font-size': 30, 'letter-spacing': '0.22em', 'text-transform': 'uppercase', color: GOLD } },
+        ],
+        tweens: [
+          { targets: 'arch,arch2', at: 0, duration: 1.8, from: { strokeDashoffset: 1 }, to: { strokeDashoffset: 0 }, ease: 'power1.inOut', sound: 'none' },
+          { targets: 'tip', at: 0.9, duration: 1, from: { scale: 0, opacity: 0, rotation: -45 }, to: { scale: 1, opacity: 1, rotation: 0 }, ease: 'power2.out', sound: 'none' },
+          { targets: stars.map((_, i) => `s${i}`).join(','), at: 0.3, duration: 1.4, from: { opacity: 0 }, to: { opacity: 0.35 }, ease: 'sine.inOut', stagger: 0.25, sound: 'none' },
+          // Stars glimmer in turn for as long as it holds.
+          { targets: stars.map((_, i) => `s${i}`).join(','), at: 2, duration: 1.6, to: { opacity: 0.12 }, ease: 'sine.inOut', yoyo: true, repeat: Math.max(1, Math.floor((len - 3) / 1.6)), stagger: 0.4, sound: 'none' },
+          { targets: 'ar', at: 1, duration: 1.4, from: { opacity: 0, y: 24 }, to: { opacity: 1, y: 0 }, ease: 'power2.out', sound: 'none' },
+          { targets: 'mean', at: 2.1, duration: 1.2, from: { opacity: 0, y: 16 }, to: { opacity: 1, y: 0 }, ease: 'power2.out', sound: 'none' },
+          { targets: 'cite-t', at: 2.8, duration: 1, from: { opacity: 0, letterSpacing: '0.5em' }, to: { opacity: 1, letterSpacing: '0.22em' }, ease: 'power2.out', sound: 'none' },
+          slowExit(['arch', 'arch2', 'tip', 'ar', 'mean', 'cite-t', ...stars.map((_, i) => `s${i}`)], len),
+        ],
+      };
+    },
+  },
+
+  hadith: {
+    label: 'Hadith',
+    hint: 'A hadith in English on night blue in a fine gold frame, who said it above and the collection and number in gold under it',
+    fields: { text: 'The hadith as its collection translates it', sub: 'The collection and number, e.g. Sahih al-Bukhari 6416', items: 'The line above it, e.g. The Prophet ﷺ said (optional)', arabic: 'The Arabic, pasted from the collection (optional)' },
+    example: { text: 'Be in this world as if you were a stranger or a traveller.', sub: 'Sahih al-Bukhari 6416', items: ['The Prophet ﷺ said'] },
+    solid: NAVY,
+    hidesCaptions: true,
+    seconds: (f) => clamp(3.2 + wordCount(f.text) * 0.36 + letters(f.arabic ?? '') * 0.025, 5, 20),
+    build: (f, { W, H }, len): Built => {
+      const fw = W - 120;
+      const ft = r(H * 0.14);
+      const fb = r(H * 0.76);
+      const fh = fb - ft;
+      const head = f.items[0] ?? '';
+      const innerW = fw - 140;
+      const hasAr = !!f.arabic;
+      const arH = hasAr ? r(fh * 0.3) : 0;
+      const textH = fh - 260 - arH;
+      const size = r(clamp(Math.sqrt((innerW * textH) / (Math.max(1, plain(f.text).length) * 0.48 * 1.35)), 30, 68));
+      const arSize = hasAr ? r(clamp(Math.sqrt((innerW * arH) / (Math.max(1, letters(f.arabic ?? '')) * 0.95)), 30, 64)) : 0;
+      const cx = r(W / 2);
+      return {
+        background: NAVY,
+        elements: [
+          { id: 'frame', kind: 'box', style: { left: 60, top: ft, width: fw, height: fh, border: `2px solid ${GOLD}`, 'border-radius': 6 } },
+          { id: 'frame2', kind: 'box', style: { left: 78, top: ft + 18, width: fw - 36, height: fh - 36, border: `1px solid ${GOLD}`, opacity: 0.55, 'border-radius': 4 } },
+          ...[
+            [60, ft],
+            [60 + fw, ft],
+            [60, fb],
+            [60 + fw, fb],
+          ].map(([x, y], i) => ({ id: `c${i}`, kind: 'path' as const, d: star8(x, y, 16), style: { fill: GOLD, stroke: NAVY, 'stroke-width': 4, 'paint-order': 'stroke' } })),
+          { id: 'top-star', kind: 'path', d: star8(cx, ft, 26), style: { fill: GOLD, stroke: NAVY, 'stroke-width': 6, 'paint-order': 'stroke', 'transform-origin': `${cx}px ${ft}px` } },
+          ...(head ? [row(W, 'head', ft + 70, 60), { id: 'head-t', kind: 'text' as const, parent: 'head', text: head, style: { 'font-family': 'Inter', 'font-weight': 600, 'font-size': 30, 'letter-spacing': '0.2em', 'text-transform': 'uppercase', color: GOLD } }] : []),
+          ...(hasAr
+            ? [
+                { id: 'ar-box', kind: 'box' as const, style: { left: cx - r(innerW / 2), top: ft + 150, width: innerW, height: arH, ...centred } },
+                { id: 'ar', kind: 'text' as const, parent: 'ar-box', text: f.arabic ?? '', style: { 'font-family': NASKH, 'font-size': arSize, 'line-height': 1.9, color: GOLD, direction: 'rtl' } },
+              ]
+            : []),
+          { id: 'say-box', kind: 'box', style: { left: cx - r(innerW / 2), top: ft + 150 + arH, width: innerW, height: textH, ...centred } },
+          { id: 'say', kind: 'text', parent: 'say-box', text: `“${f.text.replace(/^["“]|["”]$/g, '')}”`, split: 'words', style: { 'font-family': 'Playfair Display', 'font-style': 'italic', 'font-size': size, 'line-height': 1.35, color: CREAM } },
+          { id: 'rule', kind: 'box', style: { left: cx - 60, top: fb - 104, width: 120, height: 2, background: GOLD } },
+          row(W, 'cite', fb - 88, 56),
+          { id: 'cite-t', kind: 'text', parent: 'cite', text: f.sub, style: { 'font-family': 'Inter', 'font-weight': 600, 'font-size': 28, 'letter-spacing': '0.2em', 'text-transform': 'uppercase', color: GOLD } },
+        ],
+        tweens: [
+          { targets: 'frame,frame2', at: 0, duration: 1.2, from: { opacity: 0, scale: 0.97 }, to: { opacity: 1, scale: 1 }, ease: 'power2.out', sound: 'none' },
+          { targets: 'c0,c1,c2,c3', at: 0.4, duration: 0.9, from: { opacity: 0, scale: 0 }, to: { opacity: 1, scale: 1 }, ease: 'power2.out', stagger: 0.12, sound: 'none' },
+          { targets: 'top-star', at: 0.6, duration: 1.1, from: { opacity: 0, rotation: -45 }, to: { opacity: 1, rotation: 0 }, ease: 'power2.out', sound: 'none' },
+          { targets: 'top-star', at: 1.8, duration: Math.max(1, len - 2.4), to: { rotation: 45 }, ease: 'none', sound: 'none' },
+          ...(head ? [{ targets: 'head-t', at: 0.8, duration: 0.9, from: { opacity: 0 }, to: { opacity: 1 }, ease: 'sine.out', sound: 'none' as const }] : []),
+          ...(hasAr ? [{ targets: 'ar', at: 1, duration: 1.2, from: { opacity: 0, y: 16 }, to: { opacity: 1, y: 0 }, ease: 'power2.out', sound: 'none' as const }] : []),
+          { targets: 'say.words', at: hasAr ? 1.8 : 1.1, duration: 0.7, from: { opacity: 0, y: 10 }, to: { opacity: 1, y: 0 }, ease: 'power1.out', stagger: clamp((len * 0.55) / Math.max(1, wordCount(f.text)), 0.04, 0.22), sound: 'none' },
+          { targets: 'rule', at: 2.2, duration: 0.9, from: { scaleX: 0 }, to: { scaleX: 1 }, ease: 'power2.inOut', sound: 'none' },
+          { targets: 'cite-t', at: 2.5, duration: 0.9, from: { opacity: 0 }, to: { opacity: 1 }, ease: 'sine.out', sound: 'none' },
+          slowExit(['frame', 'frame2', 'c0', 'c1', 'c2', 'c3', 'top-star', 'say', 'rule', 'cite-t', ...(head ? ['head-t'] : []), ...(hasAr ? ['ar'] : [])], len),
+        ],
+      };
+    },
+  },
+
+  speaker: {
+    label: 'Speaker',
+    hint: 'A quiet name tag at the top for a lecture clip: who is speaking (a gold bar, the name, where it’s from). Keep it on for the whole clip',
+    fields: { text: 'Who is speaking, e.g. Mufti Menk', sub: 'Where it’s from, e.g. the lecture or the channel (optional)' },
+    example: { text: 'Mufti Menk', sub: 'Lecture: Hope in hard times' },
+    seconds: () => 5,
+    build: (f, { W, H }, len): Built => {
+      const size = fit(f.text, W * 0.62, 56, 34, 0.5);
+      const subSize = f.sub ? fit(f.sub, W * 0.62, 26, 20, 0.62) : 0;
+      const h = r(size * 1.25 + (f.sub ? subSize * 1.6 : 0) + 44);
+      const top = r(H * 0.1);
+      return {
+        background: 'none',
+        elements: [
+          { id: 'tag', kind: 'box', style: { left: 56, top, height: h, padding: '22px 34px 22px 30px', background: 'rgba(14,58,45,.88)', 'border-radius': 14, display: 'flex', 'flex-direction': 'column', 'justify-content': 'center', 'border-left': `6px solid ${GOLD}`, 'box-sizing': 'border-box' } },
+          { id: 'name', kind: 'text', parent: 'tag', text: f.text, style: { 'font-family': 'Playfair Display', 'font-weight': 700, 'font-size': size, 'line-height': 1.2, color: CREAM, 'white-space': 'nowrap' } },
+          ...(f.sub ? [{ id: 'from', kind: 'text' as const, parent: 'tag', text: f.sub, style: { 'font-family': 'Inter', 'font-weight': 600, 'font-size': subSize, 'letter-spacing': '0.14em', 'text-transform': 'uppercase', color: GOLD, 'margin-top': 8, 'white-space': 'nowrap' } }] : []),
+        ],
+        tweens: [
+          { targets: 'tag', at: 0, duration: 0.9, from: { opacity: 0, x: -30 }, to: { opacity: 1, x: 0 }, ease: 'power2.out', sound: 'none' },
+          { targets: 'name', at: 0.3, duration: 0.8, from: { opacity: 0 }, to: { opacity: 1 }, ease: 'sine.out', sound: 'none' },
+          ...(f.sub ? [{ targets: 'from', at: 0.55, duration: 0.8, from: { opacity: 0 }, to: { opacity: 1 }, ease: 'sine.out', sound: 'none' as const }] : []),
+          slowExit(['tag'], len),
+        ],
+      };
+    },
+  },
 };
 
 const wordCount = (t: string) => plain(t).split(/\s+/).filter(Boolean).length;
+
+/** Arabic letters, without the vowel marks (they take no width). */
+const letters = (t: string) => t.replace(/[ً-ٰٟۖ-ۭ\s]/g, '').length;
+const slowExit = (ids: string[], len: number): SceneTween => ({ targets: ids.join(','), at: Math.max(0, len - 0.7), duration: 0.7, to: { opacity: 0 }, ease: 'sine.in', sound: 'none' });
+/** An 8-point star (two squares, one turned 45°) around cx, cy: SVG path data. */
+function star8(cx: number, cy: number, R: number) {
+  const pts: string[] = [];
+  for (let i = 0; i < 16; i++) {
+    const a = (Math.PI / 8) * i - Math.PI / 2;
+    const d = i % 2 ? R * 0.7654 : R;
+    pts.push(`${r(cx + d * Math.cos(a))} ${r(cy + d * Math.sin(a))}`);
+  }
+  return `M${pts.join('L')}Z`;
+}
+/** A pointed arch `w` wide on cx, its tip at `top`, its sides down to `bottom`. */
+function arch(cx: number, top: number, bottom: number, w: number) {
+  const x0 = r(cx - w / 2);
+  const x1 = r(cx + w / 2);
+  const spring = r(top + w * 0.55);
+  return `M${x0} ${bottom}L${x0} ${spring}C${x0} ${r(spring - w * 0.3)} ${r(cx - w * 0.2)} ${r(top + w * 0.12)} ${r(cx)} ${top}C${r(cx + w * 0.2)} ${r(top + w * 0.12)} ${x1} ${r(spring - w * 0.3)} ${x1} ${spring}L${x1} ${bottom}`;
+}
 /** A mascot's box for the frame: `width` in 9:16, smaller on shorter frames, its feet at `ground` of the height. */
 function mascotSize(H: number, width: number, ground = 0.8) {
   const mw = r(width * Math.min(1, H / 1920 + 0.2));

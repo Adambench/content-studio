@@ -12,7 +12,8 @@ import {
   type BrollOverlay,
   type EditSpec,
 } from '../../../shared/edit';
-import { BUNDLED_FONTS } from '../../../shared/fonts';
+import { ARABIC_FONT, BUNDLED_FONTS, type FontSubset } from '../../../shared/fonts';
+import { isScenePreset, SCENE_LIBRARY } from '../../../shared/scene-library';
 import { captionCss, captionHtml, CAPTION_STYLE, captionTweens } from './captions';
 import { animateIn, filterCss, lookStyle, motionState, motionStyle, motionTweens, splitChars, textureLayers } from './motion';
 import { LEAK_LAYER, OUTGOING_ON_TOP, transitionTweens, WHITE_LAYER } from './transitions';
@@ -64,6 +65,8 @@ export type ComposeInput = {
 export { BUNDLED_FONTS };
 const LATIN = 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD';
 const LATIN_EXT = 'U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF';
+const ARABIC = 'U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC';
+const RANGES: Record<FontSubset, string> = { latin: LATIN, 'latin-ext': LATIN_EXT, arabic: ARABIC };
 
 const VOICE_FX = {
   version: 1,
@@ -273,7 +276,9 @@ export function composeEdit(input: ComposeInput) {
   const words = timelineWords(spec, input.transcripts);
   if (spec.captions.enabled && words.length) {
     const c = spec.captions;
-    const pages = captionPages(words, c, duration);
+    // A scene that shows the words itself (an ayah and its meaning) keeps the captions off while it's on.
+    const quiet = spec.overlays.filter((o) => o.type === 'scene' && isScenePreset(o.preset) && SCENE_LIBRARY[o.preset].hidesCaptions);
+    const pages = captionPages(words, c, duration).filter((p) => !quiet.some((o) => (p.start + p.end) / 2 >= o.start && (p.start + p.end) / 2 < o.end));
     pages.forEach((p, i) => {
       body.push(`<div id="p${i}" class="clip layer cap" data-start="${n(p.start)}" data-duration="${n(p.end - p.start)}" data-track-index="3"><div class="line"><div class="ci">${captionHtml(c.preset, p, i)}</div></div></div>`);
       tl.push(...captionTweens(c.preset, c, p, i));
@@ -333,11 +338,13 @@ export function composeEdit(input: ComposeInput) {
   });
 
   // ---------- page ----------
-  const fontFaces = BUNDLED_FONTS.flatMap((f) =>
-    f.files.map(
-      (file, i) => `@font-face { font-family: '${f.family}'; font-style: normal; font-weight: ${f.weight}; font-display: block; src: url(${input.fontUrl(file)}) format('woff2'); unicode-range: ${i === 0 ? LATIN : LATIN_EXT}; }`,
-    ),
-  );
+  const face = (family: string, weight: string, file: string, range: string) =>
+    `@font-face { font-family: '${family}'; font-style: normal; font-weight: ${weight}; font-display: block; src: url(${input.fontUrl(file)}) format('woff2'); unicode-range: ${range}; }`;
+  const fontFaces = BUNDLED_FONTS.flatMap((f) => [
+    ...f.files.map((file, i) => face(f.family, f.weight, file, RANGES[f.subsets?.[i] ?? (i === 0 ? 'latin' : 'latin-ext')])),
+    // Arabic letters in any other font (a name of Allah in a caption, a title) are drawn in Naskh.
+    ...(f.family === ARABIC_FONT.family ? [] : [face(f.family, '400 700', ARABIC_FONT.file, RANGES.arabic)]),
+  ]);
   if (spec.captions.fontMediaId) fontFaces.push(`@font-face { font-family: 'Brand'; font-display: block; src: url(${input.fileUrl(spec.captions.fontMediaId)}); }`);
 
   const html = `<!doctype html>

@@ -33,7 +33,8 @@ export async function probe(file: string): Promise<ProbeResult> {
   };
   const streams = data.streams ?? [];
   const video = streams.find((s) => s.codec_type === 'video' && !s.disposition?.attached_pic);
-  const duration = data.format?.duration ? Math.round(Number(data.format.duration) * 1000) : null;
+  // A browser's recording (MediaRecorder's WebM) has no length in its header: read it to the end to find it.
+  const duration = data.format?.duration && data.format.duration !== 'N/A' ? Math.round(Number(data.format.duration) * 1000) : streams.some((s) => s.codec_type === 'audio') ? await decodedLength(file) : null;
   // Phones record portrait video as landscape + a rotation flag; report the displayed size.
   const rotation = Math.abs(Number(video?.tags?.rotate ?? video?.side_data_list?.find((d) => d.rotation !== undefined)?.rotation ?? 0));
   const swap = rotation === 90 || rotation === 270;
@@ -45,6 +46,13 @@ export async function probe(file: string): Promise<ProbeResult> {
     hasAudio: streams.some((s) => s.codec_type === 'audio'),
     hdr: video?.color_transfer === 'arib-std-b67' || video?.color_transfer === 'smpte2084',
   };
+}
+
+async function decodedLength(file: string) {
+  const { stderr } = await execFile(requireBinary('ffmpeg'), ['-hide_banner', '-nostats', '-i', file, '-map', '0:a:0', '-f', 'null', '-progress', 'pipe:2', '-'], { maxBuffer: 20 * 1024 * 1024 }).catch(() => ({ stderr: '' }));
+  const times = [...stderr.matchAll(/out_time_us=(\d+)/g)];
+  const us = times.length ? Number(times[times.length - 1][1]) : NaN;
+  return Number.isFinite(us) && us > 0 ? Math.round(us / 1000) : null;
 }
 
 /** A small JPEG preview for a video (frame near the start) or an image. */

@@ -1,6 +1,7 @@
 # Bundled fonts
 
-Caption, title and scene fonts for the video studio, subset to Latin and Latin Extended (from Fontsource).
+Caption, title and scene fonts for the video studio, subset to Latin and Latin Extended (from Fontsource); Noto Naskh
+Arabic also has its Arabic subset.
 
 - Montserrat — Copyright 2011 The Montserrat Project Authors (https://github.com/JulietaUla/Montserrat)
 - Inter — Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
@@ -14,6 +15,7 @@ Caption, title and scene fonts for the video studio, subset to Latin and Latin E
 - Fredoka — Copyright 2016 The Fredoka Project Authors (https://github.com/hafontia/Fredoka-One)
 - JetBrains Mono — Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
 - Press Start 2P — Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with Reserved Font Name "Press Start 2P"
+- Noto Naskh Arabic — Copyright 2022 The Noto Project Authors (https://github.com/notofonts/arabic)
 - Permanent Marker (Latin only) — Copyright Font Diner, licensed under the Apache License, Version 2.0
   (https://www.apache.org/licenses/LICENSE-2.0)
 
