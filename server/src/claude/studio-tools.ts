@@ -36,6 +36,7 @@ import { checkEdit } from '../studio/quality';
 import { QUALITY_BAR, qualityText } from '../../../shared/quality';
 import { previewOverlay } from '../studio/preview';
 import { normalizeScene, SCENE_FONTS, SCENE_MAX_ELEMENTS, SCENE_MAX_SECONDS, SCENE_MAX_TWEENS, SCENE_SOUNDS } from '../../../shared/scene';
+import { MASCOT_POSES, MASCOTS, POSE_INFO } from '../../../shared/mascots';
 import { libraryScene, SCENE_LIBRARY, SCENE_PRESETS, sceneSeconds } from '../../../shared/scene-library';
 import { CHARACTERS, normalizeRecipe, RECIPE_INFO, recipeNeedsBuild, VOICES } from '../../../shared/recipe';
 import { ttsInstalled } from '../services/tts';
@@ -370,7 +371,10 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         'physics throws an element (velocity px/s, angle in degrees, gravity) for confetti, sparks and falling things. ' +
         'Use from for an explicit start state (fromTo), finite repeats only (repeatDelay between them), stagger as seconds or { each, from: "center" | "end" | "edges" | index }, and eases like power3.out, back.out(1.7), elastic.out(1, 0.4), bounce.out, expo.inOut, steps(6), slow(0.7, 0.7), wiggle-6 (wobbles out and settles back) or shake-8 (an even shake) — a wiggle or shake swings from the start value towards `to` and returns to the start, so `to` is how far it swings (e.g. rotation: 8). Times are seconds from the scene’s start. ' +
         'Anything not allowed is dropped and listed in the reply. Look at it with view_overlay afterwards and fix what doesn’t read well. ' +
-        'Check the library first (add_library_scene): a designed scene there filled with your words is better than one from scratch.',
+        'Check the library first (add_library_scene): a designed scene there filled with your words is better than one from scratch. ' +
+        `Mascots: an element of kind mascot draws the page’s mascot (or the one named, ${MASCOTS.join(', ')}) on its rig, standing on the bottom of its box (style left, top, width, height: about 1.2× as tall as wide). The box has room for raised and pointing arms, so the figure is about 40 % of its width: 550–700 wide for a full body in 9:16, and its empty left or right part may hang off the frame. ` +
+        `It starts in its pose (default idle) and a tween with to: { pose } moves every joint into the next pose over the tween’s duration (with its ease), held until the next pose tween; x, y, scale, rotation and opacity tweens on the same id move the whole mascot. Poses: ${MASCOT_POSES.map((p) => `${p} (${POSE_INFO[p].hint})`).join('; ')}. A pose the page’s mascot doesn’t have is drawn as idle. ` +
+        'flip: true faces it the other way. Walk while tweening x, then point at what you put to its side; cheer on the payoff.',
       {
         pieceId: z.string(),
         sceneId: z.string().optional().describe('Rewrite this scene instead of adding one'),
@@ -382,12 +386,15 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
           .array(
             z.object({
               id: z.string().describe('lowercase-with-dashes, unique'),
-              kind: z.enum(['box', 'text', 'image', 'path']),
+              kind: z.enum(['box', 'text', 'image', 'path', 'mascot']),
               text: z.string().optional().describe('text: the words (*accent*, \\n for a new line)'),
               split: z.enum(['words', 'chars']).optional().describe('text: so tweens can target "<id>.words" / "<id>.chars" with a stagger'),
               mediaId: z.string().optional().describe('image: a library image (list_assets, or the piece’s footage)'),
               d: z.string().optional().describe('path: SVG path data in frame pixels'),
               draw: z.boolean().optional().describe('path: start undrawn (animate strokeDashoffset 1 → 0)'),
+              mascot: z.enum(MASCOTS).optional().describe('mascot: which one; left out, the page’s own'),
+              pose: z.enum(MASCOT_POSES).optional().describe('mascot: the pose it starts in (default idle)'),
+              flip: z.boolean().optional().describe('mascot: face the other way'),
               parent: z.string().optional().describe('The id of a box this sits inside (listed before it)'),
               style: z.record(z.string(), z.union([z.string(), z.number()])).optional().describe('CSS, e.g. { left: 90, top: 400, width: 900, "font-size": 96, color: "#ffffff" }; numbers are px'),
             }),
@@ -401,7 +408,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
               at: z.number().min(0),
               duration: z.number().min(0),
               from: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
-              to: z.record(z.string(), z.union([z.string(), z.number()])),
+              to: z.record(z.string(), z.union([z.string(), z.number()])).describe('End values; for a mascot, { pose: "point" } changes its pose'),
               ease: z.string().optional(),
               stagger: z
                 .union([z.number(), z.object({ each: z.number(), from: z.union([z.enum(['start', 'center', 'end', 'edges']), z.number()]).optional() })])

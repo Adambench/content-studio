@@ -217,6 +217,9 @@ versionCode from the tag (`v1.2.3` → 10203).
   read the lessons and approve or dismiss them.
 - Account review and brands: done and in the app (*Pages (account review)*); steps 5 and 6 can start. Still open: the
   personal brand's name; the third clipping page. Read each page's Settings → Brand guide once and fix anything off.
+- Phase 12 step 5: `npm run install-app`, then on each page Brand → Mascot pick its mascot (Personal brand: the founder,
+  Gentle Return: the Traveller, Blox Moments: Blok, Long Story Short: the host). Then ask Claude in a video's chat for a
+  mascot scene and look at it.
 
 - Phase 0 on the platforms' sites, then connect real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
@@ -571,6 +574,29 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
     faster when shorter, rebuilt for 1:1 on save, `get_edit`); the editor's *Scene* menu and fields in headless Chrome,
     desktop and phone width. Not tried: `add_library_scene` from a real chat; not heard by ear.
 
+- [x] Step 5 — Mascot rig (2026-10-30): the four approved mascots (`shared/mascots.ts`: the founder, the Traveller,
+  Blok, the host) ported from the brand drafts onto a jointed rig: each limb is two segments in nested SVG groups
+  that turn at the shoulder and elbow (hip and knee), so a pose is a few angles. Poses: idle, point, think, cheer,
+  shock, du'a, lantern, at the mic, and three that loop while held (walk, wave, talk; a talking face opens and shuts
+  its mouth). Each mascot has the poses that suit it (the Traveller never cheers or shocks; only the host has the mic);
+  others are drawn standing. Faces switch with the pose (Blok, the host).
+  - Pages: `workspaces.mascot` (migration 0020), picked on Brand (top: the four, *No mascot*, the chosen one's poses).
+    The chat prompt names the page's mascot and its poses.
+  - Scenes: an element of kind `mascot` (the page's, or one named; start pose; `flip`) and a tween `to: { pose }`
+    that turns every joint into the next pose over its duration and ease (`server/src/studio/scene.ts`
+    `mascotTweens`: fromTo attribute tweens with explicit start values, parts switched halfway, loops as finite
+    yoyo repeats, so any frame seeks). x/y/scale tweens move the whole mascot. Cheer and shock get a quiet pop;
+    other pose changes are silent. `write_scene` documents all of it.
+  - Library: *Mascot explains* (walks in, points at a card with the line), *Mascot says* (pops up talking under a
+    speech bubble, words in turn) and *Mascot reacts* (a white-outlined sticker bottom left, the reaction picked by
+    `sub`, a word tag above it).
+  - Fixed on the way: overlay stills (`view_overlay`) had nothing to show when no footage sat under the overlay (a
+    video made of scenes): they get a black frame now.
+  - Tried on a test copy of my data: every pose of every mascot drawn; a scene per mascot (walk in, point, cheer or
+    du'a or mic, talk) and the three presets on each page rendered through the real overlay stills (HyperFrames);
+    the timeline seeked in headless Chrome (each joint lands on its pose); Brand → Mascot at desktop and phone width,
+    picking one and *No mascot* saved. Not tried: Claude writing a mascot scene from a real chat; a full render with
+    sound.
 - [x] Step 7 — Reference measuring (2026-10-27): Knowledge → *References*. I paste a link (YouTube, TikTok, Instagram;
   for every page or one), job `reference.measure` downloads it (yt-dlp, the research downloader) and measures it with
   no model (`server/src/knowledge/measure.ts`): hard cuts (FFmpeg scene detection), every change on screen (a cut, or the

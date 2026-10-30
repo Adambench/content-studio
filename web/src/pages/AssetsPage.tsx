@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { BUILTIN_SFX, SFX_GROUPS, builtinSfxId, type SfxGroup } from '@shared/sfx';
 import { ASSET_TYPE_LABELS, ASSET_TYPES, type AssetType } from '@shared/types';
 import { MediaCard } from '@/components/MediaCard';
+import { MascotSection } from '@/components/MascotSection';
 import { MediaDialog } from '@/components/MediaDialog';
 import { PageHeader } from '@/components/PageHeader';
 import { ListenButton } from '@/components/studio/controls';
@@ -47,8 +48,9 @@ export function AssetsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Brand assets" description="Logos, fonts, LUTs, nasheeds and sound effects for this brand — the video studio uses them" />
+      <PageHeader title="Brand assets" description="The mascot, logos, fonts, LUTs, nasheeds and sound effects for this brand — the video studio uses them" />
       <div className="min-h-0 flex-1 space-y-8 overflow-y-auto p-4 md:p-6">
+        <MascotSection workspace={workspace} />
         {media.isPending ? (
           <Skeleton className="h-40 rounded-xl" />
         ) : (

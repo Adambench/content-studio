@@ -5,6 +5,7 @@ import type { FramesCheck, MomentCaptions, MomentKind, MomentStatus, MusicCheck,
 import type { CampaignOrigin, CampaignPlatform, CampaignStatus, HalalVerdict, Payout, RuleItem, SourceKind, SourceStatus, SubmissionStatus } from '../../../shared/campaigns';
 import type { EditSpec, EditTemplate } from '../../../shared/edit';
 import type { ViralHint } from '../../../shared/finder';
+import type { MascotId } from '../../../shared/mascots';
 import type { PieceDirections } from '../../../shared/direction';
 import type { IdeaAssist, IdeaKind } from '../../../shared/ideas';
 import type { KnowledgeSource, KnowledgeStatus, KnowledgeTopic } from '../../../shared/knowledge';
@@ -56,6 +57,8 @@ export const workspaces = sqliteTable('workspaces', {
   brandGuide: text('brand_guide').notNull().default(''),
   // Claude-maintained notes about my voice, learned from my edits.
   voiceMemory: text('voice_memory').notNull().default(''),
+  // The page's mascot (shared/mascots.ts): scenes draw it when they don't name one.
+  mascot: text('mascot').$type<MascotId>(),
   // The brand's video look (shape, captions, grade, watermark, voice settings), applied to new edits.
   editTemplate: text('edit_template', { mode: 'json' }).$type<EditTemplate>(),
   stages: text('stages', { mode: 'json' }).$type<Stage[]>().notNull(),

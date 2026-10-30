@@ -62,6 +62,8 @@ const chars = (text = '') => text.replace(/[*\s]/g, '').length;
 function tweenKind(t: SceneTween, big: boolean, el?: SceneElement): { kind: MoveKind; quiet?: boolean } | null {
   const from = t.from ?? {};
   const to = t.to;
+  // A mascot changing pose: a jump or a start pops, other gestures stay quiet.
+  if (t.pose && !Object.keys(to).length) return t.pose === 'cheer' || t.pose === 'shock' ? { kind: 'pop', quiet: true } : null;
   if ('strokeDashoffset' in to || 'strokeDashoffset' in from) return { kind: t.duration >= 0.5 ? 'draw' : 'swish' };
   if (t.physics) return { kind: 'whoosh' };
   // Steady motion (a spin, a drift, a scroll) is texture, not a move.

@@ -1,4 +1,5 @@
 import { FONT_FAMILIES } from './fonts';
+import { isMascot, isMascotPose, type MascotId, type MascotPose } from './mascots';
 
 // A scene: a motion graphic Claude designs itself (with the HyperFrames and GSAP skills' know-how), stored as data, not
 // code. Elements are boxes, text, shapes and library images styled with an allow-list of CSS; tweens are GSAP tweens
@@ -16,7 +17,7 @@ export type SceneSound = (typeof SCENE_SOUNDS)[number];
 export type SceneElement = {
   /** Lowercase letters, digits and dashes; tweens target it by this. */
   id: string;
-  kind: 'box' | 'text' | 'image' | 'path';
+  kind: 'box' | 'text' | 'image' | 'path' | 'mascot';
   /** text: what it says; *word* for the accent colour, a line break with \n. */
   text?: string;
   /** text: wrap each word or letter so a tween can stagger them (target "<id>.words" / "<id>.chars"). */
@@ -27,6 +28,12 @@ export type SceneElement = {
   d?: string;
   /** path: start undrawn so a tween of strokeDashoffset from 1 to 0 draws it on. */
   draw?: boolean;
+  /** mascot: which one (shared/mascots.ts); left out, the page's own. */
+  mascot?: MascotId;
+  /** mascot: the pose it starts in (default idle); a tween's `pose` changes it. */
+  pose?: MascotPose;
+  /** mascot: faces the other way (it points to your left). */
+  flip?: boolean;
   /** A box this one sits inside (its position is then relative to that box). */
   parent?: string;
   style: Record<string, string>;
@@ -52,6 +59,8 @@ export type SceneTween = {
   physics?: { velocity: number; angle: number; gravity?: number; friction?: number };
   /** The sound on its frame when *Sound on every move* is on; left out, it's picked from the move. */
   sound?: SceneSound;
+  /** Mascots only: the pose they move into over the tween (written as `to: { pose }`); held until the next. */
+  pose?: MascotPose;
 };
 
 export type SceneSpec = {
@@ -332,7 +341,7 @@ export function normalizeScene(input: unknown, length: number, problems: string[
     const e = raw as Record<string, unknown>;
     let id = typeof e.id === 'string' && ID.test(e.id) ? e.id : `e${k + 1}`;
     while (ids.has(id)) id = `${id}-${k}`;
-    const kind = (['box', 'text', 'image', 'path'] as const).find((x) => x === e.kind) ?? 'box';
+    const kind = (['box', 'text', 'image', 'path', 'mascot'] as const).find((x) => x === e.kind) ?? 'box';
     const el: SceneElement = { id, kind, style: cleanStyle(e.style, problems, `element ${id}`) };
     if (kind === 'text') {
       el.text = typeof e.text === 'string' ? e.text.slice(0, 300) : '';
@@ -352,6 +361,13 @@ export function normalizeScene(input: unknown, length: number, problems: string[
       }
       el.d = e.d.trim();
       el.draw = e.draw === true;
+    }
+    if (kind === 'mascot') {
+      if (e.mascot !== undefined && !isMascot(e.mascot)) problems.push(`element ${id}: no mascot "${String(e.mascot).slice(0, 20)}" (the page's own is used)`);
+      if (isMascot(e.mascot)) el.mascot = e.mascot;
+      el.pose = isMascotPose(e.pose) ? e.pose : 'idle';
+      if (e.pose !== undefined && !isMascotPose(e.pose)) problems.push(`element ${id}: no pose "${String(e.pose).slice(0, 20)}"`);
+      if (e.flip === true) el.flip = true;
     }
     if (typeof e.parent === 'string' && ids.has(e.parent) && elements.find((p) => p.id === e.parent)?.kind === 'box') el.parent = e.parent;
     ids.add(id);
@@ -373,10 +389,21 @@ export function normalizeScene(input: unknown, length: number, problems: string[
         if (!ok) problems.push(`${where}: no element "${x}"${part ? ' (split the text first)' : ''}`);
         return ok;
       });
-    const to = cleanVars(t.to, problems, where);
-    if (!targets.length || !to || !Object.keys(to).length) continue;
+    // A mascot's pose is the rig's to change, not a CSS property.
+    const { pose: toPose, ...rawTo } = t.to && typeof t.to === 'object' ? (t.to as Record<string, unknown>) : {};
+    // Written as `to: { pose }`, kept as the tween's `pose`.
+    const rawPose = toPose ?? t.pose;
+    let pose: MascotPose | undefined;
+    if (rawPose !== undefined) {
+      if (!isMascotPose(rawPose)) problems.push(`${where}: no pose "${String(rawPose).slice(0, 20)}"`);
+      else if (!targets.every((x) => elements.find((e) => e.id === x)?.kind === 'mascot')) problems.push(`${where}: only mascots have a pose`);
+      else pose = rawPose;
+    }
+    const to = cleanVars(rawTo, problems, where) ?? {};
+    if (!targets.length || (!Object.keys(to).length && !pose)) continue;
     const at = round(num(t.at, 0, 0, length));
     const tween: SceneTween = { targets: targets.join(','), at, duration: round(num(t.duration, 0.4, 0, Math.max(0, length - at))), to };
+    if (pose) tween.pose = pose;
     const from = cleanVars(t.from, problems, where);
     if (from && Object.keys(from).length) tween.from = from;
     if (typeof t.ease === 'string' && EASE.test(t.ease.replace(/\s/g, ''))) tween.ease = t.ease.replace(/\s/g, '');

@@ -5,6 +5,7 @@
 // with explicit start states, nothing random, so every frame can be seeked. A library scene keeps its preset and
 // words and is built again whenever the edit changes (its length, the frame, the accent colour), until it's
 // redesigned by hand with write_scene and becomes a custom scene.
+import { isMascotPose, type MascotPose } from './mascots';
 import { normalizeFill, normalizeScene, SCENE_MAX_SECONDS, type SceneElement, type SceneSpec, type SceneTween } from './scene';
 
 export const SCENE_PRESETS = [
@@ -27,6 +28,9 @@ export const SCENE_PRESETS = [
   'terminal',
   'route',
   'clock',
+  'mascot-explain',
+  'mascot-says',
+  'mascot-react',
 ] as const;
 export type ScenePreset = (typeof SCENE_PRESETS)[number];
 export const isScenePreset = (p: unknown): p is ScenePreset => SCENE_PRESETS.includes(p as ScenePreset);
@@ -863,7 +867,122 @@ export const SCENE_LIBRARY: Record<ScenePreset, Info> = {
       };
     },
   },
+
+  // The page's mascot (shared/mascots.ts), drawn on its rig: it walks, points, talks and reacts.
+  'mascot-explain': {
+    label: 'Mascot explains',
+    hint: 'The page’s mascot walks in and points at a card with the line: a lesson, a rule, the key fact',
+    fields: { text: 'The line it points at', sub: 'A second line under it (optional)' },
+    example: { text: 'Sell *before* you build', sub: 'Ten people paying beats a perfect product' },
+    seconds: (f) => clamp(3 + wordCount(`${f.text} ${f.sub}`) * 0.2, 3.5, 8),
+    build: (f, { W, H, color }, len): Built => {
+      const { mw, mh, feet } = mascotSize(H, 600);
+      const top = feet - mh;
+      // Its box has room for its arms: the empty left part hangs off the frame. Its finger is 93 % across, 44 % down.
+      const left = -r(mw * 0.3);
+      const cardL = r(left + mw * 0.93 + 30);
+      const cardW = W - cardL - 48;
+      const size = fitWrap(f.text, cardW - 64, 3, 84, 38);
+      const subSize = f.sub ? fitWrap(f.sub, cardW - 64, 3, 42, 26) : 0;
+      const cardH = r(size * 1.15 * Math.min(3, Math.ceil((plain(f.text).length * size * 0.6) / (cardW - 64))) + (f.sub ? subSize * 1.3 * Math.min(3, Math.ceil((plain(f.sub).length * subSize * 0.55) / (cardW - 64))) + 20 : 0) + 64);
+      const cardT = r(clamp(top + mh * 0.44 - cardH / 2, H * 0.1, feet - cardH));
+      const t = Math.min(1, len / 4);
+      return {
+        background: 'none',
+        elements: [
+          { id: 'm', kind: 'mascot', pose: 'walk', style: { left, top, width: mw, height: mh } },
+          { id: 'card', kind: 'box', style: { left: cardL, top: cardT, width: cardW, padding: 32, background: '#ffffff', 'border-radius': 28, 'box-shadow': '0 18px 50px rgba(0,0,0,.28)', 'transform-origin': 'left center', display: 'flex', 'flex-direction': 'column', gap: 18 } },
+          { id: 'line', kind: 'text', parent: 'card', text: f.text, style: { 'font-size': size, 'line-height': 1.15, color: '#111111', 'font-weight': 800 } },
+          ...(f.sub ? [{ id: 'sub', kind: 'text' as const, parent: 'card', text: f.sub, style: { 'font-size': subSize, 'line-height': 1.3, color: '#555555', 'font-weight': 600, 'font-family': 'Inter' } }] : []),
+          { id: 'bar', kind: 'box', parent: 'card', style: { width: 90, height: 8, 'border-radius': 4, background: color, 'transform-origin': 'left center' } },
+        ],
+        tweens: [
+          { targets: 'm', at: 0, duration: 1.0 * t, from: { x: -mw * 0.7 }, to: { x: 0 }, ease: 'power1.out', sound: 'none' },
+          { targets: 'm', at: 1.0 * t, duration: 0.3, to: { pose: 'point' } },
+          { targets: 'card', at: 1.15 * t, duration: 0.45, from: { scale: 0.6, opacity: 0 }, to: { scale: 1, opacity: 1 }, ease: 'back.out(1.7)' },
+          ...(f.sub ? [{ targets: 'sub', at: 1.5 * t, duration: 0.4, from: { opacity: 0, y: 14 }, to: { opacity: 1, y: 0 }, ease: 'power2.out', sound: 'none' as const }] : []),
+          { targets: 'bar', at: 1.45 * t, duration: 0.45, from: { scaleX: 0 }, to: { scaleX: 1 }, ease: 'expo.out', sound: 'swish' },
+          exit(['m', 'card'], len),
+        ],
+      };
+    },
+  },
+
+  'mascot-says': {
+    label: 'Mascot says',
+    hint: 'The page’s mascot pops up and says the line in a speech bubble: a hook, a question, a punchline',
+    fields: { text: 'What it says' },
+    example: { text: 'Nobody tells you *this* about money' },
+    seconds: (f) => clamp(2.2 + wordCount(f.text) * 0.32, 3, 10),
+    build: (f, { W, H }, len): Built => {
+      const { mw, mh, feet } = mascotSize(H, 620);
+      const top = feet - mh;
+      const bw = Math.min(860, W - 120);
+      const size = fitWrap(f.text, bw - 80, 3, 76, 36);
+      const lines = Math.min(3, Math.ceil((plain(f.text).length * size * 0.6) / (bw - 80)));
+      const bh = r(lines * size * 1.2 + 76);
+      // Just above its head (the top 8 % of its box is air).
+      const bt = r(Math.max(H * 0.08, top + mh * 0.06 - bh - 30));
+      const words = wordCount(f.text);
+      return {
+        background: 'none',
+        elements: [
+          { id: 'm', kind: 'mascot', pose: 'talk', style: { left: r((W - mw) / 2), top, width: mw, height: mh } },
+          { id: 'tail', kind: 'box', style: { left: r(W / 2 - 22), top: bt + bh - 26, width: 44, height: 44, background: '#ffffff', transform: 'rotate(45deg)', 'border-radius': 6 } },
+          { id: 'bubble', kind: 'box', style: { left: r((W - bw) / 2), top: bt, width: bw, height: bh, padding: '0 40px', background: '#ffffff', 'border-radius': 40, 'box-shadow': '0 16px 44px rgba(0,0,0,.25)', 'transform-origin': 'center bottom', ...centred } },
+          { id: 'say', kind: 'text', parent: 'bubble', text: f.text, split: 'words', style: { 'font-size': size, 'line-height': 1.2, color: '#111111', 'font-weight': 800 } },
+        ],
+        tweens: [
+          { targets: 'm', at: 0, duration: 0.5, from: { y: 260, opacity: 0 }, to: { y: 0, opacity: 1 }, ease: 'back.out(1.4)' },
+          { targets: 'bubble,tail', at: 0.35, duration: 0.4, from: { scale: 0.5, opacity: 0 }, to: { scale: 1, opacity: 1 }, ease: 'back.out(2)', sound: 'pop' },
+          { targets: 'say.words', at: 0.5, duration: 0.25, from: { opacity: 0, y: 12 }, to: { opacity: 1, y: 0 }, ease: 'power2.out', stagger: clamp((len - 1.6) / Math.max(1, words), 0.06, 0.3), ...(words > 8 ? { sound: 'none' as const } : {}) },
+          // Done talking: it waits with a smile.
+          { targets: 'm', at: Math.max(0.6, len - 0.9), duration: 0.25, to: { pose: 'idle' } },
+          exit(['m', 'bubble', 'tail'], len),
+        ],
+      };
+    },
+  },
+
+  'mascot-react': {
+    label: 'Mascot reacts',
+    hint: 'The page’s mascot pops up bottom left as a sticker with a white outline and reacts: the payoff, a twist, a win',
+    fields: { sub: 'The reaction: cheer, shock, think, point or wave (cheer when left out; optional)', text: 'A word on it, e.g. NO WAY (optional)' },
+    example: { sub: 'shock', text: 'No *way*' },
+    seconds: () => 2.4,
+    build: (f, { W, H, color }, len): Built => {
+      const { mw, mh, feet } = mascotSize(H, 500, 0.78);
+      const top = feet - mh;
+      // Bottom left: the right side is under the app's buttons. Its box's empty left part hangs off the frame.
+      const left = -r(mw * 0.12);
+      const want = f.sub.trim().toLowerCase();
+      const pose: MascotPose = isMascotPose(want) ? want : 'cheer';
+      const size = f.text ? fit(f.text, 420, 96, 44, 0.62) : 0;
+      return {
+        background: 'none',
+        elements: [
+          { id: 'm', kind: 'mascot', pose: 'idle', style: { left, top, width: mw, height: mh, 'transform-origin': 'center bottom', filter: 'drop-shadow(6px 0 0 #fff) drop-shadow(-6px 0 0 #fff) drop-shadow(0 6px 0 #fff) drop-shadow(0 -6px 0 #fff)' } },
+          ...(f.text
+            ? [{ id: 'tag', kind: 'text' as const, text: f.text, style: { left: r(left + mw * 0.42), top: r(top - size * 0.9), padding: '10px 26px', background: '#ffffff', color: '#111111', 'font-size': size, 'font-weight': 900, 'text-transform': 'uppercase', 'border-radius': 18, transform: 'rotate(-6deg)', 'white-space': 'nowrap', 'box-shadow': `0 8px 0 ${color}` } }]
+            : []),
+        ],
+        tweens: [
+          { targets: 'm', at: 0, duration: 0.35, from: { scale: 0, rotation: -12 }, to: { scale: 1, rotation: 0 }, ease: 'back.out(2)' },
+          { targets: 'm', at: 0.2, duration: 0.25, to: { pose } },
+          ...(f.text ? [{ targets: 'tag', at: 0.45, duration: 0.3, from: { scale: 1.8, opacity: 0 }, to: { scale: 1, opacity: 1 }, ease: 'power4.out' }] : []),
+          { targets: f.text ? 'm,tag' : 'm', at: Math.max(0.6, len - 0.3), duration: 0.3, to: { scale: 0 }, ease: 'back.in(1.7)', sound: 'none' },
+        ],
+      };
+    },
+  },
 };
+
+const wordCount = (t: string) => plain(t).split(/\s+/).filter(Boolean).length;
+/** A mascot's box for the frame: `width` in 9:16, smaller on shorter frames, its feet at `ground` of the height. */
+function mascotSize(H: number, width: number, ground = 0.8) {
+  const mw = r(width * Math.min(1, H / 1920 + 0.2));
+  return { mw, mh: r(mw * 1.19), feet: r(H * ground) };
+}
 
 /** How long a library scene wants to be with these words. */
 export const sceneSeconds = (preset: ScenePreset, fill: SceneFill) => Math.min(SCENE_MAX_SECONDS, Math.round(SCENE_LIBRARY[preset].seconds(fill) * 10) / 10);

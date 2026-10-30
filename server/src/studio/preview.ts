@@ -1,17 +1,23 @@
 // Stills of one overlay (a scene Claude wrote, or any graphic) as it will render: the overlay alone over a still of the
 // footage under it, rendered by HyperFrames at a low frame rate, then a few frames pulled out. This is how Claude sees
 // what it designed before the creator does.
+import { execFile as execFileCb } from 'node:child_process';
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
-import { clipAt, emptyEdit, normalizeEdit, type EditOverlay, type EditSpec } from '../../../shared/edit';
+import { promisify } from 'node:util';
+import { clipAt, EDIT_FORMATS, emptyEdit, normalizeEdit, type EditOverlay, type EditSpec } from '../../../shared/edit';
 import { config } from '../config';
 import { newId } from '../db';
+import { requireBinary } from '../lib/bin';
 import { extractFrames } from '../lib/ffmpeg';
 import { getMedia, mediaPath } from '../services/media';
 import { ensureRenderer } from './browser';
 import { BUNDLED_FONTS, composeEdit, type ComposeMedia } from './compose';
+import { getWorkspace } from '../services/pieces';
 import { getEdit } from './edits';
 import { GSAP_FILES, gsapFilePath, runWorker } from './render';
+
+const execFile = promisify(execFileCb);
 
 const PREVIEW_FPS = 10;
 
@@ -29,7 +35,8 @@ export function previewOverlay(editId: string, overlayId: string, times?: number
 }
 
 async function run(editId: string, overlayId: string, times?: number[]) {
-  const spec = normalizeEdit(getEdit(editId).working);
+  const edit = getEdit(editId);
+  const spec = normalizeEdit(edit.working);
   const o = spec.overlays.find((x) => x.id === overlayId);
   if (!o) throw new Error('There’s no overlay with that id on this edit.');
   const len = o.end - o.start;
@@ -49,6 +56,13 @@ async function run(editId: string, overlayId: string, times?: number[]) {
       else await extractFrames(mediaPath(m), [hit.clip.in + (o.start - hit.start)], () => join(dir, 'media', 'bg.jpg'), 1920);
       media.set('bg', { id: 'bg', kind: 'image', assetType: null, width: m.width, height: m.height, durationMs: null });
       mini.clips = [{ ...hit.clip, mediaId: 'bg', in: 0, out: len, transition: null }];
+    } else {
+      // Nothing under it (a video made of scenes): black, so the preview still lasts as long as the overlay.
+      const { width, height } = EDIT_FORMATS[spec.format];
+      bgFile = 'bg.png';
+      await execFile(requireBinary('ffmpeg'), ['-y', '-v', 'error', '-f', 'lavfi', '-i', `color=black:s=${width}x${height}`, '-frames:v', '1', join(dir, 'media', bgFile)]);
+      media.set('bg', { id: 'bg', kind: 'image', assetType: null, width, height, durationMs: null });
+      mini.clips = normalizeEdit({ clips: [{ mediaId: 'bg', in: 0, out: len }] }).clips;
     }
     // Pictures a scene uses, and the brand font.
     const files = new Map<string, string>();
@@ -65,6 +79,7 @@ async function run(editId: string, overlayId: string, times?: number[]) {
     for (const f of GSAP_FILES) await copyFile(gsapFilePath(f), join(dir, f));
     const { html } = composeEdit({
       spec: { ...mini, captions: { ...mini.captions, fontMediaId: spec.captions.fontMediaId } },
+      mascot: getWorkspace(edit.workspaceId).mascot,
       media,
       transcripts: {},
       clipSource: () => (bgFile ? { src: `media/${bgFile}`, mediaStart: 0 } : null),

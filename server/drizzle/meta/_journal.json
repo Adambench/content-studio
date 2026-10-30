@@ -141,6 +141,13 @@
       "when": 1793128554720,
       "tag": "0019_yielding_spitfire",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1793381876801,
+      "tag": "0020_chief_gabe_jones",
+      "breakpoints": true
     }
   ]
 }

@@ -1,3 +1,4 @@
+import { MASCOT_INFO } from '../../../shared/mascots';
 import { KIND_INFO, MODULE_INFO, normalizeModules, type WorkspaceKind } from '../../../shared/types';
 import type { schema } from '../db';
 
@@ -85,6 +86,7 @@ ${KIND_RULES[ws.kind]}
 
     `## This brand
 ${ws.niche ? `Niche: ${ws.niche}\n` : ''}${ws.description ? `About: ${ws.description}` : 'No description yet.'}
+${ws.mascot ? `Mascot: ${MASCOT_INFO[ws.mascot].label}: ${MASCOT_INFO[ws.mascot].look}. Poses: ${MASCOT_INFO[ws.mascot].poses.join(', ')}. Put it in a video as a mascot element of a scene (write_scene) or with the mascot scenes of the library (mascot-explain, mascot-says, mascot-react).` : 'No mascot yet.'}
 
 ### Brand guide (written by the creator)
 ${ws.brandGuide.trim() || '(not written yet)'}

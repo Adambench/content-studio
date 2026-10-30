@@ -4,6 +4,7 @@ import { and, asc, eq, isNull, max, notInArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { normalizeTemplate } from '../../../shared/edit';
+import { MASCOTS } from '../../../shared/mascots';
 import { KIND_PRESETS, MODULES, WORKSPACE_COLORS, WORKSPACE_KINDS, normalizeModules } from '../../../shared/types';
 import { config } from '../config';
 import { db, newId, now, schema } from '../db';
@@ -25,6 +26,7 @@ const patchSchema = z.object({
   brandGuide: z.string().max(20000).optional(),
   voiceMemory: z.string().max(20000).optional(),
   stages: z.array(stageSchema).min(1).max(12).optional(),
+  mascot: z.enum(MASCOTS).nullable().optional(),
   // The brand's video look; null clears it.
   editTemplate: z.record(z.string(), z.unknown()).nullable().optional(),
 });

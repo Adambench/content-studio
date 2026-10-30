@@ -17,7 +17,7 @@ import { hasVoiceReference, speak, ttsInstalled, voiceReferencePath } from '../s
 import { CHARACTERS, CLONE_VOICE, VOICES, type CharacterId } from '../../../shared/recipe';
 import { characterSvg } from '../studio/characters';
 import { JobError, enqueue, hasPendingJob } from '../jobs/queue';
-import { getPiece } from '../services/pieces';
+import { getPiece, getWorkspace } from '../services/pieces';
 import { BUNDLED_FONTS, composeEdit } from '../studio/compose';
 import { createEdit, editDetail, findEditForPiece, getEdit, listRenders, restoreEditVersion, saveEditVersion, specMedia, specTranscripts, updateEditWorking } from '../studio/edits';
 import { proxyPath } from '../studio/proxy';
@@ -163,6 +163,7 @@ export async function studioRoutes(app: FastifyInstance) {
     };
     const { html } = composeEdit({
       spec,
+      mascot: getWorkspace(edit.workspaceId).mascot,
       media: new Map(rows.map((m) => [m.id, m])),
       transcripts: await specTranscripts(spec, rows),
       clipSource: (i) => source(spec.clips[i].mediaId, spec.clips[i].in),

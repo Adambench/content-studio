@@ -21,6 +21,7 @@ import { allSounds } from '../../../shared/sound-design';
 import { composeGraphic, graphicsCss, STAT_HELPER } from './graphics';
 import { composeRecipe } from './recipe-layers';
 import { composeScene, sceneCss } from './scene';
+import type { MascotId } from '../../../shared/mascots';
 import { accent, attrJson, esc, js, n, px } from './html';
 import type { AssetType, MediaKind, Transcript } from '../../../shared/types';
 
@@ -50,6 +51,8 @@ export type ComposeInput = {
   fontUrl: (file: string) => string;
   scripts: string[];
   preview: boolean;
+  /** The page's own mascot, for scene mascots that don't name one. */
+  mascot?: MascotId | null;
   /**
    * The Android app's WebView shows the preview from another origin: media is requested with CORS (so the runtime can
    * route audio through Web Audio), and videos get a blank poster instead of the WebView's grey play button.
@@ -203,7 +206,7 @@ export function composeEdit(input: ComposeInput) {
       return;
     }
     if (o.type === 'scene') {
-      const sceneCtx = { ...graphicCtx, fileUrl: input.fileUrl };
+      const sceneCtx = { ...graphicCtx, fileUrl: input.fileUrl, mascot: input.mascot };
       const sc = composeScene({ ...o, start, end: start + len }, i, sceneCtx);
       body.push(`<div id="o${i}" class="clip layer sc" ${timing} style="z-index:35">${sc.html}</div>`);
       tl.push(...sc.tweens);

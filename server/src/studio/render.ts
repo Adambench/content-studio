@@ -245,6 +245,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
 
     const { html } = composeEdit({
       spec,
+      mascot: getWorkspace(r.workspaceId).mascot,
       media: composeMedia(rows),
       transcripts,
       clipSource: (i) => clipSources[i] ?? null,

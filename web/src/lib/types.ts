@@ -1,6 +1,7 @@
 import type { Campaign, CampaignOrigin, CampaignResults, Submission } from '@shared/campaigns';
 import type { DayPart, PostStats, ReviewBody, ReviewStatus, WeeklyReviewSetting } from '@shared/analytics';
 import type { EditSpec, EditTemplate } from '@shared/edit';
+import type { MascotId } from '@shared/mascots';
 import type { QualityReport } from '@shared/quality';
 import type { PieceDirections } from '@shared/direction';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostProblem, PostStatus, PublishPlatform, QueueSlot } from '@shared/publish';
@@ -17,6 +18,8 @@ export type Workspace = {
   brandGuide: string;
   voiceMemory: string;
   editTemplate: EditTemplate | null;
+  /** The page's drawn mascot (shared/mascots.ts). */
+  mascot: MascotId | null;
   stages: Stage[];
   position: number;
   createdAt: number;
