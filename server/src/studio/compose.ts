@@ -190,7 +190,8 @@ export function composeEdit(input: ComposeInput) {
   tl.push(...textures.tweens);
 
   // ---------- overlays ----------
-  const fontStack = (family: string) => (spec.captions.fontMediaId ? `'Brand', '${family}', sans-serif` : `'${family}', sans-serif`);
+  // Arabic letters in any font (a name of Allah in a caption, a title) are drawn in Naskh.
+  const fontStack = (family: string) => `${spec.captions.fontMediaId ? `'Brand', ` : ''}'${family}', '${ARABIC_FONT.family}', sans-serif`;
   const graphicCtx = { W, H, color: spec.captions.highlight, font: fontStack };
   const helpers = new Set<string>();
   spec.overlays.forEach((o, i) => {
@@ -340,11 +341,7 @@ export function composeEdit(input: ComposeInput) {
   // ---------- page ----------
   const face = (family: string, weight: string, file: string, range: string) =>
     `@font-face { font-family: '${family}'; font-style: normal; font-weight: ${weight}; font-display: block; src: url(${input.fontUrl(file)}) format('woff2'); unicode-range: ${range}; }`;
-  const fontFaces = BUNDLED_FONTS.flatMap((f) => [
-    ...f.files.map((file, i) => face(f.family, f.weight, file, RANGES[f.subsets?.[i] ?? (i === 0 ? 'latin' : 'latin-ext')])),
-    // Arabic letters in any other font (a name of Allah in a caption, a title) are drawn in Naskh.
-    ...(f.family === ARABIC_FONT.family ? [] : [face(f.family, '400 700', ARABIC_FONT.file, RANGES.arabic)]),
-  ]);
+  const fontFaces = BUNDLED_FONTS.flatMap((f) => f.files.map((file, i) => face(f.family, f.weight, file, RANGES[f.subsets?.[i] ?? (i === 0 ? 'latin' : 'latin-ext')])));
   if (spec.captions.fontMediaId) fontFaces.push(`@font-face { font-family: 'Brand'; font-display: block; src: url(${input.fileUrl(spec.captions.fontMediaId)}); }`);
 
   const html = `<!doctype html>

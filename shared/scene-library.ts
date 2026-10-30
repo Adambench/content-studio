@@ -1014,8 +1014,8 @@ export const SCENE_LIBRARY: Record<ScenePreset, Info> = {
       const size = r(clamp(Math.sqrt((boxW * boxH) / (n * 0.95)), 36, 104));
       const meanW = W - 160;
       const meanT = bottom + r(H * 0.035);
-      const meanH = r(H * 0.75) - meanT - 60;
-      const meanSize = r(clamp(Math.sqrt((meanW * meanH) / (Math.max(1, plain(f.text).length) * 0.48 * 1.35)), 28, 60));
+      const meanH = r(H * 0.75) - meanT - 80;
+      const meanSize = r(clamp(Math.sqrt((meanW * meanH) / (Math.max(1, plain(f.text).length) * 0.55 * 1.35)), 26, 60));
       const stars = [
         [0.12, 0.07, 16],
         [0.86, 0.1, 12],
@@ -1030,17 +1030,17 @@ export const SCENE_LIBRARY: Record<ScenePreset, Info> = {
           ...stars.map(([x, y, R], i) => ({ id: `s${i}`, kind: 'path' as const, d: star8(W * x, H * y, R), style: { fill: GOLD, opacity: 0 } })),
           { id: 'arch', kind: 'path', d: arch(cx, top, bottom, aw), draw: true, style: { fill: 'none', stroke: GOLD, 'stroke-width': 4 } },
           { id: 'arch2', kind: 'path', d: arch(cx, top + 22, bottom, aw - 36), draw: true, style: { fill: 'none', stroke: GOLD, 'stroke-width': 1.5, opacity: 0.7 } },
-          { id: 'tip', kind: 'path', d: star8(cx, top - 34, 22), style: { fill: GOLD, 'transform-origin': `${cx}px ${top - 34}px` } },
+          { id: 'tip', kind: 'path', d: star8(cx, top - 34, 22), style: { fill: GOLD } },
           { id: 'ar-box', kind: 'box', style: { left: cx - r(boxW / 2), top: boxT, width: boxW, height: boxH, ...centred } },
           { id: 'ar', kind: 'text', parent: 'ar-box', text: f.arabic ?? '', style: { 'font-family': NASKH, 'font-size': size, 'line-height': 1.95, color: CREAM, direction: 'rtl', 'font-weight': 500 } },
           { id: 'mean-box', kind: 'box', style: { left: 80, top: meanT, width: meanW, height: meanH, ...centred } },
           { id: 'mean', kind: 'text', parent: 'mean-box', text: f.text, style: { 'font-family': 'Playfair Display', 'font-style': 'italic', 'font-size': meanSize, 'line-height': 1.35, color: CREAM } },
-          row(W, 'cite', meanT + meanH + 4, 56),
+          row(W, 'cite', meanT + meanH + 24, 56),
           { id: 'cite-t', kind: 'text', parent: 'cite', text: f.sub, style: { 'font-family': 'Inter', 'font-weight': 600, 'font-size': 30, 'letter-spacing': '0.22em', 'text-transform': 'uppercase', color: GOLD } },
         ],
         tweens: [
           { targets: 'arch,arch2', at: 0, duration: 1.8, from: { strokeDashoffset: 1 }, to: { strokeDashoffset: 0 }, ease: 'power1.inOut', sound: 'none' },
-          { targets: 'tip', at: 0.9, duration: 1, from: { scale: 0, opacity: 0, rotation: -45 }, to: { scale: 1, opacity: 1, rotation: 0 }, ease: 'power2.out', sound: 'none' },
+          { targets: 'tip', at: 0.9, duration: 1, from: { scale: 0, opacity: 0, rotation: -45, transformOrigin: '50% 50%' }, to: { scale: 1, opacity: 1, rotation: 0 }, ease: 'power2.out', sound: 'none' },
           { targets: stars.map((_, i) => `s${i}`).join(','), at: 0.3, duration: 1.4, from: { opacity: 0 }, to: { opacity: 0.35 }, ease: 'sine.inOut', stagger: 0.25, sound: 'none' },
           // Stars glimmer in turn for as long as it holds.
           { targets: stars.map((_, i) => `s${i}`).join(','), at: 2, duration: 1.6, to: { opacity: 0.12 }, ease: 'sine.inOut', yoyo: true, repeat: Math.max(1, Math.floor((len - 3) / 1.6)), stagger: 0.4, sound: 'none' },
@@ -1071,7 +1071,7 @@ export const SCENE_LIBRARY: Record<ScenePreset, Info> = {
       const hasAr = !!f.arabic;
       const arH = hasAr ? r(fh * 0.3) : 0;
       const textH = fh - 260 - arH;
-      const size = r(clamp(Math.sqrt((innerW * textH) / (Math.max(1, plain(f.text).length) * 0.48 * 1.35)), 30, 68));
+      const size = r(clamp(Math.sqrt((innerW * textH) / (Math.max(1, plain(f.text).length) * 0.55 * 1.35)), 30, 84));
       const arSize = hasAr ? r(clamp(Math.sqrt((innerW * arH) / (Math.max(1, letters(f.arabic ?? '')) * 0.95)), 30, 64)) : 0;
       const cx = r(W / 2);
       return {
@@ -1085,7 +1085,7 @@ export const SCENE_LIBRARY: Record<ScenePreset, Info> = {
             [60, fb],
             [60 + fw, fb],
           ].map(([x, y], i) => ({ id: `c${i}`, kind: 'path' as const, d: star8(x, y, 16), style: { fill: GOLD, stroke: NAVY, 'stroke-width': 4, 'paint-order': 'stroke' } })),
-          { id: 'top-star', kind: 'path', d: star8(cx, ft, 26), style: { fill: GOLD, stroke: NAVY, 'stroke-width': 6, 'paint-order': 'stroke', 'transform-origin': `${cx}px ${ft}px` } },
+          { id: 'top-star', kind: 'path', d: star8(cx, ft, 26), style: { fill: GOLD, stroke: NAVY, 'stroke-width': 6, 'paint-order': 'stroke' } },
           ...(head ? [row(W, 'head', ft + 70, 60), { id: 'head-t', kind: 'text' as const, parent: 'head', text: head, style: { 'font-family': 'Inter', 'font-weight': 600, 'font-size': 30, 'letter-spacing': '0.2em', 'text-transform': 'uppercase', color: GOLD } }] : []),
           ...(hasAr
             ? [
@@ -1101,8 +1101,8 @@ export const SCENE_LIBRARY: Record<ScenePreset, Info> = {
         ],
         tweens: [
           { targets: 'frame,frame2', at: 0, duration: 1.2, from: { opacity: 0, scale: 0.97 }, to: { opacity: 1, scale: 1 }, ease: 'power2.out', sound: 'none' },
-          { targets: 'c0,c1,c2,c3', at: 0.4, duration: 0.9, from: { opacity: 0, scale: 0 }, to: { opacity: 1, scale: 1 }, ease: 'power2.out', stagger: 0.12, sound: 'none' },
-          { targets: 'top-star', at: 0.6, duration: 1.1, from: { opacity: 0, rotation: -45 }, to: { opacity: 1, rotation: 0 }, ease: 'power2.out', sound: 'none' },
+          { targets: 'c0,c1,c2,c3', at: 0.4, duration: 0.9, from: { opacity: 0, scale: 0, transformOrigin: '50% 50%' }, to: { opacity: 1, scale: 1 }, ease: 'power2.out', stagger: 0.12, sound: 'none' },
+          { targets: 'top-star', at: 0.6, duration: 1.1, from: { opacity: 0, rotation: -45, transformOrigin: '50% 50%' }, to: { opacity: 1, rotation: 0 }, ease: 'power2.out', sound: 'none' },
           { targets: 'top-star', at: 1.8, duration: Math.max(1, len - 2.4), to: { rotation: 45 }, ease: 'none', sound: 'none' },
           ...(head ? [{ targets: 'head-t', at: 0.8, duration: 0.9, from: { opacity: 0 }, to: { opacity: 1 }, ease: 'sine.out', sound: 'none' as const }] : []),
           ...(hasAr ? [{ targets: 'ar', at: 1, duration: 1.2, from: { opacity: 0, y: 16 }, to: { opacity: 1, y: 0 }, ease: 'power2.out', sound: 'none' as const }] : []),

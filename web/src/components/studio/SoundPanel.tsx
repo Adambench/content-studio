@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useStudio } from './context';
 import { Field, ListenButton, MediaSelect, SecondsField, SfxSelect, SliderField } from './controls';
+import { VoiceSection } from './VoiceSection';
 
 const pct = (v: number) => (v === 0 ? 'Off' : `${Math.round(v * 100)}%`);
 
@@ -43,8 +44,10 @@ export function SoundPanel() {
 
   return (
     <div className="space-y-6">
-      <section className="space-y-4">
-        <h3 className="text-sm font-medium">Voice</h3>
+      {/* A format video's voices come from its script. */}
+      {!spec.recipe && <VoiceSection />}
+      <section className={cn('space-y-4', !spec.recipe && 'border-t pt-4')}>
+        <h3 className="text-sm font-medium">Clip sound</h3>
         <SliderField label="Clip sound" value={a.voiceVolume} min={0} max={2} step={0.05} format={pct} onChange={(voiceVolume) => set({ voiceVolume })} />
         <Toggle id="enhance" label="Clean up voice" hint="Cuts rumble, evens out levels, adds presence" checked={a.enhanceVoice} onChange={(enhanceVoice) => set({ enhanceVoice })} />
       </section>

@@ -1,5 +1,6 @@
 import { ChevronDown, Clapperboard, Image as ImageIcon, Shapes, Sparkles, Trash2, Type, WandSparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import {
   EDIT_FORMATS,
   editDuration,
@@ -15,6 +16,8 @@ import {
 } from '@shared/edit';
 import { BROLL_LAYOUT_INFO, BROLL_LAYOUTS, OVERLAY_ANIMATION_INFO } from '@shared/looks';
 import { libraryScene, SCENE_LIBRARY, SCENE_PRESETS, sceneSeconds, type ScenePreset, type SceneFill } from '@shared/scene-library';
+import type { QuranPassage } from '@shared/quran';
+import { api, errorMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -374,7 +377,20 @@ function LibrarySceneFields({ overlay, preset, fill, set }: { overlay: SceneOver
     setSub(fill.sub);
     setItems(fill.items.join('\n'));
   }, [fill]);
+  const [arabic, setArabic] = useState(fill.arabic ?? '');
+  useEffect(() => setArabic(fill.arabic ?? ''), [fill]);
   const save = (patch: Partial<SceneFill>) => set({ fill: { ...fill, ...patch } });
+  // An ayah is filled in from the Quran text by its reference, never typed.
+  const ayah = preset === 'ayah';
+  async function lookUp(ref: string) {
+    try {
+      const p = await api<QuranPassage>(`/quran?ref=${encodeURIComponent(ref)}`);
+      save({ sub: p.citation, text: p.meaning, arabic: p.arabic });
+    } catch (err) {
+      toast.error(errorMessage(err));
+      setSub(fill.sub);
+    }
+  }
   const wants = sceneSeconds(preset, fill);
   const len = overlay.end - overlay.start;
   const solid = overlay.background !== 'none' && overlay.background !== 'dim';
@@ -384,14 +400,33 @@ function LibrarySceneFields({ overlay, preset, fill, set }: { overlay: SceneOver
         {info.hint}. Put *stars* around a word for the accent colour. It's redrawn from these words; ask Claude to redesign it.
         {len < wants - 0.05 && ` Shorter than its ${wants} s, so it plays faster.`}
       </p>
-      {info.fields.text && (
+      {ayah && info.fields.sub && (
+        <Field label={info.fields.sub}>
+          <Input value={sub} onChange={(e) => setSub(e.target.value)} onBlur={() => sub !== fill.sub && void lookUp(sub)} onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()} className="h-8" />
+        </Field>
+      )}
+      {ayah && (
+        <div className="space-y-2 rounded-lg border bg-card/50 p-2.5">
+          <p dir="rtl" lang="ar" className="text-right text-lg leading-loose" style={{ fontFamily: "'Noto Naskh Arabic', serif" }}>
+            {fill.arabic}
+          </p>
+          <p className="text-xs italic text-muted-foreground">{fill.text}</p>
+          <p className="text-[11px] text-muted-foreground">From the Quran text (Tanzil) and the Saheeh International translation. Check it before posting.</p>
+        </div>
+      )}
+      {!ayah && info.fields.text && (
         <Field label={info.fields.text}>
           <Input value={text} onChange={(e) => setText(e.target.value)} onBlur={() => text !== fill.text && save({ text: text.trim() })} className="h-8" />
         </Field>
       )}
-      {info.fields.sub && (
+      {!ayah && info.fields.sub && (
         <Field label={info.fields.sub}>
           <Input value={sub} onChange={(e) => setSub(e.target.value)} onBlur={() => sub !== fill.sub && save({ sub: sub.trim() })} className="h-8" />
+        </Field>
+      )}
+      {!ayah && info.fields.arabic && (
+        <Field label={info.fields.arabic}>
+          <Textarea dir="rtl" lang="ar" value={arabic} onChange={(e) => setArabic(e.target.value)} onBlur={() => arabic !== (fill.arabic ?? '') && save({ arabic: arabic.trim() })} rows={3} />
         </Field>
       )}
       {info.fields.items && (
@@ -403,11 +438,11 @@ function LibrarySceneFields({ overlay, preset, fill, set }: { overlay: SceneOver
         <ChoiceSelect
           label="Behind it"
           value={solid ? 'solid' : overlay.background}
-          onChange={(v) => set({ background: v === 'solid' ? '#0b0c10' : v })}
+          onChange={(v) => set({ background: v === 'solid' ? (info.solid ?? '#0b0c10') : v })}
           options={[
             { value: 'none', label: 'The video' },
             { value: 'dim', label: 'The video, darkened' },
-            { value: 'solid', label: 'Plain dark' },
+            { value: 'solid', label: info.solid ? 'Plain colour' : 'Plain dark' },
           ]}
         />
       </Field>

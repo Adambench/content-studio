@@ -347,7 +347,7 @@ export function normalizeScene(input: unknown, length: number, problems: string[
     const kind = (['box', 'text', 'image', 'path', 'mascot'] as const).find((x) => x === e.kind) ?? 'box';
     const el: SceneElement = { id, kind, style: cleanStyle(e.style, problems, `element ${id}`) };
     if (kind === 'text') {
-      el.text = typeof e.text === 'string' ? e.text.slice(0, 300) : '';
+      el.text = typeof e.text === 'string' ? e.text.slice(0, 1200) : '';
       if (e.split === 'words' || e.split === 'chars') el.split = e.split;
     }
     if (kind === 'image') {

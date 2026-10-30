@@ -42,6 +42,21 @@ export async function mediaRoutes(app: FastifyInstance) {
     return saved;
   });
 
+  // The creator's voice for one video (its script read aloud): kept with the video as a recording, never an idea card.
+  app.post<{ Params: { id: string } }>('/api/pieces/:id/recording', async (req) => {
+    const piece = getPiece(req.params.id);
+    const saved: Awaited<ReturnType<typeof saveUpload>>[] = [];
+    await readMultipart(req, async (file) => {
+      if (!file.mimetype.startsWith('audio/')) {
+        file.stream.resume();
+        throw badRequest('Only a voice recording goes here.');
+      }
+      saved.push(await saveUpload(piece.workspaceId, file, { source: 'capture', pieceId: piece.id }));
+    });
+    if (!saved.length) throw badRequest('No recording received.');
+    return saved[0];
+  });
+
   app.get<{ Params: { wid: string } }>('/api/workspaces/:wid/media', async (req) => {
     const q = z
       .object({ scope: z.enum(['footage', 'assets', 'inbox']).default('footage'), kind: z.enum(['video', 'image', 'audio', 'other']).optional(), q: z.string().optional(), pieceId: z.string().optional() })

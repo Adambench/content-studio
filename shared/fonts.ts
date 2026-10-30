@@ -29,8 +29,8 @@ export const BUNDLED_FONTS: StudioFont[] = [
   },
 ];
 
-/** The Arabic letters' file: every other family borrows it, so Arabic never falls back to a system font. */
-export const ARABIC_FONT = { family: 'Noto Naskh Arabic', file: 'noto-naskh-arabic-arabic-wght-normal.woff2' };
+/** Next in every font stack, so Arabic letters never fall back to a system font. */
+export const ARABIC_FONT = { family: 'Noto Naskh Arabic' };
 
 export const FONT_FAMILIES = BUNDLED_FONTS.map((f) => f.family);
 export type FontFamily = string;
