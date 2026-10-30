@@ -77,15 +77,17 @@ proposal was tech, AI and apps).
 Both clipping pages: big word-by-word captions. Brands (2026-10-29): Claude drafts every page's brand (mascot, profile
 picture, palette, fonts, captions, voice, bio) and I approve or ask for changes. Drafts in
 `~/Documents/content-studio-brand/` (open `index.html`; rebuilt by `node src/build.mjs` there, mascots drawn in
-`src/rig.mjs` as one posed outline rig). Approved (2026-10-29): the Traveller (Gentle Return: faceless, thobe and
-kufi, a lantern); Blok (Blox Moments, cyan: a classic blocky avatar, yellow head, plain shirt, sideways cap); the
-personal brand's mascot (amber, paper and ink): me faceless (no eyes or mouth, like the page), a cap with an amber
-patch, gold aviators, a full beard, the oversized amber hoodie and a crossbody bag. Long Story Short (orange on charcoal): a human podcast host (curly
-hair, short beard, orange hoodie, big orange headphones), signature pose at the desk mic with the page name on the
-desk. To pick (round 4): the personal brand's money cues (a growth-arrow patch on the cap, cash in the bag, a profile
-picture with a hand-drawn rising chart and $ behind him); Gentle Return's profile picture, flat with no gradients:
-A the open door with the Traveller silhouetted in its light, B the crescent he walks on, C a lantern mark with the
-Traveller inside. Once approved they go into the app: page colours, brand
+`src/rig.mjs` as one posed outline rig). All approved (2026-10-30):
+- Personal brand (amber, paper and ink): me faceless (no eyes or mouth, like the page): a cap with an amber
+  growth-arrow patch, gold aviators, a full beard, the oversized amber hoodie, a crossbody bag with cash sticking out.
+  Profile picture: him on an amber circle with a hand-drawn rising chart and $ behind him.
+- Gentle Return (emerald and gold): the Traveller (faceless, thobe and kufi, a lantern). Profile picture, flat with no
+  gradients: an arched door ajar, its light spilling across the floor, the Traveller silhouetted in it.
+- Blox Moments (cyan): Blok, a classic blocky avatar (yellow head, simple smile, plain cyan shirt, sideways cap).
+- Long Story Short (orange on charcoal): a human podcast host (curly hair, short beard, orange hoodie, big orange
+  headphones); signature pose at the desk mic with the page name on the desk.
+
+Next they go into the app: page colours, brand
 guides, caption styles, and the mascot SVGs become step 5's rig.
 
 ### Halal (2026-10-15)
@@ -209,8 +211,9 @@ versionCode from the tag (`v1.2.3` → 10203).
 - Phase 12 step 4: try a few library scenes in the editor (Overlays → Scene) and say which look off.
 - Phase 12 step 7: Knowledge → References: paste 2–3 shorts I like (one TikTok, one Reel: only YouTube was tried),
   read the lessons and approve or dismiss them.
-- Account review: decided (*Pages (account review)*). Approve or change the brand drafts in
-  `~/Documents/content-studio-brand/index.html` (left: the personal brand's money cues and Gentle Return's profile picture); that unblocks steps 5 and 6. Still open: the personal brand's name; the third clipping page.
+- Account review and brands: done (*Pages (account review)*); steps 5 and 6 can start. Still open: the personal
+  brand's name; the third clipping page.
+
 - Phase 0 on the platforms' sites, then connect real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
   Listen to the first clips from a source with background music (the music check was only tried on stand-ins).
@@ -594,5 +597,4 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
 Accounts (2026-10-27): each page gets its own mascot (not one shared). Once every buildable step is done, I go over
 each account with Claude (name, goal, niche, language, the mascot's look): steps 5 and 6 are built after that.
 
-Open: my OK on the brand drafts (the account review itself is done, see *Pages (account review)*); which SFX source
-(licence).
+Open: which SFX source (licence); the personal brand's name; the third clipping page.
