@@ -6,10 +6,10 @@ import { count, max } from 'drizzle-orm';
 import { RECOMMENDED_LOCAL_MODEL } from '../../../shared/ai';
 import type { ComputeTool } from '../../../shared/compute';
 import { normalizeHosted } from '../../../shared/hosted';
-import type { InstalledTool, ToolKind } from '../../../shared/toolbox';
+import type { InstalledTool, SkillHome, ToolKind } from '../../../shared/toolbox';
 import { localStatus } from '../ai/local';
 import { resolveModel } from '../claude/options';
-import { CHAT_SKILLS } from '../claude/plugin';
+import { addedSkills, CHAT_SKILLS, skillFolders } from '../claude/plugin';
 import { buildTools } from '../claude/tools';
 import { listWorkers } from '../compute/workers';
 import { config } from '../config';
@@ -19,15 +19,10 @@ import { getSetting } from '../lib/settings';
 import { clipToolsInstalled } from '../services/cliptools';
 import { ttsInstalled } from '../services/tts';
 import { rendererInstalled } from '../studio/browser';
+import { firstSentence, frontField, frontMatter, SKILL_DIRS, skillLock } from './skills';
 import { claudeFamily, listUses } from './uses';
 
 const run = promisify(execFile);
-const firstSentence = (s: string) => {
-  const t = s.replace(/\s+/g, ' ').trim();
-  const end = t.search(/[.!?](\s|$)/);
-  const one = end > 0 ? t.slice(0, end + 1) : t;
-  return one.length > 240 ? `${one.slice(0, 240)}…` : one;
-};
 
 type Row = Omit<InstalledTool, 'uses' | 'lastUsedAt'> & { uses?: number | null; lastUsedAt?: number | null };
 const row = (kind: ToolKind, name: string, r: Partial<Row>): Row => ({ kind, name, about: '', version: null, licence: null, source: null, where: null, status: 'ready', note: '', ...r });
@@ -36,67 +31,46 @@ const row = (kind: ToolKind, name: string, r: Partial<Row>): Row => ({ kind, nam
 export type RepoInfo = { licence: string | null; stars: number; pushedAt: number | null; at: number };
 export const repoInfo = (): Record<string, RepoInfo> => getSetting('toolboxRepos') ?? {};
 
-/** `skills-lock.json` (what `npx skills add` installed and from where), shipped with the packaged app. */
-function skillsLock(): Record<string, { source: string }> {
-  try {
-    return JSON.parse(readFileSync(join(config.resourcesDir, 'skills-lock.json'), 'utf8')).skills ?? {};
-  } catch {
-    return {};
-  }
-}
-export const skillSources = () => [...new Set(Object.values(skillsLock()).map((s) => s.source))];
-
-/** A field of a SKILL.md's front matter (top level, or under `metadata:`), wrapped and folded lines joined. */
-function frontField(head: string, key: string) {
-  const m = new RegExp(`^([ \\t]*)${key}:[ \\t]*(.*)$`, 'm').exec(head);
-  if (!m) return null;
-  let v = m[2].trim();
-  // A top-level value goes on over the indented lines under it (`>`, `|`, or a long string wrapped).
-  if (!m[1]) {
-    const lines: string[] = [];
-    for (const l of head.slice(m.index + m[0].length).split('\n').slice(1)) {
-      if (!/^\s+\S/.test(l) || /^\s+[\w-]+:(\s|$)/.test(l)) break;
-      lines.push(l.trim());
-    }
-    v = [/^[>|]-?$/.test(v) ? '' : v, ...lines].filter(Boolean).join(' ');
-  }
-  return v.replace(/^["']|["']$/g, '').trim() || null;
-}
+/** Every repo an installed skill came from, wherever it's installed. */
+export const skillSources = () => [...new Set((['built-in', 'app', 'claude-code'] as const).flatMap((h) => Object.values(skillLock(h)).map((s) => s.source)).filter(Boolean))];
 
 function skills(): Row[] {
-  const dir = join(config.pluginDir, 'skills');
-  const lock = skillsLock();
   const repos = repoInfo();
-  let names: string[];
-  try {
-    names = readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && existsSync(join(dir, e.name, 'SKILL.md')))
-      .map((e) => e.name);
-  } catch {
-    return [];
-  }
-  return names.map((name) => {
-    const text = readFileSync(join(dir, name, 'SKILL.md'), 'utf8');
-    const head = text.startsWith('---') ? text.slice(3, Math.max(3, text.indexOf('\n---', 3))) : '';
-    const repo = lock[name]?.source ?? null;
-    const ours = name === 'playbook';
-    const licence = ours ? 'Ours' : frontField(head, 'license') ?? (repo ? repos[repo]?.licence ?? null : null);
-    const chat = CHAT_SKILLS.includes(name);
-    return row('skill', name, {
-      about: firstSentence(frontField(head, 'description') ?? ''),
-      version: frontField(head, 'version'),
-      licence,
-      source: repo ? `https://github.com/${repo}` : null,
-      where: ours ? 'Content Studio' : repo,
-      status: chat ? 'ready' : 'off',
-      note: [
-        chat ? '' : 'Not loaded in the chat: it runs commands the app’s Claude doesn’t have',
-        ours ? 'Its rules are on the Knowledge page; every background prompt pastes them' : '',
-        // Only once the scout has read the repo: before that the licence is just unknown.
-        !ours && !licence && repo && repos[repo] ? 'No licence: personal use only' : '',
-      ]
-        .filter(Boolean)
-        .join('. '),
+  const added = new Set(addedSkills());
+  return (Object.keys(SKILL_DIRS) as SkillHome[]).flatMap((home) => {
+    const dir = SKILL_DIRS[home];
+    const lock = skillLock(home);
+    return skillFolders(dir).flatMap((name) => {
+      let text: string;
+      try {
+        text = readFileSync(join(dir, name, 'SKILL.md'), 'utf8');
+      } catch {
+        return [];
+      }
+      const head = frontMatter(text);
+      const repo = typeof lock[name]?.source === 'string' ? lock[name].source : null;
+      const ours = home === 'built-in' && name === 'playbook';
+      const licence = ours ? 'Ours' : frontField(head, 'license') ?? (repo ? repos[repo]?.licence ?? null : null);
+      const chat = home === 'built-in' ? CHAT_SKILLS.includes(name) : home === 'app' && added.has(name);
+      return [
+        row('skill', name, {
+          about: firstSentence(frontField(head, 'description') ?? ''),
+          version: frontField(head, 'version'),
+          licence,
+          source: repo ? `https://github.com/${repo}` : null,
+          where: ours ? 'Content Studio' : repo,
+          home,
+          status: chat ? 'ready' : 'off',
+          note: [
+            home === 'claude-code' || chat ? '' : home === 'app' ? 'A built-in skill has this name: that one is used' : 'Not loaded in the chat: it runs commands the app’s Claude doesn’t have',
+            ours ? 'Its rules are on the Knowledge page; every background prompt pastes them' : '',
+            // Only once the scout has read the repo: before that the licence is just unknown.
+            !ours && !licence && repo && repos[repo] ? 'No licence: personal use only' : '',
+          ]
+            .filter(Boolean)
+            .join('. '),
+        }),
+      ];
     });
   });
 }
@@ -335,6 +309,8 @@ export async function listInstalled(): Promise<InstalledTool[]> {
   const counted: ToolKind[] = ['skill', 'tool', 'model'];
   const rows = [...skills(), ...studioTools(), ...(await models()), ...(await programs()), ...libraries()];
   return rows.map((r) => {
+    // Claude Code's skills are used outside the app: nothing here counts them.
+    if (r.home === 'claude-code') return { ...r, uses: null, lastUsedAt: null };
     const u = uses.get(`${r.kind}:${r.name}`);
     return { ...r, uses: r.uses ?? (counted.includes(r.kind) ? (u?.count ?? 0) : null), lastUsedAt: r.lastUsedAt ?? u?.lastAt ?? null };
   });

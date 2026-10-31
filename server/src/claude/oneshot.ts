@@ -20,7 +20,7 @@ async function* withImages(text: string, images: PromptImage[]): AsyncGenerator<
   };
 }
 
-type StructuredInput = { system: string; prompt: string; schema: Record<string, unknown>; model?: string; images?: PromptImage[] };
+type StructuredInput = { system: string; prompt: string; schema: Record<string, unknown>; model?: string; images?: PromptImage[]; signal?: AbortSignal };
 
 /**
  * JSON matching `schema`, with no tools, from whoever answers `task` now (Claude or the self-hosted model,
@@ -38,6 +38,8 @@ export async function askStructured<T>(input: StructuredInput & { task: AiTask }
 
 async function askClaude<T>(input: StructuredInput): Promise<T> {
   countUse('model', `claude-${claudeFamily(resolveModel(input.model))}`);
+  const abortController = new AbortController();
+  input.signal?.addEventListener('abort', () => abortController.abort(), { once: true });
   const q = query({
     prompt: input.images?.length ? withImages(input.prompt, input.images) : input.prompt,
     options: {
@@ -48,6 +50,7 @@ async function askClaude<T>(input: StructuredInput): Promise<T> {
       outputFormat: { type: 'json_schema', schema: input.schema },
       persistSession: false,
       maxTurns: 4,
+      abortController,
     },
   });
   for await (const message of q) {

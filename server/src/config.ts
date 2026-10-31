@@ -48,6 +48,11 @@ export const config = {
   skillsSource: join(resourcesDir, '.claude/skills'),
   pluginDir: existsSync(join(packagedPluginDir, '.claude-plugin/plugin.json')) ? packagedPluginDir : devPluginDir,
   devPluginDir,
+  // Skills I install from the Toolbox, as a second plugin (studio-added): outside the app, so updates keep them.
+  addedPluginDir: join(dataDir, 'skills-added'),
+  // Claude Code's own skills (every project) and the skills CLI's record of where they came from.
+  claudeCodeSkillsDir: join(homedir(), '.claude/skills'),
+  skillsCliLock: join(homedir(), '.agents/.skill-lock.json'),
   // Campaigns' long source videos and their transcripts (sources/<campaign>/), apart from the pages' libraries.
   sourcesDir: join(dataDir, 'sources'),
   // Whisper's Python environment lives with the data so app updates don't wipe it.

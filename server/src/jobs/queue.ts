@@ -48,6 +48,18 @@ export function enqueue(type: string, payload: Record<string, unknown>, opts: { 
   return id;
 }
 
+/** Jobs of this type that haven't started: dropped, or (with `payload` merged into theirs) run at once. */
+export function cancelQueued(type: string) {
+  return db.delete(schema.jobs).where(and(eq(schema.jobs.type, type), eq(schema.jobs.status, 'queued'))).run().changes > 0;
+}
+
+export function runQueuedNow(type: string, payload: Record<string, unknown>) {
+  const queued = db.select().from(schema.jobs).where(and(eq(schema.jobs.type, type), eq(schema.jobs.status, 'queued'))).all();
+  for (const job of queued) db.update(schema.jobs).set({ payload: { ...(job.payload as object), ...payload }, runAt: now(), updatedAt: now() }).where(eq(schema.jobs.id, job.id)).run();
+  if (queued.length) setImmediate(tick);
+  return queued.length > 0;
+}
+
 function claim(type: string) {
   const job = db
     .select()

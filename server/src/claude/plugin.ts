@@ -14,6 +14,8 @@ import { countUse } from '../toolbox/uses';
  * settings or hooks come along.
  */
 export const PLUGIN_NAME = 'studio-skills';
+/** The skills I install from the Toolbox (`toolbox/skills.ts`): a second plugin in the data folder, all in the chat. */
+export const ADDED_PLUGIN = 'studio-added';
 
 /**
  * The skills the chat may load. Knowledge only: skills that run commands (last30days, hyperframes-cli, broll, steal,
@@ -57,6 +59,25 @@ export const CHAT_SKILLS = [
 ];
 
 const manifest = join(config.pluginDir, '.claude-plugin/plugin.json');
+const addedManifest = join(config.addedPluginDir, '.claude-plugin/plugin.json');
+
+/** Folders of a skills folder that hold a SKILL.md. */
+export function skillFolders(dir: string) {
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((e) => (e.isDirectory() || e.isSymbolicLink()) && existsSync(join(dir, e.name, 'SKILL.md')))
+      .map((e) => e.name)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/** The skills I added from the Toolbox, minus any that share a name with a built-in one (that one wins). */
+export function addedSkills() {
+  const builtIn = new Set(skillFolders(join(config.pluginDir, 'skills')));
+  return skillFolders(join(config.addedPluginDir, 'skills')).filter((n) => !builtIn.has(n));
+}
 const stampFile = join(config.pluginDir, '.source-stamp');
 
 /** Every file's path, size and modification time: changes when any skill is added, removed or edited. */
@@ -92,23 +113,32 @@ export function preparePlugin() {
   playbookCache.clear();
 }
 
-function writePluginManifest(dir: string) {
+function writePluginManifest(dir: string, name = PLUGIN_NAME, description = "Content Studio's skills: the playbook and the content skills it builds on") {
   mkdirSync(join(dir, '.claude-plugin'), { recursive: true });
-  writeFileSync(
-    join(dir, '.claude-plugin/plugin.json'),
-    JSON.stringify({ name: PLUGIN_NAME, description: "Content Studio's skills: the playbook and the content skills it builds on", version: '1.0.0' }, null, 2),
-  );
+  writeFileSync(join(dir, '.claude-plugin/plugin.json'), JSON.stringify({ name, description, version: '1.0.0' }, null, 2));
 }
 
-const inPlugin = (path: string) => {
-  const root = realpathSync(config.pluginDir);
-  let target = resolve(path);
+/** The added skills' plugin folder, made on the first install. */
+export function prepareAddedPlugin() {
+  mkdirSync(join(config.addedPluginDir, 'skills'), { recursive: true });
+  if (!existsSync(addedManifest)) writePluginManifest(config.addedPluginDir, ADDED_PLUGIN, 'Skills added from the Toolbox');
+}
+
+const real = (path: string) => {
   try {
-    target = realpathSync(target);
+    return realpathSync(path);
   } catch {
-    /* doesn't exist: Read fails on its own */
+    // Doesn't exist: Read fails on its own.
+    return resolve(path);
   }
-  return target === root || target.startsWith(root + sep);
+};
+
+const inPlugin = (path: string) => {
+  const target = real(path);
+  return [config.pluginDir, config.addedPluginDir].some((dir) => {
+    const root = real(dir);
+    return target === root || target.startsWith(root + sep);
+  });
 };
 
 /** Read is only for the skills' own files (their references); anything else on this computer is refused. */
@@ -127,22 +157,34 @@ const readOnlyInPlugin: HookCallback = async (input) => {
 
 /** What the chat needs to load the skills, or nothing when there are none. */
 export function skillOptions(): Pick<Options, 'plugins' | 'skills' | 'additionalDirectories' | 'hooks'> & { tools: string[] } {
-  if (!existsSync(manifest)) return { tools: [] };
+  const builtIn = existsSync(manifest);
+  const added = existsSync(addedManifest) ? addedSkills() : [];
+  if (!builtIn && !added.length) return { tools: [] };
   return {
-    plugins: [{ type: 'local', path: config.pluginDir, skipMcpDiscovery: true }],
-    skills: CHAT_SKILLS.map((name) => `${PLUGIN_NAME}:${name}`),
+    plugins: [
+      ...(builtIn ? [{ type: 'local' as const, path: config.pluginDir, skipMcpDiscovery: true }] : []),
+      ...(added.length ? [{ type: 'local' as const, path: config.addedPluginDir, skipMcpDiscovery: true }] : []),
+    ],
+    skills: [...(builtIn ? CHAT_SKILLS.map((name) => `${PLUGIN_NAME}:${name}`) : []), ...added.map((name) => `${ADDED_PLUGIN}:${name}`)],
     // `tools` limits the built-in tools, so the Skill tool has to be listed as well as `skills`.
     tools: ['Skill', 'Read'],
-    additionalDirectories: [config.pluginDir],
+    additionalDirectories: [...(builtIn ? [config.pluginDir] : []), ...(added.length ? [config.addedPluginDir] : [])],
     hooks: { PreToolUse: [{ matcher: 'Read', hooks: [readOnlyInPlugin] }] },
   };
 }
 
+/** A chat skill's folder: built in (on the allow-list) or added from the Toolbox. */
+function chatSkillDir(name: string) {
+  if (CHAT_SKILLS.includes(name)) return join(config.pluginDir, 'skills', name);
+  if (addedSkills().includes(name)) return join(config.addedPluginDir, 'skills', name);
+  return null;
+}
+
 /** The chat's skills with their one-line descriptions, for a model that opens them with a tool (the local chat). */
 export function chatSkillList(): { name: string; description: string }[] {
-  return CHAT_SKILLS.flatMap((name) => {
+  return [...CHAT_SKILLS, ...addedSkills()].flatMap((name) => {
     try {
-      const head = readFileSync(join(config.pluginDir, 'skills', name, 'SKILL.md'), 'utf8').slice(0, 4000);
+      const head = readFileSync(join(chatSkillDir(name) ?? '', 'SKILL.md'), 'utf8').slice(0, 4000);
       const description = /^description:\s*(.+)$/m.exec(head)?.[1]?.replace(/^["']|["']$/g, '') ?? '';
       return [{ name, description: description.length > 220 ? `${description.slice(0, 220)}…` : description }];
     } catch {
@@ -153,8 +195,8 @@ export function chatSkillList(): { name: string; description: string }[] {
 
 /** A chat skill's SKILL.md, or one of its own files (`references/hooks.md`); nothing outside the skill's folder. */
 export function readSkillFile(name: string, file = 'SKILL.md'): string {
-  if (!CHAT_SKILLS.includes(name)) throw new Error(`No skill called ${name}. Skills: ${CHAT_SKILLS.join(', ')}.`);
-  const root = join(config.pluginDir, 'skills', name);
+  const root = chatSkillDir(name);
+  if (!root) throw new Error(`No skill called ${name}. Skills: ${[...CHAT_SKILLS, ...addedSkills()].join(', ')}.`);
   const path = resolve(root, file);
   if (!inPlugin(path) || !(path === root || path.startsWith(root + sep))) throw new Error('Only the skill’s own files can be read.');
   if (!existsSync(path)) {

@@ -542,6 +542,19 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
     now, and GitHub's 403s wait and retry): 40 judged, 6 shown (herk-edit-kit, anything2explainer, motionmaxxing,
     claude-video-vision, lemo-opuscar, MOSS-TTS). Page looked at in headless Chrome, desktop and phone width. Not tried:
     the packaged app's `libraries.json`/`skills-lock.json` (next `npm run install-app`).
+  - **Installing from the app** (2026-10-31; running the command left the app none the wiser, and which place to pick
+    wasn't clear): *Install* on a skill find (or *Install a skill* with a GitHub link) shows the repo's skills (size,
+    files left out, *Runs commands*, where each is already) and two places: **Content Studio** (`<data>/skills-added`,
+    the `studio-added` plugin, every skill in the chat from the next message, kept across updates) and **Claude Code**
+    (`~/.claude/skills`, every project; the skills CLI's `~/.agents/.skill-lock.json` gets the entry so `npx skills
+    update -g` still works). Recommended: know-how → Content Studio, a skill with scripts → Claude Code. Files come
+    straight from GitHub (tree API + raw files; no npx, which the launcher's PATH lacks), with progress; sound and
+    video files are never copied (music), built-in names are left alone. *Installed* groups skills by place, with
+    *Remove* and *Use in Content Studio too* (for a Claude Code skill). Finds whose repo is installed anywhere move to
+    an *Installed* filter. The scout shows what it's doing; *Stop* drops a run, *Finish now* judges what it found so
+    far, and a run waiting on Claude's usage says so, with *Run now*. Tried on a test server with a GitHub stand-in
+    (install both places, remove, copy, find matching, the SDK loading `studio-added:*`, the Read hook, stop/finish/
+    run now) and in headless Chrome, desktop and phone width. Not tried: a real GitHub install, the packaged app.
 - [ ] Step 3 — SFX library and frame-synced placement. Placement done (2026-10-27), the recorded library waits on
   my pick of a source:
   - **Sound on every move** (`audio.autoSfx`, on by default, editor → Sound; Claude's `update_edit` can turn it off for

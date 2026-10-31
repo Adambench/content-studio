@@ -141,9 +141,13 @@ export const useReferences = () => useQuery({ queryKey: keys.references, queryFn
 /** The same measures from my own latest edits (one page's, or all). */
 export const useOwnMeasures = (wid: string | null) =>
   useQuery({ queryKey: keys.ownMeasures(wid), queryFn: () => api<OwnMeasures>(`/references/own${wid ? `?workspaceId=${wid}` : ''}`), staleTime: 60_000 });
-/** What's installed and used, and the scout's finds. Polls while the scout runs. */
+/** What's installed and used, the scout's finds and installs. Polls while the scout or an install runs. */
 export const useToolbox = () =>
-  useQuery({ queryKey: keys.toolbox, queryFn: () => api<Toolbox>('/toolbox'), refetchInterval: (q) => (q.state.data?.scout?.status === 'running' ? 5000 : false) });
+  useQuery({
+    queryKey: keys.toolbox,
+    queryFn: () => api<Toolbox>('/toolbox'),
+    refetchInterval: (q) => (q.state.data?.installs.some((r) => r.status === 'running') ? 1000 : q.state.data?.scout?.status === 'running' ? 5000 : false),
+  });
 export const useIdeas = (wid: string) => useQuery({ queryKey: keys.ideas(wid), queryFn: () => api<IdeaNode[]>(`/workspaces/${wid}/ideas`), enabled: !!wid });
 export const useIdea = (id: string | null) => useQuery({ queryKey: keys.idea(id ?? ''), queryFn: () => api<IdeaDetail>(`/ideas/${id}`), enabled: !!id });
 export const useResearch = (wid: string) =>

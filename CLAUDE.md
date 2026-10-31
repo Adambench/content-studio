@@ -14,7 +14,7 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   Main areas: `claude/` (agent, tools, prompts, plugin), `ai/` (Claude or the self-hosted model per task, the local
   chat loop), `studio/` (edits → HyperFrames, render, generation), `publish/`,
   `analytics/`, `campaigns/`, `clipping/`, `research/`, `ideas/` (the brainstorm canvas, Saved pile), `knowledge/` (the
-  playbook as editable rules), `toolbox/` (what's installed and used, the weekly scout), `jobs/` (queue).
+  playbook as editable rules), `toolbox/` (what's installed and used, installing skills, the weekly scout), `jobs/` (queue).
 - `web/` — React UI. `isDesktop` (`lib/desktop.ts`), `isApp`/`isNative` (`lib/native.ts`, the `vite --mode app` build).
 - `mobile/` — Capacitor 8, committed `android/`, one native plugin `StudioPlugin` (Java). CI builds APKs.
 - `shared/` — types for both sides (`types.ts`, `edit.ts`, `campaigns.ts`, `clipping.ts`, …).
@@ -43,8 +43,10 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   drafts/edits freely (versions authored `claude`) and may render, but never schedules, publishes, approves, rejects or
   submits: those need the user's click. Never give Claude a publish tool. On Ideas it only adds cards (`by: 'claude'`),
   never edits or deletes the user's; locking an idea in is the user's click.
-- Chat skills: `.claude/skills` loads as the `studio-skills` plugin (`claude/plugin.ts`, allow-list `CHAT_SKILLS`); the
-  chat's Read is held to the plugin folder by a hook; claude.ai connectors off. Background prompts don't load skills:
+- Chat skills: `.claude/skills` loads as the `studio-skills` plugin (`claude/plugin.ts`, allow-list `CHAT_SKILLS`);
+  skills I install from the Toolbox go to `<data>/skills-added` (plugin `studio-added`, all in the chat) or
+  `~/.claude/skills` (Claude Code only), never with sound or video files; the chat's Read is held to the plugin
+  folders by a hook; claude.ai connectors off. Background prompts don't load skills:
   paste playbook files with `playbook(...)`, first in the system prompt.
 - Scenes (`shared/scene.ts`) are data: never let a scene carry script, `url()` or `random()`.
 - Publishing adapters keep resume state in `posts.remote` via `ctx.save` so retries never post twice. Tokens stay
