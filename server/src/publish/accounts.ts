@@ -7,7 +7,7 @@ import { badRequest, notFound } from '../lib/http';
 import { notify } from '../lib/push';
 import { getWorkspace } from '../services/pieces';
 import { PlatformError, platforms, type AccountRow } from './platforms';
-import { platformUrl, sleep, type TokenSet } from './platforms/http';
+import { platformUrl, sleep, type Profile, type TokenSet } from './platforms/http';
 import { publicUrl, redirectUri, requireApp } from './setup';
 
 // A new account's queue: one slot a day, at a typical evening time. Edit it on the Accounts page.
@@ -133,6 +133,8 @@ export function startConnect(workspaceId: string, platform: PublishPlatform) {
 /**
  * The platform sent the browser back with a code. The browser may not be signed in to Content Studio (it's
  * usually the system browser, not the app), so the one-time `state` from startConnect is what proves the request.
+ * Returns the connected accounts, and a `pick` key when the user can (or, with none connected, has to) name the
+ * accounts the sign-in was for.
  */
 export async function finishConnect(platform: PublishPlatform, query: { code?: string; state?: string; error?: string; error_description?: string; error_reason?: string }) {
   const sign = query.state ? pending.get(query.state) : undefined;
@@ -159,9 +161,59 @@ export async function finishConnect(platform: PublishPlatform, query: { code?: s
       await sleep(2000 * attempt);
     }
   }
-  const profiles = adapter.profiles ? await adapter.profiles(tokens.accessToken, tokens.accountIds) : [await adapter.profile(tokens.accessToken)];
-  if (!profiles.length) throw badRequest(`${PUBLISH_PLATFORM_LABELS[platform]} didn’t share any account. Connect again and pick one.`);
-  const tokenValues = {
+  if (!adapter.profiles) return { accounts: saveAccounts(sign.workspaceId, platform, [await adapter.profile(tokens.accessToken)], tokens), pick: undefined };
+
+  // A token that covers several accounts (Instagram) also covers the ones already connected (here or in other
+  // workspaces), which the platform doesn't always list: give them the new sign-in too. It adds here the listed
+  // accounts not connected anywhere yet; with none new, it's a reconnect of this workspace's ones, or (if it has
+  // none) all the listed ones. With none listed, the user says which.
+  const listed = await adapter.profiles(tokens.accessToken, tokens.accountIds);
+  const known = db.select().from(schema.accounts).where(eq(schema.accounts.platform, platform)).all();
+  const unlisted = [...new Set(known.map((k) => k.externalId))].filter((id) => !listed.some((p) => p.externalId === id));
+  const covered = [...listed, ...(unlisted.length && adapter.lookup ? (await adapter.lookup(tokens.accessToken, unlisted, [])).found : [])];
+  const values = tokenValues(tokens);
+  for (const k of known) {
+    if (!covered.some((p) => p.externalId === k.externalId)) continue;
+    db.update(schema.accounts).set(values).where(eq(schema.accounts.id, k.id)).run();
+    announce(k);
+  }
+  const fresh = listed.filter((p) => !known.some((k) => k.externalId === p.externalId));
+  const here = covered.filter((p) => known.some((k) => k.externalId === p.externalId && k.workspaceId === sign.workspaceId));
+  const picked = fresh.length ? fresh : here.length ? here : listed;
+  // None listed: the user can name accounts (another one for this workspace, after a reconnect).
+  let pick: string | undefined;
+  if (!listed.length && adapter.lookup) {
+    for (const [key, p] of picks) if (p.expires < now()) picks.delete(key);
+    pick = randomBytes(24).toString('base64url');
+    picks.set(pick, { workspaceId: sign.workspaceId, platform, tokens, roots: covered.map((p) => p.externalId), expires: now() + 20 * 60_000 });
+  }
+  if (!picked.length && !pick) throw badRequest(`${PUBLISH_PLATFORM_LABELS[platform]} didn’t share any account. Connect again and pick one.`);
+  return { accounts: saveAccounts(sign.workspaceId, platform, picked, tokens), pick };
+}
+
+// Sign-ins waiting for the user to say which accounts they're for. The token stays in memory only.
+type PendingPick = { workspaceId: string; platform: PublishPlatform; tokens: TokenSet; roots: string[]; expires: number };
+const picks = new Map<string, PendingPick>();
+
+export const pickOpen = (platform: PublishPlatform, key?: string) => {
+  const p = key ? picks.get(key) : undefined;
+  return !!p && p.platform === platform && p.expires >= now();
+};
+
+/** The accounts the user named for a sign-in whose platform listed none; each must be one the token can use. */
+export async function pickAccounts(platform: PublishPlatform, key: string | undefined, input: string | undefined) {
+  if (!pickOpen(platform, key)) throw badRequest('This sign-in link has expired. Start again from Content Studio.');
+  const pick = picks.get(key!)!;
+  const wanted = [...new Set((input ?? '').split(/[\s,]+/).filter(Boolean))].slice(0, 20);
+  if (!wanted.length) throw badRequest('Paste the account’s ID first.');
+  const { found, missing } = await platforms[platform].lookup!(pick.tokens.accessToken, wanted, pick.roots);
+  if (missing.length) throw badRequest(`This sign-in can’t reach ${missing.join(', ')}. Check the ID, or connect again and tick that account in Meta’s window.`);
+  picks.delete(key!);
+  return saveAccounts(pick.workspaceId, platform, found, pick.tokens);
+}
+
+function tokenValues(tokens: TokenSet) {
+  return {
     accessToken: tokens.accessToken,
     expiresAt: tokens.expiresAt ?? null,
     refreshExpiresAt: tokens.refreshExpiresAt ?? null,
@@ -171,35 +223,18 @@ export async function finishConnect(platform: PublishPlatform, query: { code?: s
     statusMessage: null,
     updatedAt: now(),
   };
+}
 
-  // A token that covers several accounts (Instagram) also covers the ones already connected (here or in other
-  // workspaces): give them the new sign-in too. It adds here the accounts not connected anywhere yet; with none new,
-  // it's a reconnect of this workspace's ones, or (if it has none) all of them.
-  let picked = profiles;
-  if (adapter.profiles) {
-    const known = db
-      .select()
-      .from(schema.accounts)
-      .where(and(eq(schema.accounts.platform, platform), inArray(schema.accounts.externalId, profiles.map((p) => p.externalId))))
-      .all();
-    for (const k of known) {
-      db.update(schema.accounts).set(tokenValues).where(eq(schema.accounts.id, k.id)).run();
-      announce(k);
-    }
-    const fresh = profiles.filter((p) => !known.some((k) => k.externalId === p.externalId));
-    const here = profiles.filter((p) => known.some((k) => k.externalId === p.externalId && k.workspaceId === sign.workspaceId));
-    if (fresh.length) picked = fresh;
-    else if (here.length) picked = here;
-  }
-
-  const connected = picked.map((profile) => {
+/** Connect the accounts to the workspace (or update them, if they already are). */
+function saveAccounts(workspaceId: string, platform: PublishPlatform, profiles: Profile[], tokens: TokenSet) {
+  return profiles.map((profile) => {
     const existing = db
       .select()
       .from(schema.accounts)
-      .where(and(eq(schema.accounts.workspaceId, sign.workspaceId), eq(schema.accounts.platform, platform), eq(schema.accounts.externalId, profile.externalId)))
+      .where(and(eq(schema.accounts.workspaceId, workspaceId), eq(schema.accounts.platform, platform), eq(schema.accounts.externalId, profile.externalId)))
       .get();
     const values = {
-      ...tokenValues,
+      ...tokenValues(tokens),
       name: profile.name,
       handle: profile.handle,
       avatarUrl: profile.avatarUrl,
@@ -208,13 +243,12 @@ export async function finishConnect(platform: PublishPlatform, query: { code?: s
     };
     const id = existing?.id ?? newId();
     if (existing) db.update(schema.accounts).set(values).where(eq(schema.accounts.id, id)).run();
-    else db.insert(schema.accounts).values({ id, workspaceId: sign.workspaceId, platform, externalId: profile.externalId, slots: DEFAULT_SLOTS, settings: {}, ...values }).run();
+    else db.insert(schema.accounts).values({ id, workspaceId, platform, externalId: profile.externalId, slots: DEFAULT_SLOTS, settings: {}, ...values }).run();
     const account = getAccount(id);
     announce(account);
     emit({ type: 'job', jobType: 'account.connect', status: 'done', workspaceId: account.workspaceId, message: `Connected ${accountLabel(account)}` });
     return account;
   });
-  return connected;
 }
 
 /** Forget the account (and ask the platform to revoke our access). Its scheduled posts can't go out any more. */

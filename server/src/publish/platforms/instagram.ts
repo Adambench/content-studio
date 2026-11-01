@@ -1,5 +1,5 @@
 import { emptyStats } from '../../../../shared/analytics';
-import { count, form, oauthError, PlatformError, poll, readJson, request, sleep, type PlatformAdapter, type PostStatsResult, type Profile, type PublishContext, type PublishResult } from './http';
+import { count, form, oauthError, PlatformError, poll, readJson, request, type PlatformAdapter, type PostStatsResult, type Profile, type PublishContext, type PublishResult } from './http';
 
 // Instagram API with Unified Login: new Meta apps no longer get Instagram Login. Sign-in is Facebook Login for Business
 // with a configuration (its permissions and the Instagram account picked in the dialog); the token belongs to a system
@@ -127,23 +127,19 @@ export const instagram: PlatformAdapter = {
     return first;
   },
 
-  // One sign-in can share several accounts (all of the business portfolio's that I picked so far). Meta's docs only
-  // name /me/assigned_instagram_accounts; the permission grants and (for a configuration that gives a user token) the
-  // Pages' linked accounts are fallbacks.
+  // One sign-in can share several accounts. Meta's docs name /me/assigned_instagram_accounts, but it comes back empty
+  // when the app's own business portfolio connects (2026-11: the token reaches the accounts all the same); the
+  // permission grants and (for a configuration that gives a user token) the Pages' linked accounts are fallbacks.
+  // Empty: Content Studio asks which accounts, and lookup() checks them.
   async profiles(token, accountIds = []) {
     const found = new Map<string, string>();
     const tried: string[] = [];
-    // Asked again once after a pause, in case Meta is still assigning what was just shared.
-    for (const pause of [0, 4000]) {
-      if (found.size) break;
-      await sleep(pause);
-      try {
-        const { data } = await graph<{ data: { id: string; username?: string }[] }>('GET', '/me/assigned_instagram_accounts', token, { fields: 'id,username', limit: 100 });
-        for (const a of data) found.set(String(a.id), a.username ?? '');
-        tried.push(`assigned_instagram_accounts: ${data.length}`);
-      } catch (err) {
-        tried.push(`assigned_instagram_accounts: ${(err as Error).message}`);
-      }
+    try {
+      const { data } = await graph<{ data: { id: string; username?: string }[] }>('GET', '/me/assigned_instagram_accounts', token, { fields: 'id,username', limit: 100 });
+      for (const a of data) found.set(String(a.id), a.username ?? '');
+      tried.push(`assigned_instagram_accounts: ${data.length}`);
+    } catch (err) {
+      tried.push(`assigned_instagram_accounts: ${(err as Error).message}`);
     }
     for (const id of accountIds) if (!found.has(id)) found.set(id, '');
     if (!found.size) {
@@ -157,15 +153,35 @@ export const instagram: PlatformAdapter = {
     }
     // An id that isn't an Instagram account (a Page from the grants) has no username.
     const profiles = (await Promise.all([...found].map(([id, username]) => igProfile(token, id, username)))).filter((p) => p.handle);
-    if (!profiles.length) {
-      const me = await graph('GET', '/me', token, { fields: 'id,name,client_business_id' }).catch((err) => (err as Error).message);
-      console.warn(`[instagram] the sign-in shared no Instagram account (${tried.join('; ')}; granted ids: ${accountIds.join(',') || 'none'}; me: ${JSON.stringify(me)})`);
-      throw new PlatformError(
-        'Meta’s sign-in worked, but no Instagram account came with it. While the Meta app is unpublished, the account must be an Instagram Tester of it: in the app, Unified login → Generate access tokens → Add account; then on instagram.com, signed in as that account, Settings → Website permissions → Apps and websites → Tester invites → Accept. Then connect again and tick the account.',
-        'fatal',
-      );
-    }
+    if (!profiles.length) console.warn(`[instagram] Meta listed no account (${tried.join('; ')}; granted ids: ${accountIds.join(',') || 'none'})`);
     return profiles;
+  },
+
+  // Meta answers for an account only if the token may use it, so reading it is the check. A @handle is found through
+  // an account the token already reaches (business discovery).
+  async lookup(token, wanted, roots) {
+    const found: Profile[] = [];
+    const missing: string[] = [];
+    const reachable = async (id: string) => {
+      const ig = await graph<{ username?: string; name?: string; profile_picture_url?: string }>('GET', `/${id}`, token, { fields: 'username,name,profile_picture_url' }).catch(() => null);
+      return ig?.username ? { externalId: id, name: ig.name || ig.username, handle: ig.username, avatarUrl: ig.profile_picture_url ?? null } : null;
+    };
+    const ids = wanted.filter((w) => /^\d+$/.test(w));
+    for (const w of [...ids, ...wanted.filter((w) => !ids.includes(w))]) {
+      let id: string | undefined = w;
+      if (!ids.includes(w)) {
+        const username = w.replace(/^@/, '');
+        id = undefined;
+        for (const root of /^[\w.]{1,30}$/.test(username) ? [...roots, ...found.map((f) => f.externalId)] : []) {
+          const r = await graph<{ business_discovery?: { id: string } }>('GET', `/${root}`, token, { fields: `business_discovery.username(${username}){id}` }).catch(() => null);
+          if ((id = r?.business_discovery?.id)) break;
+        }
+      }
+      const p = id ? await reachable(String(id)) : null;
+      if (!p) missing.push(w);
+      else if (!found.some((f) => f.externalId === p.externalId)) found.push(p);
+    }
+    return { found, missing };
   },
 
   async publish(ctx) {

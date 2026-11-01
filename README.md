@@ -56,7 +56,9 @@ Publishing walks through each one and shows the exact redirect address to regist
    expiry *Never*, the redirect URI registered there and under Facebook Login for Business → Settings. Settings takes
    the app ID and secret (App settings → Basic) and the configuration ID. The app can stay unpublished, but then each
    Instagram account must be a tester (Unified login → *Generate access tokens* → *Add account*, then accept on
-   instagram.com → Settings → Website permissions → Apps and websites → Tester invites).
+   instagram.com → Settings → Website permissions → Apps and websites → Tester invites). Meta's sign-in may not say
+   which account was picked (it didn't for the app's own business portfolio): Content Studio then asks for the
+   account's ID, the number under its name in *Generate access tokens* (or its @handle once one is connected).
 4. **YouTube** — Google Cloud: a project with the YouTube Data API v3 (and the YouTube Analytics API, for watch time
    and shares), an OAuth consent screen set to *In production*
    (otherwise the sign-in expires every 7 days) and a *Web application* OAuth client. Submit the YouTube API audit

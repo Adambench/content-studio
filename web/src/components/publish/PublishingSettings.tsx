@@ -39,7 +39,7 @@ const GUIDES: Record<PublishPlatform, { console: string; idLabel: string; secret
       'Under Redirect URL there, and in Facebook Login for Business → Settings → Valid OAuth Redirect URIs: the address below.',
       'Copy the App ID and secret from App settings → Basic, and the configuration’s ID from Facebook Login for Business → Configurations.',
       'Make each Instagram account a tester: Unified login → Generate access tokens → Add account; then on instagram.com, signed in as that account, Settings → Website permissions → Apps and websites → Tester invites → Accept.',
-      'Connect from a workspace’s Accounts page and pick the Instagram account for it in Meta’s window. Leave the app unpublished: it works for your own accounts.',
+      'Connect from a workspace’s Accounts page and pick the Instagram account for it in Meta’s window. If Meta doesn’t pass on which one, Content Studio asks for its ID (the number under its name in Generate access tokens). Leave the app unpublished: it works for your own accounts.',
     ],
   },
   youtube: {

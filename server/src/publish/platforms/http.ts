@@ -54,6 +54,11 @@ export type PlatformAdapter = {
   profile(accessToken: string, account?: Pick<AccountRow, 'externalId' | 'handle'>): Promise<Profile>;
   /** Every account a token covers, for platforms where one sign-in can share several. */
   profiles?(accessToken: string, accountIds?: string[]): Promise<Profile[]>;
+  /**
+   * Which of `wanted` (ids, or @handles found through the `roots` accounts) this token can use, for when the
+   * platform's list leaves them out.
+   */
+  lookup?(accessToken: string, wanted: string[], roots: string[]): Promise<{ found: Profile[]; missing: string[] }>;
   revoke?(app: AppCredentials, account: AccountRow): Promise<void>;
   publish(ctx: PublishContext): Promise<PublishResult>;
   /** Permissions needed to read stats. Accounts connected before they were asked for need reconnecting. */

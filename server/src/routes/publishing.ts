@@ -8,8 +8,8 @@ import { badRequest, HttpError, notFound } from '../lib/http';
 import { getSetting, setSetting } from '../lib/settings';
 import { getMedia } from '../services/media';
 import { getWorkspace } from '../services/pieces';
-import { accessToken, disconnectAccount, finishConnect, getAccount, listAccounts, publicAccount, startConnect, updateAccount } from '../publish/accounts';
-import { PlatformError } from '../publish/platforms';
+import { accessToken, disconnectAccount, finishConnect, getAccount, listAccounts, pickAccounts, pickOpen, publicAccount, startConnect, updateAccount } from '../publish/accounts';
+import { PlatformError, type AccountRow } from '../publish/platforms';
 import { creatorInfo } from '../publish/platforms/tiktok';
 import { createPosts, deletePost, getPost, listPosts, piecePosts, planPosts, postDetail, postNow, scheduleSchema, stopPost, updatePost, updateSchema, upcomingPosts } from '../publish/posts';
 import { kickScheduler } from '../publish/scheduler';
@@ -21,11 +21,28 @@ const slotSchema = z.object({ time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 /** The page the browser lands on after signing in to a platform (often the system browser, not the app). */
-function callbackPage(ok: boolean, title: string, body: string, back?: string) {
+function callbackPage(ok: boolean | null, title: string, body: string, back?: string, extra = '') {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · Content Studio</title>
 <style>:root{color-scheme:dark}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0c0c10;color:#ececf1;font:15px/1.5 system-ui,sans-serif;padding:16px;box-sizing:border-box}
-main{max-width:420px;text-align:center}h1{font-size:18px;margin:12px 0 4px}p{color:#a1a1aa;margin:0 0 16px}.mark{font-size:28px;color:${ok ? '#34d399' : '#f87171'}}a{color:#a78bfa}</style></head>
-<body><main><div class="mark">${ok ? '✓' : '!'}</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(body)}</p>${back ? `<a href="${escapeHtml(back)}">Open Content Studio</a>` : ''}</main></body></html>`;
+main{max-width:420px;text-align:center}h1{font-size:18px;margin:12px 0 4px}p{color:#a1a1aa;margin:0 0 16px}.mark{font-size:28px;color:${ok === null ? '#a78bfa' : ok ? '#34d399' : '#f87171'}}a{color:#a78bfa}
+form{display:flex;gap:8px;margin:0 0 16px}input{flex:1;min-width:0;background:#18181b;border:1px solid #3f3f46;border-radius:8px;color:inherit;padding:8px 10px;font:inherit}button{background:#7c3aed;border:0;border-radius:8px;color:#fff;padding:8px 14px;font:inherit;cursor:pointer}p.error{color:#f87171}</style></head>
+<body><main><div class="mark">${ok === null ? '?' : ok ? '✓' : '!'}</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(body)}</p>${extra}${back ? `<a href="${escapeHtml(back)}">Open Content Studio</a>` : ''}</main></body></html>`;
+}
+
+/** The form for naming accounts a sign-in was for, when the platform listed none (Instagram's Unified login). */
+function pickForm(platform: PublishPlatform, pick: string, error?: string) {
+  return `${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}<form method="get" action="/api/oauth/${platform}/pick"><input type="hidden" name="pick" value="${escapeHtml(pick)}"><input name="accounts" required autofocus autocomplete="off" placeholder="17841… or @handle" aria-label="Account ID or @handle"><button>Connect</button></form>`;
+}
+
+const PICK_HELP =
+  'Meta didn’t say which Instagram account you picked. Paste its account ID: in your Meta app, API setup with Unified login → Generate access tokens, the number under its name. Separate several with commas. Once one account is connected, @handles work too.';
+
+function connectedPage(platform: PublishPlatform, accounts: AccountRow[], pick?: string) {
+  const label = PUBLISH_PLATFORM_LABELS[platform];
+  if (!accounts.length) return callbackPage(null, `Which ${label} account?`, PICK_HELP, undefined, pickForm(platform, pick!));
+  const names = accounts.map((a) => (a.handle ? `@${a.handle}` : a.name)).join(', ');
+  const another = pick ? `<p>Another account for this page? Paste its ID or @handle.</p>${pickForm(platform, pick)}` : '';
+  return callbackPage(true, `${label} connected`, `${names} ${accounts.length > 1 ? 'are' : 'is'} connected to Content Studio. You can close this tab.`, `/w/${accounts[0].workspaceId}/accounts`, another);
 }
 
 function setupInfo() {
@@ -154,12 +171,28 @@ export async function publishingRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(404).send(callbackPage(false, 'Unknown platform', 'This sign-in link isn’t one of Content Studio’s.'));
     const label = PUBLISH_PLATFORM_LABELS[parsed.data.platform];
     try {
-      const accounts = await finishConnect(parsed.data.platform, req.query);
-      const names = accounts.map((a) => (a.handle ? `@${a.handle}` : a.name)).join(', ');
-      return callbackPage(true, `${label} connected`, `${names} ${accounts.length > 1 ? 'are' : 'is'} connected to Content Studio. You can close this tab.`, `/w/${accounts[0].workspaceId}/accounts`);
+      const { accounts, pick } = await finishConnect(parsed.data.platform, req.query);
+      return connectedPage(parsed.data.platform, accounts, pick);
     } catch (err) {
       const message = err instanceof HttpError || err instanceof PlatformError ? err.message : 'Something went wrong while connecting.';
       if (!(err instanceof HttpError)) req.log.error(err);
+      return reply.code(400).send(callbackPage(false, `Couldn’t connect ${label}`, message, '/'));
+    }
+  });
+
+  // The accounts named on that page. Public like the callback: the one-time pick key proves it.
+  app.get<{ Params: { platform: string }; Querystring: { pick?: string; accounts?: string } }>('/api/oauth/:platform/pick', async (req, reply) => {
+    reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store');
+    const parsed = platformParam.safeParse(req.params);
+    if (!parsed.success) return reply.code(404).send(callbackPage(false, 'Unknown platform', 'This sign-in link isn’t one of Content Studio’s.'));
+    const { platform } = parsed.data;
+    const label = PUBLISH_PLATFORM_LABELS[platform];
+    try {
+      return connectedPage(platform, await pickAccounts(platform, req.query.pick, req.query.accounts));
+    } catch (err) {
+      const message = err instanceof HttpError || err instanceof PlatformError ? err.message : 'Something went wrong while connecting.';
+      if (!(err instanceof HttpError)) req.log.error(err);
+      if (pickOpen(platform, req.query.pick)) return reply.code(400).send(callbackPage(null, `Which ${label} account?`, PICK_HELP, undefined, pickForm(platform, req.query.pick!, message)));
       return reply.code(400).send(callbackPage(false, `Couldn’t connect ${label}`, message, '/'));
     }
   });
