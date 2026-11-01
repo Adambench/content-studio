@@ -54,7 +54,9 @@ Publishing walks through each one and shows the exact redirect address to regist
    content on Instagram* and a business portfolio, set up with *Unified login* (new apps don't get Instagram Login): a
    configuration with `instagram_basic`, `instagram_content_publish` and `instagram_manage_insights` (analytics), token
    expiry *Never*, the redirect URI registered there and under Facebook Login for Business → Settings. Settings takes
-   the app ID and secret (App settings → Basic) and the configuration ID. The app can stay unpublished.
+   the app ID and secret (App settings → Basic) and the configuration ID. The app can stay unpublished, but then each
+   Instagram account must be a tester (Unified login → *Generate access tokens* → *Add account*, then accept on
+   instagram.com → Settings → Website permissions → Apps and websites → Tester invites).
 4. **YouTube** — Google Cloud: a project with the YouTube Data API v3 (and the YouTube Analytics API, for watch time
    and shares), an OAuth consent screen set to *In production*
    (otherwise the sign-in expires every 7 days) and a *Web application* OAuth client. Submit the YouTube API audit

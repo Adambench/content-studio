@@ -1,5 +1,5 @@
 import { emptyStats } from '../../../../shared/analytics';
-import { count, form, oauthError, PlatformError, poll, readJson, request, type PlatformAdapter, type PostStatsResult, type Profile, type PublishContext, type PublishResult } from './http';
+import { count, form, oauthError, PlatformError, poll, readJson, request, sleep, type PlatformAdapter, type PostStatsResult, type Profile, type PublishContext, type PublishResult } from './http';
 
 // Instagram API with Unified Login: new Meta apps no longer get Instagram Login. Sign-in is Facebook Login for Business
 // with a configuration (its permissions and the Instagram account picked in the dialog); the token belongs to a system
@@ -133,12 +133,17 @@ export const instagram: PlatformAdapter = {
   async profiles(token, accountIds = []) {
     const found = new Map<string, string>();
     const tried: string[] = [];
-    try {
-      const { data } = await graph<{ data: { id: string; username?: string }[] }>('GET', '/me/assigned_instagram_accounts', token, { fields: 'id,username', limit: 100 });
-      for (const a of data) found.set(String(a.id), a.username ?? '');
-      tried.push(`assigned_instagram_accounts: ${data.length}`);
-    } catch (err) {
-      tried.push(`assigned_instagram_accounts: ${(err as Error).message}`);
+    // Asked again once after a pause, in case Meta is still assigning what was just shared.
+    for (const pause of [0, 4000]) {
+      if (found.size) break;
+      await sleep(pause);
+      try {
+        const { data } = await graph<{ data: { id: string; username?: string }[] }>('GET', '/me/assigned_instagram_accounts', token, { fields: 'id,username', limit: 100 });
+        for (const a of data) found.set(String(a.id), a.username ?? '');
+        tried.push(`assigned_instagram_accounts: ${data.length}`);
+      } catch (err) {
+        tried.push(`assigned_instagram_accounts: ${(err as Error).message}`);
+      }
     }
     for (const id of accountIds) if (!found.has(id)) found.set(id, '');
     if (!found.size) {
@@ -153,9 +158,10 @@ export const instagram: PlatformAdapter = {
     // An id that isn't an Instagram account (a Page from the grants) has no username.
     const profiles = (await Promise.all([...found].map(([id, username]) => igProfile(token, id, username)))).filter((p) => p.handle);
     if (!profiles.length) {
-      console.warn(`[instagram] the sign-in shared no Instagram account (${tried.join('; ')}; granted ids: ${accountIds.join(',') || 'none'})`);
+      const me = await graph('GET', '/me', token, { fields: 'id,name,client_business_id' }).catch((err) => (err as Error).message);
+      console.warn(`[instagram] the sign-in shared no Instagram account (${tried.join('; ')}; granted ids: ${accountIds.join(',') || 'none'}; me: ${JSON.stringify(me)})`);
       throw new PlatformError(
-        'Meta’s sign-in worked, but no Instagram account came with it. In Meta’s window, tick the Instagram account itself. If it isn’t listed, add it to your business portfolio first (business.facebook.com → Settings → Accounts → Instagram accounts), then connect again.',
+        'Meta’s sign-in worked, but no Instagram account came with it. While the Meta app is unpublished, the account must be an Instagram Tester of it: in the app, Unified login → Generate access tokens → Add account; then on instagram.com, signed in as that account, Settings → Website permissions → Apps and websites → Tester invites → Accept. Then connect again and tick the account.',
         'fatal',
       );
     }
