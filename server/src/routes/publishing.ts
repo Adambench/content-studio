@@ -36,8 +36,11 @@ function setupInfo() {
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     tiktokVerification: getSetting('tiktokVerification')?.name ?? null,
     platforms: Object.fromEntries(
-      PUBLISH_PLATFORMS.map((p) => [p, { configured: !!platformApp(p), clientId: apps[p]?.clientId ?? '', hasSecret: !!apps[p]?.clientSecret, redirectUri: redirectUri(p) }]),
-    ) as Record<PublishPlatform, { configured: boolean; clientId: string; hasSecret: boolean; redirectUri: string | null }>,
+      PUBLISH_PLATFORMS.map((p) => [
+        p,
+        { configured: !!platformApp(p), clientId: apps[p]?.clientId ?? '', configId: apps[p]?.configId ?? '', hasSecret: !!apps[p]?.clientSecret, redirectUri: redirectUri(p) },
+      ]),
+    ) as Record<PublishPlatform, { configured: boolean; clientId: string; configId: string; hasSecret: boolean; redirectUri: string | null }>,
   };
 }
 
@@ -65,11 +68,14 @@ export async function publishingRoutes(app: FastifyInstance) {
 
   app.put<{ Params: { platform: string } }>('/api/publishing/apps/:platform', async (req) => {
     const { platform } = platformParam.parse(req.params);
-    const body = z.object({ clientId: z.string().trim().min(1).max(200), clientSecret: z.string().trim().max(500).optional() }).parse(req.body);
+    const body = z
+      .object({ clientId: z.string().trim().min(1).max(200), clientSecret: z.string().trim().max(500).optional(), configId: z.string().trim().max(200).optional() })
+      .parse(req.body);
     const apps = getSetting('platformApps') ?? {};
     const clientSecret = body.clientSecret || apps[platform]?.clientSecret;
     if (!clientSecret) throw badRequest('Add the client secret too.');
-    setSetting('platformApps', { ...apps, [platform]: { clientId: body.clientId, clientSecret } });
+    if (platform === 'instagram' && !body.configId) throw badRequest('Add the configuration ID too (Facebook Login for Business → Configurations).');
+    setSetting('platformApps', { ...apps, [platform]: { clientId: body.clientId, clientSecret, ...(body.configId && { configId: body.configId }) } });
     emit({ type: 'changed', entity: 'settings' });
     return setupInfo();
   });
@@ -148,8 +154,9 @@ export async function publishingRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(404).send(callbackPage(false, 'Unknown platform', 'This sign-in link isn’t one of Content Studio’s.'));
     const label = PUBLISH_PLATFORM_LABELS[parsed.data.platform];
     try {
-      const account = await finishConnect(parsed.data.platform, req.query);
-      return callbackPage(true, `${label} connected`, `${account.handle ? `@${account.handle}` : account.name} is connected to Content Studio. You can close this tab.`, `/w/${account.workspaceId}/accounts`);
+      const accounts = await finishConnect(parsed.data.platform, req.query);
+      const names = accounts.map((a) => (a.handle ? `@${a.handle}` : a.name)).join(', ');
+      return callbackPage(true, `${label} connected`, `${names} ${accounts.length > 1 ? 'are' : 'is'} connected to Content Studio. You can close this tab.`, `/w/${accounts[0].workspaceId}/accounts`);
     } catch (err) {
       const message = err instanceof HttpError || err instanceof PlatformError ? err.message : 'Something went wrong while connecting.';
       if (!(err instanceof HttpError)) req.log.error(err);

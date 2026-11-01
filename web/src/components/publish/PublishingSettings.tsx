@@ -13,7 +13,7 @@ import { keys, queryClient, usePublishingSetup } from '@/lib/queries';
 import type { PublishingSetup } from '@/lib/types';
 import { PlatformIcon, platformLabel } from './common';
 
-const GUIDES: Record<PublishPlatform, { console: string; idLabel: string; secretLabel: string; steps: React.ReactNode[] }> = {
+const GUIDES: Record<PublishPlatform, { console: string; idLabel: string; secretLabel: string; configLabel?: string; steps: React.ReactNode[] }> = {
   tiktok: {
     console: 'https://developers.tiktok.com/apps',
     idLabel: 'Client key',
@@ -29,14 +29,16 @@ const GUIDES: Record<PublishPlatform, { console: string; idLabel: string; secret
   },
   instagram: {
     console: 'https://developers.facebook.com/apps',
-    idLabel: 'Instagram app ID',
-    secretLabel: 'Instagram app secret',
+    idLabel: 'App ID',
+    secretLabel: 'App secret',
+    configLabel: 'Configuration ID',
     steps: [
-      'Your Instagram must be a Business or Creator account.',
-      'On developers.facebook.com, create an app (Business type) and add the Instagram product, with the instagram_business_manage_insights permission for analytics.',
-      'API setup with Instagram business login → Business login settings → OAuth redirect URI: the address below.',
-      'Copy the Instagram app ID and secret from that page (not the Facebook app ID).',
-      'While the app is in development, add your Instagram account under App roles → Roles → Instagram testers, and accept it in Instagram.',
+      'Your Instagram accounts must be Business or Creator accounts.',
+      'On developers.facebook.com, create an app with the use case “Manage messaging & content on Instagram” and connect your business portfolio.',
+      'Use cases → Customize → API setup with Unified login → Create new configuration. Edit permissions: instagram_basic, instagram_content_publish and instagram_manage_insights (analytics); the ads ones can go. Token expiry: Never.',
+      'Under Redirect URL there, and in Facebook Login for Business → Settings → Valid OAuth Redirect URIs: the address below.',
+      'Copy the App ID and secret from App settings → Basic, and the configuration’s ID from Facebook Login for Business → Configurations.',
+      'Connect from a workspace’s Accounts page and pick the Instagram account for it in Meta’s window. Leave the app unpublished: it works for your own accounts.',
     ],
   },
   youtube: {
@@ -163,17 +165,19 @@ function PlatformApp({ platform, setup }: { platform: PublishPlatform; setup: Pu
   const info = setup.platforms[platform];
   const guide = GUIDES[platform];
   const [clientId, setClientId] = useState(info.clientId);
+  const [configId, setConfigId] = useState(info.configId);
   const [secret, setSecret] = useState('');
   const [open, setOpen] = useState(!info.configured);
   const [busy, setBusy] = useState(false);
   const file = useRef<HTMLInputElement>(null);
   useEffect(() => setClientId(info.clientId), [info.clientId]);
+  useEffect(() => setConfigId(info.configId), [info.configId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
-      await save(`/publishing/apps/${platform}`, { clientId: clientId.trim(), clientSecret: secret.trim() || undefined });
+      await save(`/publishing/apps/${platform}`, { clientId: clientId.trim(), clientSecret: secret.trim() || undefined, configId: configId.trim() || undefined });
       setSecret('');
       setOpen(false);
       toast.success(`${platformLabel(platform)} app saved`);
@@ -241,8 +245,16 @@ function PlatformApp({ platform, setup }: { platform: PublishPlatform; setup: Pu
               </Label>
               <Input id={`${platform}-secret`} type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={info.hasSecret ? 'Saved — type to replace' : ''} autoComplete="off" />
             </div>
+            {guide.configLabel && (
+              <div className="space-y-1.5">
+                <Label htmlFor={`${platform}-config`} className="text-xs">
+                  {guide.configLabel}
+                </Label>
+                <Input id={`${platform}-config`} value={configId} onChange={(e) => setConfigId(e.target.value)} autoComplete="off" />
+              </div>
+            )}
             <div className="flex gap-2 sm:col-span-2">
-              <Button type="submit" size="sm" disabled={busy || !clientId.trim() || (!secret.trim() && !info.hasSecret)}>
+              <Button type="submit" size="sm" disabled={busy || !clientId.trim() || (!secret.trim() && !info.hasSecret) || (!!guide.configLabel && !configId.trim())}>
                 {busy && <Spinner />} Save
               </Button>
               {info.configured && (

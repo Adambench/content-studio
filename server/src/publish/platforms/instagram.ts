@@ -1,13 +1,15 @@
 import { emptyStats } from '../../../../shared/analytics';
-import { count, form, oauthError, PlatformError, poll, readJson, request, type PlatformAdapter, type PostStatsResult, type PublishContext, type PublishResult } from './http';
+import { count, form, oauthError, PlatformError, poll, readJson, request, type PlatformAdapter, type PostStatsResult, type Profile, type PublishContext, type PublishResult } from './http';
 
-// Instagram API with Instagram Login. https://developers.facebook.com/docs/instagram-platform/content-publishing
-const GRAPH = 'https://graph.instagram.com';
-const VERSION = 'v25.0';
-// Insights: views, reach, shares, saves and watch time. Likes, comments and followers come with the basic permission.
-const STATS_SCOPES = ['instagram_business_manage_insights'];
-const SCOPES = ['instagram_business_basic', 'instagram_business_content_publish', ...STATS_SCOPES];
-const INSIGHTS_RECONNECT = 'Reconnect this Instagram account (Accounts page) to let Content Studio read views, reach and saves.';
+// Instagram API with Unified Login: new Meta apps no longer get Instagram Login. Sign-in is Facebook Login for Business
+// with a configuration (its permissions and the Instagram account picked in the dialog); the token belongs to a system
+// user of my business portfolio, covers every account shared with the app, and doesn't expire.
+// https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-unified-login
+const GRAPH = 'https://graph.facebook.com';
+const VERSION = 'v26.0';
+// Insights: views, reach, shares, saves and watch time. Likes, comments and followers come with instagram_basic.
+const STATS_SCOPES = ['instagram_manage_insights'];
+const INSIGHTS_RECONNECT = 'Add instagram_manage_insights to the configuration in your Meta app, then reconnect this Instagram account (Accounts page) to let Content Studio read views, reach and saves.';
 // Reels also report average watch time (in milliseconds).
 const REEL_METRICS = 'views,reach,likes,comments,shares,saved,ig_reels_avg_watch_time';
 const FEED_METRICS = 'views,reach,likes,comments,shares,saved';
@@ -80,43 +82,46 @@ async function finish(ctx: PublishContext, mediaId: string): Promise<PublishResu
   return { externalId: mediaId, url: permalink ?? (ctx.account.handle ? `https://www.instagram.com/${ctx.account.handle}/` : null), stage: 'Live on Instagram.' };
 }
 
+async function igProfile(token: string, id: string, username = ''): Promise<Profile> {
+  const ig = await graph<{ username?: string; name?: string; profile_picture_url?: string }>('GET', `/${id}`, token, { fields: 'username,name,profile_picture_url' }).catch(() => ({ username, name: undefined, profile_picture_url: undefined }));
+  const handle = ig.username || username;
+  return { externalId: id, name: ig.name || handle, handle, avatarUrl: ig.profile_picture_url ?? null };
+}
+
 export const instagram: PlatformAdapter = {
-  // Long-lived tokens last 60 days and can be refreshed once they're a day old.
-  refreshMarginMs: 30 * 24 * 60 * 60_000,
+  // The configuration's token doesn't expire, so this only matters if it was set up to.
+  refreshMarginMs: 24 * 60 * 60_000,
 
   authorizeUrl({ app, redirectUri, state }) {
-    return `https://www.instagram.com/oauth/authorize?${form({ client_id: app.clientId, redirect_uri: redirectUri, response_type: 'code', scope: SCOPES.join(','), state, enable_fb_login: 'false' })}`;
+    if (!app.configId) throw new PlatformError('Add the configuration ID of your Meta app in Settings → Publishing → Instagram first.', 'fatal');
+    return `https://www.facebook.com/dialog/oauth?${form({ client_id: app.clientId, config_id: app.configId, redirect_uri: redirectUri, response_type: 'code', state })}`;
   },
 
   async exchangeCode({ app, redirectUri, code }) {
-    // Instagram appends "#_" to the code in the redirect.
-    const res = await request('https://api.instagram.com/oauth/access_token', {
-      method: 'POST',
-      body: form({ client_id: app.clientId, client_secret: app.clientSecret, grant_type: 'authorization_code', redirect_uri: redirectUri, code: code.replace(/#_$/, '') }),
-    });
+    const res = await request(`${GRAPH}/${VERSION}/oauth/access_token?${form({ client_id: app.clientId, client_secret: app.clientSecret, redirect_uri: redirectUri, code })}`);
     const json = await readJson(res);
-    const short = json?.data?.[0] ?? json;
-    if (!res.ok || !short?.access_token) throw oauthError('Instagram', res.status, json?.error_message ? { error_description: json.error_message } : json);
-    // Swap the one-hour token for a 60-day one.
-    const long = await request(`${GRAPH}/access_token?${form({ grant_type: 'ig_exchange_token', client_secret: app.clientSecret, access_token: short.access_token })}`);
-    const lj = await readJson(long);
-    if (!long.ok || !lj.access_token) throw oauthError('Instagram', long.status, lj);
-    const scopes = Array.isArray(short.permissions) ? short.permissions.join(',') : String(short.permissions ?? '');
-    return { accessToken: lj.access_token, refreshToken: null, expiresAt: Date.now() + Number(lj.expires_in ?? 5_184_000) * 1000, scopes };
+    if (!res.ok || !json?.access_token) throw oauthError('Instagram', res.status, json);
+    // The token doesn't say what it may do; ask with the app's own token.
+    const debug = await graph<{ data?: { scopes?: string[]; expires_at?: number } }>('GET', '/debug_token', `${app.clientId}|${app.clientSecret}`, { input_token: json.access_token }).catch(() => null);
+    const expiresAt = debug?.data?.expires_at ? debug.data.expires_at * 1000 : json.expires_in ? Date.now() + Number(json.expires_in) * 1000 : null;
+    return { accessToken: json.access_token, refreshToken: null, expiresAt, scopes: debug?.data?.scopes?.join(',') ?? '' };
   },
 
-  async refresh(_app, account) {
-    const res = await request(`${GRAPH}/refresh_access_token?${form({ grant_type: 'ig_refresh_token', access_token: account.accessToken })}`);
-    const json = await readJson(res);
-    if (!res.ok || !json.access_token) throw json?.error?.code === 190 ? new PlatformError('Instagram refused the sign-in.', 'auth') : oauthError('Instagram', res.status, json);
-    return { accessToken: json.access_token, expiresAt: Date.now() + Number(json.expires_in ?? 5_184_000) * 1000 };
+  async refresh() {
+    throw new PlatformError('Instagram’s sign-in has run out. Reconnect the account (Accounts page).', 'auth');
   },
 
-  async profile(token) {
-    const me = await graph<{ user_id: string; username: string; name?: string; profile_picture_url?: string; account_type?: string }>('GET', '/me', token, {
-      fields: 'user_id,username,name,profile_picture_url,account_type',
-    });
-    return { externalId: String(me.user_id), name: me.name || me.username, handle: me.username, avatarUrl: me.profile_picture_url ?? null };
+  async profile(token, account) {
+    if (account) return igProfile(token, account.externalId, account.handle);
+    const [first] = await instagram.profiles!(token);
+    if (!first) throw new PlatformError('Instagram didn’t share any account. Connect again and pick one.', 'fatal');
+    return first;
+  },
+
+  // One sign-in can share several accounts (all of the business portfolio's that I picked so far).
+  async profiles(token) {
+    const { data } = await graph<{ data: { id: string; username?: string }[] }>('GET', '/me/assigned_instagram_accounts', token, { fields: 'id,username', limit: 100 });
+    return Promise.all(data.map((a) => igProfile(token, String(a.id), a.username)));
   },
 
   async publish(ctx) {
@@ -201,8 +206,8 @@ export const instagram: PlatformAdapter = {
     return { posts: out, note };
   },
 
-  async accountStats(token) {
-    const me = await graph<{ followers_count?: number; media_count?: number }>('GET', '/me', token, { fields: 'followers_count,media_count' });
+  async accountStats(token, account) {
+    const me = await graph<{ followers_count?: number; media_count?: number }>('GET', `/${account.externalId}`, token, { fields: 'followers_count,media_count' });
     return { followers: count(me.followers_count), views: null, likes: null, posts: count(me.media_count) };
   },
 };

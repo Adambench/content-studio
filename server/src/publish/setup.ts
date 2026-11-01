@@ -17,7 +17,7 @@ const execFile = promisify(execFileCb);
 export const publicUrl = () => getSetting('publicUrl')?.replace(/\/+$/, '') || null;
 
 /**
- * Where a platform sends you back after signing in. TikTok and Instagram insist on HTTPS, so they need the public
+ * Where a platform sends you back after signing in. TikTok and Meta insist on HTTPS, so they need the public
  * address; Google also accepts this computer's own address.
  */
 export function redirectUri(platform: PublishPlatform) {
@@ -27,7 +27,7 @@ export function redirectUri(platform: PublishPlatform) {
 
 export function platformApp(platform: PublishPlatform) {
   const app = getSetting('platformApps')?.[platform];
-  return app?.clientId && app.clientSecret ? app : null;
+  return app?.clientId && app.clientSecret && (platform !== 'instagram' || app.configId) ? app : null;
 }
 
 export function requireApp(platform: PublishPlatform) {

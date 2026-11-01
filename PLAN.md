@@ -180,7 +180,7 @@ versionCode from the tag (`v1.2.3` → 10203).
 
 ## Phases
 
-0. **Setup** — on me, not started: Meta app (Instagram API with Instagram Login), TikTok app (Login Kit + Content
+0. **Setup** — on me, not started: Meta app (Instagram API with Unified login: new apps don't get Instagram Login, 2026-11-01), TikTok app (Login Kit + Content
    Posting + Display API), Google Cloud (YouTube Data + Analytics API, audit form), Tailscale Funnel, Firebase.
 1. **Pipeline + Claude** — done.
 2. **Video studio** — done. Open: grade shown in the preview; hardware encoding (libva).

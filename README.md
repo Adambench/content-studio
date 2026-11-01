@@ -50,9 +50,11 @@ Publishing walks through each one and shows the exact redirect address to regist
    `user.info.stats`. For photo posts, verify the URL prefix
    `<public address>/api/public/` with the file TikTok gives you (upload it in Settings). Record the audit demo
    (PLAN.md) to lift the private-only limit.
-3. **Instagram** — a Business or Creator account; developers.facebook.com: a Business app with the Instagram product
-   (Instagram business login), including the `instagram_business_manage_insights` permission for analytics. Use the *Instagram* app ID and secret; add yourself as an Instagram tester while the
-   app is in development.
+3. **Instagram** — Business or Creator accounts; developers.facebook.com: an app with the use case *Manage messaging &
+   content on Instagram* and a business portfolio, set up with *Unified login* (new apps don't get Instagram Login): a
+   configuration with `instagram_basic`, `instagram_content_publish` and `instagram_manage_insights` (analytics), token
+   expiry *Never*, the redirect URI registered there and under Facebook Login for Business → Settings. Settings takes
+   the app ID and secret (App settings → Basic) and the configuration ID. The app can stay unpublished.
 4. **YouTube** — Google Cloud: a project with the YouTube Data API v3 (and the YouTube Analytics API, for watch time
    and shares), an OAuth consent screen set to *In production*
    (otherwise the sign-in expires every 7 days) and a *Web application* OAuth client. Submit the YouTube API audit

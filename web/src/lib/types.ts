@@ -248,7 +248,7 @@ export type PublishingSetup = {
   catchUpHours: number;
   timeZone: string;
   tiktokVerification: string | null;
-  platforms: Record<PublishPlatform, { configured: boolean; clientId: string; hasSecret: boolean; redirectUri: string | null }>;
+  platforms: Record<PublishPlatform, { configured: boolean; clientId: string; configId: string; hasSecret: boolean; redirectUri: string | null }>;
 };
 
 /** How a post did: its latest numbers and how it compares with its account's typical post (views after 24 hours). */

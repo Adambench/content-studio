@@ -10,7 +10,7 @@ type SettingsShape = {
   lastWorkspaceId: string;
   claudeUsage: import('../../../shared/types').ClaudeUsage;
   /** The developer apps registered with each platform (one per platform, shared by every workspace). */
-  platformApps: Partial<Record<import('../../../shared/publish').PublishPlatform, { clientId: string; clientSecret: string }>>;
+  platformApps: Partial<Record<import('../../../shared/publish').PublishPlatform, import('../publish/platforms/http').AppCredentials>>;
   /** This computer's public HTTPS address (Tailscale Funnel), for sign-in redirects and media the platforms fetch. */
   publicUrl: string;
   /** Signs the short-lived public links to media that Instagram and TikTok download. */

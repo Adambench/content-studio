@@ -50,8 +50,6 @@ export async function accessToken(account: AccountRow, force = false): Promise<s
   const current = getAccount(account.id);
   const adapter = platforms[current.platform];
   if (!force && (!current.expiresAt || current.expiresAt - adapter.refreshMarginMs > now())) return current.accessToken;
-  // Instagram can't refresh a token less than a day old; it's still valid, so use it.
-  if (current.platform === 'instagram' && now() - current.tokenUpdatedAt < 24 * 60 * 60_000 && (current.expiresAt ?? 0) > now()) return current.accessToken;
   const inflight = refreshing.get(current.id);
   if (inflight) return inflight;
   const run = (async () => {
@@ -99,7 +97,7 @@ export function updateAccount(id: string, patch: { settings?: AccountSettings; s
 async function refreshProfile(id: string, token: string) {
   const a = getAccount(id);
   try {
-    const p = await platforms[a.platform].profile(token);
+    const p = await platforms[a.platform].profile(token, a);
     if (p.externalId !== a.externalId || (p.name === a.name && p.handle === a.handle && p.avatarUrl === a.avatarUrl)) return;
     db.update(schema.accounts).set({ name: p.name, handle: p.handle || a.handle, avatarUrl: p.avatarUrl, updatedAt: now() }).where(eq(schema.accounts.id, id)).run();
     announce(a);
@@ -146,20 +144,10 @@ export async function finishConnect(platform: PublishPlatform, query: { code?: s
   }
   const adapter = platforms[platform];
   const tokens = await adapter.exchangeCode({ app: requireApp(platform), redirectUri: sign.redirectUri, code: query.code, verifier: sign.verifier });
-  const profile = await adapter.profile(tokens.accessToken);
-
-  const existing = db
-    .select()
-    .from(schema.accounts)
-    .where(and(eq(schema.accounts.workspaceId, sign.workspaceId), eq(schema.accounts.platform, platform), eq(schema.accounts.externalId, profile.externalId)))
-    .get();
-  const values = {
-    name: profile.name,
-    handle: profile.handle,
-    avatarUrl: profile.avatarUrl,
+  const profiles = adapter.profiles ? await adapter.profiles(tokens.accessToken) : [await adapter.profile(tokens.accessToken)];
+  if (!profiles.length) throw badRequest(`${PUBLISH_PLATFORM_LABELS[platform]} didn’t share any account. Connect again and pick one.`);
+  const tokenValues = {
     accessToken: tokens.accessToken,
-    // Reconnecting without a new refresh token (Google omits it sometimes) keeps the old one.
-    ...(tokens.refreshToken || !existing ? { refreshToken: tokens.refreshToken ?? null } : {}),
     expiresAt: tokens.expiresAt ?? null,
     refreshExpiresAt: tokens.refreshExpiresAt ?? null,
     scopes: tokens.scopes ?? '',
@@ -168,13 +156,50 @@ export async function finishConnect(platform: PublishPlatform, query: { code?: s
     statusMessage: null,
     updatedAt: now(),
   };
-  const id = existing?.id ?? newId();
-  if (existing) db.update(schema.accounts).set(values).where(eq(schema.accounts.id, id)).run();
-  else db.insert(schema.accounts).values({ id, workspaceId: sign.workspaceId, platform, externalId: profile.externalId, slots: DEFAULT_SLOTS, settings: {}, ...values }).run();
-  const account = getAccount(id);
-  announce(account);
-  emit({ type: 'job', jobType: 'account.connect', status: 'done', workspaceId: account.workspaceId, message: `Connected ${accountLabel(account)}` });
-  return account;
+
+  // A token that covers several accounts (Instagram) also covers the ones already connected (here or in other
+  // workspaces): give them the new sign-in too. It adds here the accounts not connected anywhere yet; with none new,
+  // it's a reconnect of this workspace's ones, or (if it has none) all of them.
+  let picked = profiles;
+  if (adapter.profiles) {
+    const known = db
+      .select()
+      .from(schema.accounts)
+      .where(and(eq(schema.accounts.platform, platform), inArray(schema.accounts.externalId, profiles.map((p) => p.externalId))))
+      .all();
+    for (const k of known) {
+      db.update(schema.accounts).set(tokenValues).where(eq(schema.accounts.id, k.id)).run();
+      announce(k);
+    }
+    const fresh = profiles.filter((p) => !known.some((k) => k.externalId === p.externalId));
+    const here = profiles.filter((p) => known.some((k) => k.externalId === p.externalId && k.workspaceId === sign.workspaceId));
+    if (fresh.length) picked = fresh;
+    else if (here.length) picked = here;
+  }
+
+  const connected = picked.map((profile) => {
+    const existing = db
+      .select()
+      .from(schema.accounts)
+      .where(and(eq(schema.accounts.workspaceId, sign.workspaceId), eq(schema.accounts.platform, platform), eq(schema.accounts.externalId, profile.externalId)))
+      .get();
+    const values = {
+      ...tokenValues,
+      name: profile.name,
+      handle: profile.handle,
+      avatarUrl: profile.avatarUrl,
+      // Reconnecting without a new refresh token (Google omits it sometimes) keeps the old one.
+      ...(tokens.refreshToken || !existing ? { refreshToken: tokens.refreshToken ?? null } : {}),
+    };
+    const id = existing?.id ?? newId();
+    if (existing) db.update(schema.accounts).set(values).where(eq(schema.accounts.id, id)).run();
+    else db.insert(schema.accounts).values({ id, workspaceId: sign.workspaceId, platform, externalId: profile.externalId, slots: DEFAULT_SLOTS, settings: {}, ...values }).run();
+    const account = getAccount(id);
+    announce(account);
+    emit({ type: 'job', jobType: 'account.connect', status: 'done', workspaceId: account.workspaceId, message: `Connected ${accountLabel(account)}` });
+    return account;
+  });
+  return connected;
 }
 
 /** Forget the account (and ask the platform to revoke our access). Its scheduled posts can't go out any more. */
