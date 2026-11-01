@@ -104,7 +104,10 @@ export async function request(url: string, init: RequestInit & { timeoutMs?: num
     return await fetch(platformUrl(url), { ...rest, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) });
   } catch (err) {
     const host = new URL(url).host;
-    throw new PlatformError(`Couldn’t reach ${host} (${(err as Error).message}).`, 'retry');
+    // fetch only says "fetch failed"; the cause has the network error (ENOTFOUND, ECONNRESET, …).
+    const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+    const detail = cause?.code ?? cause?.message;
+    throw new PlatformError(`Couldn’t reach ${host} (${(err as Error).message}${detail ? `: ${detail}` : ''}).`, 'retry');
   }
 }
 

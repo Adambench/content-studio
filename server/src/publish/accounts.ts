@@ -7,7 +7,7 @@ import { badRequest, notFound } from '../lib/http';
 import { notify } from '../lib/push';
 import { getWorkspace } from '../services/pieces';
 import { PlatformError, platforms, type AccountRow } from './platforms';
-import { platformUrl } from './platforms/http';
+import { platformUrl, sleep, type TokenSet } from './platforms/http';
 import { publicUrl, redirectUri, requireApp } from './setup';
 
 // A new account's queue: one slot a day, at a typical evening time. Edit it on the Accounts page.
@@ -143,7 +143,22 @@ export async function finishConnect(platform: PublishPlatform, query: { code?: s
     throw badRequest(denied ? 'You cancelled the sign-in, so nothing was connected.' : `${PUBLISH_PLATFORM_LABELS[platform]} said: ${query.error_description ?? query.error ?? 'no code was returned'}`);
   }
   const adapter = platforms[platform];
-  const tokens = await adapter.exchangeCode({ app: requireApp(platform), redirectUri: sign.redirectUri, code: query.code, verifier: sign.verifier });
+  const app = requireApp(platform);
+  let tokens: TokenSet | undefined;
+  for (let attempt = 1; !tokens; attempt++) {
+    try {
+      tokens = await adapter.exchangeCode({ app, redirectUri: sign.redirectUri, code: query.code, verifier: sign.verifier });
+    } catch (err) {
+      // A dropped connection: the code still works if the platform never saw it, so try again, and keep the
+      // sign-in so reloading the page tries once more.
+      if (!(err instanceof PlatformError && err.kind === 'retry')) throw err;
+      if (attempt === 3) {
+        pending.set(query.state!, sign);
+        throw new PlatformError(`${err.message} Reload this page to try again.`, 'retry');
+      }
+      await sleep(2000 * attempt);
+    }
+  }
   const profiles = adapter.profiles ? await adapter.profiles(tokens.accessToken, tokens.accountIds) : [await adapter.profile(tokens.accessToken)];
   if (!profiles.length) throw badRequest(`${PUBLISH_PLATFORM_LABELS[platform]} didn’t share any account. Connect again and pick one.`);
   const tokenValues = {
