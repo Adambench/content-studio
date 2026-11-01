@@ -144,7 +144,7 @@ export async function finishConnect(platform: PublishPlatform, query: { code?: s
   }
   const adapter = platforms[platform];
   const tokens = await adapter.exchangeCode({ app: requireApp(platform), redirectUri: sign.redirectUri, code: query.code, verifier: sign.verifier });
-  const profiles = adapter.profiles ? await adapter.profiles(tokens.accessToken) : [await adapter.profile(tokens.accessToken)];
+  const profiles = adapter.profiles ? await adapter.profiles(tokens.accessToken, tokens.accountIds) : [await adapter.profile(tokens.accessToken)];
   if (!profiles.length) throw badRequest(`${PUBLISH_PLATFORM_LABELS[platform]} didn’t share any account. Connect again and pick one.`);
   const tokenValues = {
     accessToken: tokens.accessToken,

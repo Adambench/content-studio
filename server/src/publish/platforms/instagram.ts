@@ -82,6 +82,8 @@ async function finish(ctx: PublishContext, mediaId: string): Promise<PublishResu
   return { externalId: mediaId, url: permalink ?? (ctx.account.handle ? `https://www.instagram.com/${ctx.account.handle}/` : null), stage: 'Live on Instagram.' };
 }
 
+type DebugToken = { type?: string; scopes?: string[]; granular_scopes?: { scope: string; target_ids?: string[] }[]; expires_at?: number };
+
 async function igProfile(token: string, id: string, username = ''): Promise<Profile> {
   const ig = await graph<{ username?: string; name?: string; profile_picture_url?: string }>('GET', `/${id}`, token, { fields: 'username,name,profile_picture_url' }).catch(() => ({ username, name: undefined, profile_picture_url: undefined }));
   const handle = ig.username || username;
@@ -102,9 +104,16 @@ export const instagram: PlatformAdapter = {
     const json = await readJson(res);
     if (!res.ok || !json?.access_token) throw oauthError('Instagram', res.status, json);
     // The token doesn't say what it may do; ask with the app's own token.
-    const debug = await graph<{ data?: { scopes?: string[]; expires_at?: number } }>('GET', '/debug_token', `${app.clientId}|${app.clientSecret}`, { input_token: json.access_token }).catch(() => null);
-    const expiresAt = debug?.data?.expires_at ? debug.data.expires_at * 1000 : json.expires_in ? Date.now() + Number(json.expires_in) * 1000 : null;
-    return { accessToken: json.access_token, refreshToken: null, expiresAt, scopes: debug?.data?.scopes?.join(',') ?? '' };
+    const debug = await graph<{ data?: DebugToken }>('GET', '/debug_token', `${app.clientId}|${app.clientSecret}`, { input_token: json.access_token }).catch((err) => {
+      console.warn(`[instagram] debug_token failed: ${(err as Error).message}`);
+      return null;
+    });
+    const d = debug?.data;
+    const expiresAt = d?.expires_at ? d.expires_at * 1000 : json.expires_in ? Date.now() + Number(json.expires_in) * 1000 : null;
+    // The accounts picked in the dialog, per permission (some of these may be Pages; profiles() drops those).
+    const accountIds = [...new Set((d?.granular_scopes ?? []).filter((g) => g.scope.startsWith('instagram_')).flatMap((g) => g.target_ids ?? []).map(String))];
+    if (d) console.log(`[instagram] sign-in: ${JSON.stringify({ type: d.type, scopes: d.scopes, granular_scopes: d.granular_scopes, expires_at: d.expires_at })}`);
+    return { accessToken: json.access_token, refreshToken: null, expiresAt, scopes: d?.scopes?.join(',') ?? '', accountIds };
   },
 
   async refresh() {
@@ -118,10 +127,39 @@ export const instagram: PlatformAdapter = {
     return first;
   },
 
-  // One sign-in can share several accounts (all of the business portfolio's that I picked so far).
-  async profiles(token) {
-    const { data } = await graph<{ data: { id: string; username?: string }[] }>('GET', '/me/assigned_instagram_accounts', token, { fields: 'id,username', limit: 100 });
-    return Promise.all(data.map((a) => igProfile(token, String(a.id), a.username)));
+  // One sign-in can share several accounts (all of the business portfolio's that I picked so far). Meta's docs only
+  // name /me/assigned_instagram_accounts; the permission grants and (for a configuration that gives a user token) the
+  // Pages' linked accounts are fallbacks.
+  async profiles(token, accountIds = []) {
+    const found = new Map<string, string>();
+    const tried: string[] = [];
+    try {
+      const { data } = await graph<{ data: { id: string; username?: string }[] }>('GET', '/me/assigned_instagram_accounts', token, { fields: 'id,username', limit: 100 });
+      for (const a of data) found.set(String(a.id), a.username ?? '');
+      tried.push(`assigned_instagram_accounts: ${data.length}`);
+    } catch (err) {
+      tried.push(`assigned_instagram_accounts: ${(err as Error).message}`);
+    }
+    for (const id of accountIds) if (!found.has(id)) found.set(id, '');
+    if (!found.size) {
+      try {
+        const { data } = await graph<{ data: { id: string; instagram_business_account?: { id: string; username?: string } }[] }>('GET', '/me/accounts', token, { fields: 'instagram_business_account{id,username}', limit: 100 });
+        for (const { instagram_business_account: ig } of data) if (ig) found.set(String(ig.id), ig.username ?? '');
+        tried.push(`pages: ${data.length}, with Instagram: ${found.size}`);
+      } catch (err) {
+        tried.push(`pages: ${(err as Error).message}`);
+      }
+    }
+    // An id that isn't an Instagram account (a Page from the grants) has no username.
+    const profiles = (await Promise.all([...found].map(([id, username]) => igProfile(token, id, username)))).filter((p) => p.handle);
+    if (!profiles.length) {
+      console.warn(`[instagram] the sign-in shared no Instagram account (${tried.join('; ')}; granted ids: ${accountIds.join(',') || 'none'})`);
+      throw new PlatformError(
+        'Meta’s sign-in worked, but no Instagram account came with it. In Meta’s window, tick the Instagram account itself. If it isn’t listed, add it to your business portfolio first (business.facebook.com → Settings → Accounts → Instagram accounts), then connect again.',
+        'fatal',
+      );
+    }
+    return profiles;
   },
 
   async publish(ctx) {

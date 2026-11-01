@@ -8,7 +8,15 @@ export type AccountRow = typeof schema.accounts.$inferSelect;
 export type PostRow = typeof schema.posts.$inferSelect;
 /** A platform's developer app. `configId`: the Facebook Login for Business configuration Instagram signs in with. */
 export type AppCredentials = { clientId: string; clientSecret: string; configId?: string };
-export type TokenSet = { accessToken: string; refreshToken?: string | null; expiresAt?: number | null; refreshExpiresAt?: number | null; scopes?: string };
+export type TokenSet = {
+  accessToken: string;
+  refreshToken?: string | null;
+  expiresAt?: number | null;
+  refreshExpiresAt?: number | null;
+  scopes?: string;
+  /** Accounts the sign-in's permissions name (Instagram), in case the platform's own list comes back empty. */
+  accountIds?: string[];
+};
 export type Profile = { externalId: string; name: string; handle: string; avatarUrl: string | null };
 
 /** Everything a platform needs to publish one post; `remote` and `save` let a retry resume where the last attempt stopped. */
@@ -45,7 +53,7 @@ export type PlatformAdapter = {
   /** The signed-in account, or (when one token covers several) the given one. */
   profile(accessToken: string, account?: Pick<AccountRow, 'externalId' | 'handle'>): Promise<Profile>;
   /** Every account a token covers, for platforms where one sign-in can share several. */
-  profiles?(accessToken: string): Promise<Profile[]>;
+  profiles?(accessToken: string, accountIds?: string[]): Promise<Profile[]>;
   revoke?(app: AppCredentials, account: AccountRow): Promise<void>;
   publish(ctx: PublishContext): Promise<PublishResult>;
   /** Permissions needed to read stats. Accounts connected before they were asked for need reconnecting. */
