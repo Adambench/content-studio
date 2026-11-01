@@ -84,10 +84,15 @@ async function finish(ctx: PublishContext, mediaId: string): Promise<PublishResu
 
 type DebugToken = { type?: string; scopes?: string[]; granular_scopes?: { scope: string; target_ids?: string[] }[]; expires_at?: number };
 
+async function readProfile(token: string, id: string): Promise<Profile> {
+  const ig = await graph<{ username?: string; name?: string; profile_picture_url?: string }>('GET', `/${id}`, token, { fields: 'username,name,profile_picture_url' });
+  return { externalId: id, name: ig.name || ig.username || '', handle: ig.username ?? '', avatarUrl: ig.profile_picture_url ?? null };
+}
+
 async function igProfile(token: string, id: string, username = ''): Promise<Profile> {
-  const ig = await graph<{ username?: string; name?: string; profile_picture_url?: string }>('GET', `/${id}`, token, { fields: 'username,name,profile_picture_url' }).catch(() => ({ username, name: undefined, profile_picture_url: undefined }));
-  const handle = ig.username || username;
-  return { externalId: id, name: ig.name || handle, handle, avatarUrl: ig.profile_picture_url ?? null };
+  const p = await readProfile(token, id).catch(() => null);
+  const handle = p?.handle || username;
+  return { externalId: id, name: p?.name || handle, handle, avatarUrl: p?.avatarUrl ?? null };
 }
 
 export const instagram: PlatformAdapter = {
@@ -121,7 +126,8 @@ export const instagram: PlatformAdapter = {
   },
 
   async profile(token, account) {
-    if (account) return igProfile(token, account.externalId, account.handle);
+    // Refreshing a connected account: a failed read throws, so it never blanks the name or picture.
+    if (account) return readProfile(token, account.externalId);
     const [first] = await instagram.profiles!(token);
     if (!first) throw new PlatformError('Instagram didn’t share any account. Connect again and pick one.', 'fatal');
     return first;
@@ -162,10 +168,7 @@ export const instagram: PlatformAdapter = {
   async lookup(token, wanted, roots) {
     const found: Profile[] = [];
     const missing: string[] = [];
-    const reachable = async (id: string) => {
-      const ig = await graph<{ username?: string; name?: string; profile_picture_url?: string }>('GET', `/${id}`, token, { fields: 'username,name,profile_picture_url' }).catch(() => null);
-      return ig?.username ? { externalId: id, name: ig.name || ig.username, handle: ig.username, avatarUrl: ig.profile_picture_url ?? null } : null;
-    };
+    const reachable = (id: string) => readProfile(token, id).then((p) => (p.handle ? p : null), () => null);
     const ids = wanted.filter((w) => /^\d+$/.test(w));
     for (const w of [...ids, ...wanted.filter((w) => !ids.includes(w))]) {
       let id: string | undefined = w;

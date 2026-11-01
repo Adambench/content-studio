@@ -106,6 +106,21 @@ async function refreshProfile(id: string, token: string) {
   }
 }
 
+const PROFILE_EVERY = 10 * 60_000;
+const profileChecked = new Map<string, number>();
+
+/**
+ * Instagram's sign-in never renews, so renames and new pictures (and picture links running out) are picked up when
+ * the accounts are listed, at most every 10 minutes an account.
+ */
+export function refreshProfiles(workspaceId: string) {
+  for (const a of listAccounts(workspaceId)) {
+    if (a.status !== 'connected' || (profileChecked.get(a.id) ?? 0) > now() - PROFILE_EVERY) continue;
+    profileChecked.set(a.id, now());
+    void accessToken(a).then((token) => refreshProfile(a.id, token), () => {});
+  }
+}
+
 // ---------- connecting ----------
 
 type PendingSignIn = { workspaceId: string; platform: PublishPlatform; verifier: string; redirectUri: string; expires: number };

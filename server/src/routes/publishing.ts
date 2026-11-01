@@ -8,7 +8,7 @@ import { badRequest, HttpError, notFound } from '../lib/http';
 import { getSetting, setSetting } from '../lib/settings';
 import { getMedia } from '../services/media';
 import { getWorkspace } from '../services/pieces';
-import { accessToken, disconnectAccount, finishConnect, getAccount, listAccounts, pickAccounts, pickOpen, publicAccount, startConnect, updateAccount } from '../publish/accounts';
+import { accessToken, disconnectAccount, finishConnect, getAccount, listAccounts, pickAccounts, pickOpen, publicAccount, refreshProfiles, startConnect, updateAccount } from '../publish/accounts';
 import { PlatformError, type AccountRow } from '../publish/platforms';
 import { creatorInfo } from '../publish/platforms/tiktok';
 import { createPosts, deletePost, getPost, listPosts, piecePosts, planPosts, postDetail, postNow, scheduleSchema, stopPost, updatePost, updateSchema, upcomingPosts } from '../publish/posts';
@@ -129,7 +129,12 @@ export async function publishingRoutes(app: FastifyInstance) {
 
   // ---------- accounts ----------
 
-  app.get<{ Params: { wid: string } }>('/api/workspaces/:wid/accounts', async (req) => listAccounts(getWorkspace(req.params.wid).id).map(publicAccount));
+  app.get<{ Params: { wid: string } }>('/api/workspaces/:wid/accounts', async (req) => {
+    const ws = getWorkspace(req.params.wid);
+    // The new names land through a live update once the platforms answer.
+    refreshProfiles(ws.id);
+    return listAccounts(ws.id).map(publicAccount);
+  });
 
   app.post<{ Params: { wid: string } }>('/api/workspaces/:wid/accounts/connect', async (req) => {
     const { platform } = platformParam.parse(req.body);
