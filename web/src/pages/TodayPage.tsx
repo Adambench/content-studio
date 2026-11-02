@@ -1,9 +1,9 @@
 import { AlertCircle, BadgeDollarSign, CalendarCheck, Clapperboard, Loader2, Sparkles, Telescope } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { isMarket, money } from '@shared/campaigns';
+import { campaignPicture, isMarket, money } from '@shared/campaigns';
 import { KIND_INFO } from '@shared/types';
-import { BudgetBar, deadlineText, HalalBadge, rateText } from '@/components/campaigns/common';
+import { BudgetBar, CampaignPicture, deadlineText, HalalBadge, rateText } from '@/components/campaigns/common';
 import { SubmitRow } from '@/components/campaigns/Submissions';
 import { KIND_ICONS } from '@/components/KindPicker';
 import { PageHeader } from '@/components/PageHeader';
@@ -286,7 +286,7 @@ export function TodayPage() {
               )}
               {toConfirm.map((c) => (
                 <Link key={c.id} to={`/campaigns/${c.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border bg-card p-2.5 hover:border-foreground/20">
-                  <BadgeDollarSign className="size-4 shrink-0 text-orange-400" />
+                  {campaignPicture(c.link) ? <CampaignPicture link={c.link} className="w-20 shrink-0 rounded-md" /> : <BadgeDollarSign className="size-4 shrink-0 text-orange-400" />}
                   <span className="min-w-0 flex-1 text-sm">
                     Confirm the campaign <span className="font-medium">{c.title || 'you added'}</span>
                   </span>

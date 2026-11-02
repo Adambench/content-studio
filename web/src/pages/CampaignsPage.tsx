@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { isMarket, MARKET_INFO, type Campaign, type CampaignPlatform } from '@shared/campaigns';
 import { AddCampaignDialog } from '@/components/campaigns/AddCampaignDialog';
-import { BudgetBar, deadlineText, HalalBadge, PageChips, rateText, StatusBadge } from '@/components/campaigns/common';
+import { BudgetBar, CampaignPicture, deadlineText, HalalBadge, PageChips, rateText, StatusBadge } from '@/components/campaigns/common';
 import { PageHeader } from '@/components/PageHeader';
 import { PlatformIcon } from '@/components/publish/common';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,7 @@ function CampaignCard({ c, wid, workspaces }: { c: Campaign; wid: string; worksp
   const deadline = deadlineText(c.deadline);
   return (
     <Link to={`/w/${wid}/campaigns/${c.id}`} className="block space-y-2.5 rounded-lg border bg-card p-3 hover:border-foreground/20">
+      <CampaignPicture link={c.link} />
       <div className="flex flex-wrap items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{c.title || (c.link ? 'Reading the campaign…' : 'Untitled campaign')}</p>

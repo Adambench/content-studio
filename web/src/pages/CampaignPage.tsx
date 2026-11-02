@@ -2,8 +2,8 @@ import { ArrowLeft, CircleAlert, ClipboardPaste, ExternalLink, Loader2, MoreHori
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { CAMPAIGN_PLATFORM_LABELS, isMarket, money, type CampaignDetail } from '@shared/campaigns';
-import { BudgetBar, deadlineText, HalalBadge, PageChips, PagePicker, StatusBadge } from '@/components/campaigns/common';
+import { CAMPAIGN_PLATFORM_LABELS, isMarket, MARKET_INFO, money, type CampaignDetail } from '@shared/campaigns';
+import { BudgetBar, CampaignPicture, deadlineText, HalalBadge, PageChips, PagePicker, rateText, StatusBadge } from '@/components/campaigns/common';
 import { RulesCard } from '@/components/campaigns/RulesCard';
 import { MomentsCard } from '@/components/campaigns/MomentsCard';
 import { SourcesCard } from '@/components/campaigns/SourcesCard';
@@ -43,12 +43,40 @@ async function patch(id: string, body: Record<string, unknown>) {
   return next;
 }
 
-/** The halal screen, then my OK turns a read campaign on for its page (one added before pages were picked asks which). */
+/** What the halal screen left for me to judge, one short line each (the app's own handling isn't listed). */
+function HalalCheck({ c }: { c: CampaignDetail }) {
+  if (!c.halalVerdict) return null;
+  const head = c.halalVerdict === 'ok' ? 'Nothing for you to check.' : c.halalVerdict === 'reject' ? 'Rejected because:' : 'Your call on these:';
+  return (
+    <div className="space-y-2 rounded-lg border px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <HalalBadge verdict={c.halalVerdict} />
+        <span className="text-muted-foreground">{head}</span>
+      </div>
+      {c.halalVerdict !== 'ok' && c.halalReasons.length > 0 && (
+        <ul className="list-disc space-y-1 pl-5 text-sm">
+          {c.halalReasons.map((r) => (
+            <li key={r}>{r}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Which campaign this is, as I know it from the marketplace (its picture, name, brand, pay), what the halal screen
+ * leaves to me, then my OK turns it on for its page (one added before pages were picked asks which).
+ */
 function ConfirmCard({ c, workspaces }: { c: CampaignDetail; workspaces: Workspace[] }) {
   const hasPages = c.pageIds.length > 0;
   const [pages, setPages] = useState<string[]>(c.pageIds);
   const [busy, setBusy] = useState(false);
   const rejected = c.halalVerdict === 'reject';
+  const market = isMarket(c.origin) ? MARKET_INFO[c.origin] : null;
+  const maxPay = Math.max(0, ...c.payouts.map((p) => p.maxPayout ?? 0));
+  const pay = [rateText(c.ratePer1k), maxPay ? `up to ${money(maxPay)} a clip` : null].filter(Boolean).join(' · ');
+  const meta = [c.brand, market?.label, c.platforms.map((p) => CAMPAIGN_PLATFORM_LABELS[p]).join(', ')].filter(Boolean).join(' · ');
 
   async function confirm() {
     setBusy(true);
@@ -66,23 +94,32 @@ function ConfirmCard({ c, workspaces }: { c: CampaignDetail; workspaces: Workspa
   return (
     <Card className={rejected ? 'border-destructive/40' : 'border-brand/40'}>
       <CardHeader>
-        <CardTitle className="flex flex-wrap items-center gap-2">
-          {rejected ? 'Not for these pages' : 'Check it, then confirm'} <HalalBadge verdict={c.halalVerdict} />
-        </CardTitle>
+        <CardTitle>{rejected ? 'Not for these pages' : 'Take this campaign?'}</CardTitle>
         <CardDescription>
           {rejected
-            ? 'The halal screen rejected this campaign, so it can’t be used. Delete it, or read it again if the page changed.'
-            : 'Read the rules and the screen below. Confirming turns it on for this page; clips are still made only when you ask and go out only with your OK.'}
+            ? 'The halal screen rejected it, so it can’t be used. Delete it, or read it again if the page changed.'
+            : `Confirming turns it on for ${hasPages ? workspaces.find((w) => w.id === c.pageIds[0])?.name ?? 'its page' : 'the page you pick'}. Clips are still made only when you ask, and go out only with your OK.`}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {c.halalReasons.length > 0 && (
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            {c.halalReasons.map((r) => (
-              <li key={r}>{r}</li>
-            ))}
-          </ul>
-        )}
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <CampaignPicture link={c.link} className="sm:w-56 sm:shrink-0 sm:self-start" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="space-y-0.5">
+              <p className="font-medium">{c.title || 'Untitled campaign'}</p>
+              {meta && <p className="text-sm text-muted-foreground">{meta}</p>}
+              {pay && <p className="text-sm">{pay}</p>}
+            </div>
+            {market && <BudgetBar left={c.budgetLeft} total={c.budgetTotal} />}
+            {c.link && market && (
+              <Button size="sm" variant="outline" onClick={() => openExternal(c.link!)}>
+                <ExternalLink /> Open on {market.label}
+              </Button>
+            )}
+          </div>
+        </div>
+        {c.description && <p className="line-clamp-2 text-sm text-muted-foreground">{c.description}</p>}
+        <HalalCheck c={c} />
         {!rejected && (
           <>
             {!hasPages && (
@@ -126,6 +163,7 @@ function OverviewCard({ c, workspaces }: { c: CampaignDetail; workspaces: Worksp
         {c.readAt && <CardDescription>Read {timeAgo(c.readAt)}.</CardDescription>}
       </CardHeader>
       <CardContent className="space-y-5">
+        {c.status !== 'to_confirm' && <CampaignPicture link={c.link} className="max-w-xs" />}
         {c.payouts.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -205,18 +243,7 @@ function OverviewCard({ c, workspaces }: { c: CampaignDetail; workspaces: Worksp
             )}
           </div>
         )}
-        {c.status !== 'to_confirm' && c.halalVerdict && (
-          <div className="space-y-1.5">
-            <HalalBadge verdict={c.halalVerdict} />
-            {c.halalReasons.length > 0 && (
-              <ul className="list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
-                {c.halalReasons.map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+        {c.status !== 'to_confirm' && <HalalCheck c={c} />}
       </CardContent>
     </Card>
   );

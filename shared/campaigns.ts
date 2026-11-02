@@ -368,6 +368,16 @@ export function parseCampaignLink(url: string): { market: Market; link: string; 
 }
 
 /** A marketplace campaign's page (Content Rewards or Vyro). */
+/**
+ * The campaign's preview picture as its marketplace draws it (banner, name, brand, budget and pay: what I recognise
+ * it by on Whop). Content Rewards makes one per campaign from its id; null where there's none.
+ */
+export function campaignPicture(link: string | null) {
+  const p = link ? parseCampaignLink(link) : null;
+  const id = p?.market === 'content_rewards' ? /\/campaigns\/([0-9a-f-]{36})/i.exec(p.link)?.[1] : null;
+  return id ? `https://contentrewards.com/c/api/og/campaigns/${id.toLowerCase()}` : null;
+}
+
 export const isCampaignLink = (url: string) => !!parseCampaignLink(url);
 
 /** The key a stored campaign link dedupes by (see parseCampaignLink); the link itself when it isn't one. */

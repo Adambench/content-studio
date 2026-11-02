@@ -1,11 +1,20 @@
 import { CircleCheck, Film, FolderOpen, HardDriveUpload, Link2, ShieldAlert, ShieldX, Tv } from 'lucide-react';
-import { CAMPAIGN_STATUS_LABELS, HALAL_LABELS, money, type CampaignStatus, type HalalVerdict, type SourceKind } from '@shared/campaigns';
+import { useState } from 'react';
+import { CAMPAIGN_STATUS_LABELS, campaignPicture, HALAL_LABELS, money, type CampaignStatus, type HalalVerdict, type SourceKind } from '@shared/campaigns';
 import { PlatformIcon } from '@/components/publish/common';
 import { WorkspaceDot } from '@/components/WorkspaceDot';
 import { Badge } from '@/components/ui/badge';
 import { Toggle } from '@/components/ui/toggle';
 import type { Workspace } from '@/lib/types';
 import { cn } from '@/lib/utils';
+
+/** The campaign's picture from its marketplace (nothing when it has none or it doesn't load). */
+export function CampaignPicture({ link, className }: { link: string | null; className?: string }) {
+  const src = campaignPicture(link);
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return null;
+  return <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} className={cn('aspect-[40/21] w-full rounded-lg border bg-muted object-cover', className)} />;
+}
 
 export function HalalBadge({ verdict, className }: { verdict: HalalVerdict | null; className?: string }) {
   if (!verdict) return null;
