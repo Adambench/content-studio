@@ -116,6 +116,13 @@ Submitting on Content Rewards stays my click; the app tracks status, counted vie
 the site says). Whop has no Content Rewards API for clippers: rules, source files and submissions are read through
 the signed-in desktop window.
 
+2026-11-02: two marketplaces, Content Rewards (Whop) and Vyro (MrBeast's, app.vyro.com). Campaigns I join there come
+in by themselves: every 6 hours (and on *Check joined*) the desktop app reads each site's list of my campaigns
+(contentrewards.com/c/campaigns, app.vyro.com/campaigns/add-clips; one page read each, no Claude) and adds the new
+ones as To confirm. One key per campaign (the Content Rewards UUID, the last 8 characters of Vyro's slug), so nothing
+is added twice; a campaign I delete stays out until I paste its link again. Pasting a link still works for both.
+whop.com's own pages aren't campaign links (they don't say which campaign is open).
+
 ### Video studio (2026-10-14)
 
 | Topic | Decision |
@@ -236,7 +243,11 @@ versionCode from the tag (`v1.2.3` → 10203).
 - Release a new Android build (API version 3): until then the phone app says it's out of date.
 - A format video and a UGC video for real.
 - Research: each page's *What it watches* (or *Find channels for me*), *Run now* once; sign in to TikTok.
-- Settings → Connected sites: sign in to Whop (contentrewards.com), TikTok, Instagram; check each says “Signed in”.
+- Settings → Connected sites: sign in to Content Rewards (Whop) and Vyro, TikTok, Instagram; check each says “Signed in”.
+  Then Campaigns → *Check joined*: each site should say “N joined”. If one says none though I've joined some, its
+  list didn't hold plain campaign links: the server log has `[joined] no campaign links on …` with the page's text
+  (Vyro's My campaigns page and its earnings page, used for submissions, were only guessed from its app's code).
+  Vyro's sign-in cookie (`vyro_sid`) is from its app's config, untried.
   Whop's session cookie is a guess (`SITES.whop.sessionCookie`): if it stays “Not signed in”, list the HttpOnly
   cookies on contentrewards.com and pin the right one. Then “Try a page” on a joined campaign (rules and files should
   be in the text).

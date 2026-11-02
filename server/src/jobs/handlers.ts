@@ -6,6 +6,7 @@ import { onReviewFailed, runReview } from '../analytics/review';
 import { statsJob } from '../analytics/schedule';
 import { onReadFailed, readCampaign, refreshBudgets } from '../campaigns/read';
 import { onSyncFailed, syncSubmissions } from '../campaigns/submissions';
+import { onJoinedFailed, syncJoined } from '../campaigns/joined';
 import { analyseItem, onAnalyseFailed } from '../research/analyse';
 import { draftLessons, measureReference, onLessonsFailed, onMeasureFailed } from '../knowledge/references';
 import { onBriefFailed, writeBrief } from '../research/brief';
@@ -251,11 +252,13 @@ export function registerHandlers() {
   onJobFailed('source.pick', onSourceFailed);
   registerJob('clip.make', makeClip, 1);
   onJobFailed('clip.make', onMakeFailed);
-  // Submissions and earnings: budgets from the campaigns' public pages (no Claude), and my submissions page on
-  // Content Rewards read in the signed-in window (one Haiku call).
+  // Submissions and earnings: budgets from the campaigns' public pages (no Claude), and my submissions pages on the
+  // marketplaces read in the signed-in windows (one Haiku call each). Joined campaigns: one page read each, no Claude.
   registerJob('campaign.budget', refreshBudgets, 1);
   registerJob('submissions.sync', syncSubmissions, 1);
   onJobFailed('submissions.sync', onSyncFailed);
+  registerJob('campaigns.joined', syncJoined, 1);
+  onJobFailed('campaigns.joined', onJoinedFailed);
   // Research: the daily sweep (yt-dlp and page reads, no Claude), the brief (one Haiku call) and analyses of single
   // videos (a download, FFmpeg and one Claude call with frames).
   registerJob('research.sweep', researchSweep, 1);

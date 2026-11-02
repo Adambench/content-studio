@@ -1,7 +1,7 @@
 import { AlertCircle, BadgeDollarSign, CalendarCheck, Clapperboard, Loader2, Sparkles, Telescope } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { money } from '@shared/campaigns';
+import { isMarket, money } from '@shared/campaigns';
 import { KIND_INFO } from '@shared/types';
 import { BudgetBar, deadlineText, HalalBadge, rateText } from '@/components/campaigns/common';
 import { SubmitRow } from '@/components/campaigns/Submissions';
@@ -159,11 +159,11 @@ function CampaignTile({ c }: { c: TodayActiveCampaign }) {
         {rateText(c.ratePer1k) && <span className="text-foreground">{rateText(c.ratePer1k)}</span>}
         {deadline && <span>{deadline}</span>}
       </p>
-      {c.origin === 'content_rewards' && <BudgetBar left={c.budgetLeft} total={c.budgetTotal} />}
+      {isMarket(c.origin) && <BudgetBar left={c.budgetLeft} total={c.budgetTotal} />}
       {c.posted > 0 && (
         <p className="text-xs text-muted-foreground">
           {c.posted} clip{c.posted === 1 ? '' : 's'} posted
-          {c.origin === 'content_rewards' && earnings > 0 && (
+          {isMarket(c.origin) && earnings > 0 && (
             <>
               {' · '}
               <span className="text-foreground">{money(earnings)}</span>
@@ -276,7 +276,7 @@ export function TodayPage() {
                 <div className="space-y-2">
                   <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <BadgeDollarSign className="size-3.5 text-orange-400" />
-                    {submissions.length === 1 ? 'A clip is' : `${submissions.length} clips are`} posted: submit {submissions.length === 1 ? 'its link' : 'their links'} on Content Rewards
+                    {submissions.length === 1 ? 'A clip is' : `${submissions.length} clips are`} posted: submit {submissions.length === 1 ? 'its link' : 'their links'} on the campaign’s page
                     {data.desktop ? '' : ' (the campaign opens in your browser)'}, then tap Done.
                   </p>
                   {submissions.map((s) => (

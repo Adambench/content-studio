@@ -1,12 +1,56 @@
-// Campaigns: Content Rewards campaigns (read from their page) and my businesses' own, assigned to the pages they post
-// on, with their rule checklist, halal screen and source videos. Shared by the server and the web app.
+// Campaigns: clipping marketplaces' campaigns (Content Rewards, Vyro: read from their page) and my businesses' own,
+// assigned to the pages they post on, with their rule checklist, halal screen and source videos. Shared by the server
+// and the web app.
 
 import type { Moment } from './clipping';
 import type { PublishPlatform } from './publish';
+import type { SiteId } from './sites';
 
-/** Where a campaign comes from: a Content Rewards (Whop) campaign page, or one of my businesses (no link). */
-export const CAMPAIGN_ORIGINS = ['content_rewards', 'business'] as const;
+/** Where a campaign comes from: a marketplace's campaign page (Content Rewards on Whop, Vyro), or one of my businesses (no link). */
+export const CAMPAIGN_ORIGINS = ['content_rewards', 'vyro', 'business'] as const;
 export type CampaignOrigin = (typeof CAMPAIGN_ORIGINS)[number];
+
+/** The clipping marketplaces: campaigns there are read from their page, joined and submitted to by me on the site. */
+export const MARKETS = ['content_rewards', 'vyro'] as const;
+export type Market = (typeof MARKETS)[number];
+export const isMarket = (origin: CampaignOrigin): origin is Market => (MARKETS as readonly string[]).includes(origin);
+
+export type MarketInfo = {
+  label: string;
+  /** The signed-in window it's read in (Settings → Connected sites). */
+  site: SiteId;
+  /** The list of campaigns I've joined, read to add new ones by themselves. */
+  joinedUrl: string;
+  /** Where my submitted posts are listed with their status, views and earnings. */
+  submissionsUrl: string;
+  /** What a campaign's link looks like, for the Add dialog. */
+  linkExample: string;
+  /** The button on a campaign's page where a post's link is submitted. */
+  submitButton: string;
+};
+
+export const MARKET_INFO: Record<Market, MarketInfo> = {
+  content_rewards: {
+    label: 'Content Rewards',
+    site: 'whop',
+    // "Your Campaigns" (Discover is /c/discover).
+    joinedUrl: 'https://contentrewards.com/c/campaigns',
+    submissionsUrl: 'https://contentrewards.com/c/submissions',
+    linkExample: 'https://contentrewards.com/c/campaigns/…',
+    submitButton: 'Submit clip',
+  },
+  vyro: {
+    label: 'Vyro',
+    site: 'vyro',
+    // "My campaigns" (Add posts); the catalog is /campaigns.
+    joinedUrl: 'https://app.vyro.com/campaigns/add-clips',
+    submissionsUrl: 'https://app.vyro.com/earnings',
+    linkExample: 'https://app.vyro.com/campaigns?c=…',
+    submitButton: 'Submit post',
+  },
+};
+
+export const originLabel = (origin: CampaignOrigin) => (isMarket(origin) ? MARKET_INFO[origin].label : 'My business');
 
 /**
  * `reading`: the page (or brief) is being read and screened. `to_confirm`: waiting for me to check it and pick its
@@ -297,15 +341,43 @@ export function canonicalLink(url: string) {
   return u.toString();
 }
 
-/** Content Rewards campaign pages (and Whop's own). */
-export function isCampaignLink(url: string) {
+const CR_CAMPAIGN = /^\/c\/campaigns\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
+const VYRO_NOT_CAMPAIGN = new Set(['new', 'add-clips']);
+
+/**
+ * A campaign's own page on a marketplace, and one key for it however the link is spelled (a Vyro slug changes with
+ * the title, its last 8 characters don't). Content Rewards: contentrewards.com/c/campaigns/<uuid> (?group=1 and the
+ * like dropped). Vyro: app.vyro.com/campaigns?c=<slug-id>, or /campaigns/<slug-id> (from My campaigns). Null when it
+ * isn't one: whop.com's own pages don't say which campaign is open, so they aren't campaign links.
+ */
+export function parseCampaignLink(url: string): { market: Market; link: string; key: string } | null {
+  let u: URL;
   try {
-    const u = new URL(url);
-    return /^https?:$/.test(u.protocol) && /(^|\.)(contentrewards\.com|whop\.com)$/.test(u.hostname);
+    u = new URL(url.trim());
   } catch {
-    return false;
+    return null;
   }
+  if (!/^https?:$/.test(u.protocol)) return null;
+  const host = u.hostname.toLowerCase().replace(/^www\./, '');
+  if (host === 'contentrewards.com') {
+    const id = CR_CAMPAIGN.exec(u.pathname)?.[1]?.toLowerCase();
+    return id ? { market: 'content_rewards', link: `https://contentrewards.com/c/campaigns/${id}`, key: `content_rewards:${id}` } : null;
+  }
+  if (host === 'app.vyro.com' || host === 'vyro.com') {
+    const parts = u.pathname.split('/').filter(Boolean);
+    if (parts[0] !== 'campaigns') return null;
+    const slug = u.searchParams.get('c') ?? (parts.length === 2 && !VYRO_NOT_CAMPAIGN.has(parts[1]) ? parts[1] : parts.length === 3 && parts[1] === 'add-clips' ? parts[2] : null);
+    if (!slug || !/^[\w-]{4,200}$/.test(slug)) return null;
+    return { market: 'vyro', link: `https://app.vyro.com/campaigns?c=${slug}`, key: `vyro:${slug.slice(-8)}` };
+  }
+  return null;
 }
+
+/** A marketplace campaign's page (Content Rewards or Vyro). */
+export const isCampaignLink = (url: string) => !!parseCampaignLink(url);
+
+/** The key a stored campaign link dedupes by (see parseCampaignLink); the link itself when it isn't one. */
+export const campaignKey = (url: string) => parseCampaignLink(url)?.key ?? url.trim().replace(/[?#].*$/, '');
 
 export const money = (n: number | null | undefined) =>
   n === null || n === undefined ? '—' : n >= 1000 ? `$${(n / 1000).toFixed(n >= 100_000 ? 0 : 1).replace(/\.0$/, '')}K` : `$${n % 1 ? n.toFixed(2) : n}`;

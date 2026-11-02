@@ -1,4 +1,4 @@
-import type { Campaign, CampaignOrigin, CampaignResults, Submission } from '@shared/campaigns';
+import type { Campaign, CampaignOrigin, CampaignResults, Market, Submission } from '@shared/campaigns';
 import type { DayPart, PostStats, ReviewBody, ReviewStatus, WeeklyReviewSetting } from '@shared/analytics';
 import type { EditSpec, EditTemplate } from '@shared/edit';
 import type { MascotId } from '@shared/mascots';
@@ -364,9 +364,16 @@ export type TodayCampaign = Pick<Campaign, 'id' | 'link' | 'title' | 'brand' | '
 /** A running campaign on Today, with what its clips earned so far. */
 export type TodayActiveCampaign = TodayCampaign & { earned: number; estimated: number; posted: number; budgetLow: boolean; accepting: boolean | null };
 
+/** The last check of the campaigns I've joined on each marketplace (server/src/campaigns/joined.ts). */
+export type JoinedSyncState = {
+  last: { at: number; markets: Partial<Record<Market, { ok: boolean; found: number; added: number; note: string | null }>> } | null;
+  available: boolean;
+  running: boolean;
+};
+
 export type SubmissionsSyncState = {
   last: { at: number; ok: boolean; note: string | null; seen: number; matched: number } | null;
-  /** Content Rewards can be read (the desktop app is running the server). */
+  /** The marketplaces can be read (the desktop app is running the server). */
   available: boolean;
   running: boolean;
 };
@@ -391,9 +398,9 @@ export type TodayData = {
   attention: Post[];
   work: TodayWork[];
   campaigns: { toConfirm: TodayCampaign[]; active: TodayActiveCampaign[] };
-  /** Posted campaign clips to submit on Content Rewards. */
+  /** Posted campaign clips to submit on their marketplace. */
   submissions: Submission[];
-  /** The desktop app runs the server: Content Rewards opens in its signed-in window. */
+  /** The desktop app runs the server: the marketplaces open in its signed-in windows. */
   desktop: boolean;
   /** Each page's latest research brief (from the last day and a half). */
   briefs: { id: string; workspaceId: string; day: string; headline: string; ideas: number; patterns: string[] }[];

@@ -2,7 +2,7 @@ import { ArrowLeft, CircleAlert, ExternalLink, Loader2, MoreHorizontal, Pause, P
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { CAMPAIGN_PLATFORM_LABELS, money, type CampaignDetail } from '@shared/campaigns';
+import { CAMPAIGN_PLATFORM_LABELS, isMarket, money, type CampaignDetail } from '@shared/campaigns';
 import { BudgetBar, deadlineText, HalalBadge, PageChips, PagePicker, StatusBadge } from '@/components/campaigns/common';
 import { RulesCard } from '@/components/campaigns/RulesCard';
 import { MomentsCard } from '@/components/campaigns/MomentsCard';
@@ -153,7 +153,7 @@ function OverviewCard({ c, workspaces }: { c: CampaignDetail; workspaces: Worksp
           </div>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
-          {c.origin === 'content_rewards' && (
+          {isMarket(c.origin) && (
             <div className="space-y-1.5">
               <Label>Budget</Label>
               <BudgetBar left={c.budgetLeft} total={c.budgetTotal} />

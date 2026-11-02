@@ -1,7 +1,7 @@
 // Campaign discovery: Content Rewards' list of campaigns, read in the signed-in window, turned by one Haiku call into
 // leads (pay, budget left, category, a halal screen), ranked. Joining a campaign on Whop stays the creator's click;
 // "Add" only reads the campaign into the app (campaign.read) like pasting its link.
-import { canonicalLink, isCampaignLink } from '../../../shared/campaigns';
+import { campaignKey, parseCampaignLink } from '../../../shared/campaigns';
 import { leadScore, type CampaignLead } from '../../../shared/finder';
 import { parsePage } from '../claude/extract';
 import { playbook } from '../claude/plugin';
@@ -49,15 +49,15 @@ export async function discoverCampaigns() {
   if (!desktopAvailable()) throw new Error('Reading Content Rewards needs the desktop app (it uses the signed-in window).');
   const page = await readPage(DISCOVER_URL, { scrolls: 6 });
   const out = await parsePage<Read>(page, { system: playbook('halal'), what: INSTRUCTIONS, schema: SCHEMA });
-  const key = (link: string) => canonicalLink(link).replace(/[?#].*$/, '');
-  const have = new Set(db.select({ link: schema.campaigns.link }).from(schema.campaigns).all().flatMap((c) => (c.link ? [key(c.link)] : [])));
+  const have = new Set(db.select({ link: schema.campaigns.link }).from(schema.campaigns).all().flatMap((c) => (c.link ? [campaignKey(c.link)] : [])));
   const seen = new Set<string>();
   const items: CampaignLead[] = [];
   for (const c of out.campaigns ?? []) {
-    if (!isCampaignLink(c.link) || c.accepting === false) continue;
-    const link = key(c.link);
-    if (have.has(link) || seen.has(link) || c.halal === 'reject') continue;
-    seen.add(link);
+    const parsed = parseCampaignLink(c.link);
+    if (!parsed || c.accepting === false) continue;
+    const link = parsed.link;
+    if (have.has(parsed.key) || seen.has(parsed.key) || c.halal === 'reject') continue;
+    seen.add(parsed.key);
     const lead = { link, title: c.title, brand: c.brand, ratePer1k: c.ratePer1k, budgetLeft: c.budgetLeft, category: c.category, halal: c.halal, halalNote: c.halalNote };
     items.push({ ...lead, score: leadScore(lead) });
   }

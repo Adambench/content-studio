@@ -1,4 +1,4 @@
-// Signed-in windows: Whop, TikTok and Instagram in the user's own sessions, in a browser session of their own
+// Signed-in windows: Whop, Vyro, TikTok and Instagram in the user's own sessions, in a browser session of their own
 // ("persist:sites", apart from the app's). The server asks for pages through the bridge in main.ts; reads are slow on
 // purpose — one page at a time, at least 5 s apart, with a daily cap — and never click, post or submit anything.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -62,7 +62,7 @@ function sitesSession() {
   // Settings shows the change as soon as a sign-in (or its expiry) lands.
   ses.cookies.on('changed', (_e, cookie) => {
     const site = siteOfHost(cookie.domain ?? '');
-    if (site && cookie.httpOnly && SITES[site].sessionCookie.test(cookie.name)) changed();
+    if (site && isSessionCookie(site, cookie)) changed();
   });
   return ses;
 }
@@ -75,6 +75,8 @@ function changed() {
     opts.onChange();
   }, 500);
 }
+
+const isSessionCookie = (site: SiteId, c: Cookie) => (c.httpOnly || !!SITES[site].scriptCookie) && SITES[site].sessionCookie.test(c.name);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -246,7 +248,7 @@ function openPage(url: unknown) {
     throw new SiteError('That isn’t a valid web address', 'bad-request');
   }
   const site = siteOfHost(u.hostname);
-  if (u.protocol !== 'https:' || !site) throw new SiteError('Only Content Rewards, Whop, TikTok and Instagram pages open here.', 'bad-request');
+  if (u.protocol !== 'https:' || !site) throw new SiteError('Only Content Rewards, Whop, Vyro, TikTok and Instagram pages open here.', 'bad-request');
   return openWindow(site, u.toString(), /(^|\.)contentrewards\.com$/.test(u.hostname) ? 'Content Rewards' : SITES[site].label, true);
 }
 
@@ -289,7 +291,7 @@ function openWindow(site: SiteId, url: string, title: string, navigate: boolean)
   return { ok: true };
 }
 
-const origins = (site: SiteId) => SITES[site].domains.flatMap((d) => [`https://${d}`, `https://www.${d}`]);
+const origins = (site: SiteId) => [...SITES[site].domains.flatMap((d) => [`https://${d}`, `https://www.${d}`]), ...(SITES[site].appOrigins ?? [])];
 const cookieUrl = (c: Cookie) => `${c.secure ? 'https' : 'http'}://${(c.domain ?? '').replace(/^\./, '')}${c.path ?? '/'}`;
 
 /**
@@ -320,7 +322,7 @@ async function signOut(site: SiteId) {
 async function status(): Promise<Omit<SitesStatus, 'available'>> {
   const now = Date.now() / 1000;
   const signedIn = await Promise.all(
-    SITE_IDS.map(async (id) => (await siteCookies(id)).some((c) => c.httpOnly && SITES[id].sessionCookie.test(c.name) && (!c.expirationDate || c.expirationDate > now))),
+    SITE_IDS.map(async (id) => (await siteCookies(id)).some((c) => isSessionCookie(id, c) && (!c.expirationDate || c.expirationDate > now))),
   );
   return {
     sites: SITE_IDS.map((id, i) => ({ id, signedIn: signedIn[i], windowOpen: !!signInWindows.get(id) && !signInWindows.get(id)!.isDestroyed() })),

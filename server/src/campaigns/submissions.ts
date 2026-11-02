@@ -1,11 +1,16 @@
-// Submissions: once a campaign's clip is posted with a link, it waits for me to submit it on Content Rewards (the app
-// never submits anything). A daily read of my submissions page there, in the desktop app's signed-in window, brings
-// back each one's status, the views the campaign counted and what it earned; I can also set them by hand.
+// Submissions: once a marketplace campaign's clip is posted with a link, it waits for me to submit it on the
+// campaign's marketplace (Content Rewards, Vyro; the app never submits anything). A daily read of my submissions page
+// there, in the desktop app's signed-in window, brings back each one's status, the views the campaign counted and
+// what it earned; I can also set them by hand.
 import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import {
   budgetLow,
   estimateEarnings,
+  isMarket,
+  MARKET_INFO,
+  MARKETS,
   postKey,
+  type Market,
   SUBMISSION_STATUSES,
   type CampaignResults,
   type Submission,
@@ -20,13 +25,14 @@ import { notFound } from '../lib/http';
 import { notify } from '../lib/push';
 import { getSetting, setSetting } from '../lib/settings';
 import { JobError } from '../jobs/queue';
+import { SITES } from '../../../shared/sites';
 import { emitCampaign, getCampaignRow, type CampaignRow } from './campaigns';
 
 export type SubmissionRow = typeof schema.submissions.$inferSelect;
 
-/** Where Content Rewards lists my submissions, with their status, views and earnings. */
-// (CS_SUBMISSIONS_URL points it at a local stand-in for testing.)
-export const SUBMISSIONS_URL = process.env.CS_SUBMISSIONS_URL || 'https://contentrewards.com/c/submissions';
+/** Where a marketplace lists my submissions, with their status, views and earnings. */
+// (CS_SUBMISSIONS_URL points Content Rewards' at a local stand-in for testing.)
+const submissionsUrl = (m: Market) => (m === 'content_rewards' && process.env.CS_SUBMISSIONS_URL) || MARKET_INFO[m].submissionsUrl;
 
 export function emitSubmissions(campaignIds: Iterable<string>) {
   emit({ type: 'changed', entity: 'submissions' });
@@ -46,12 +52,12 @@ function campaignPieceIds(campaignId: string) {
 }
 
 /**
- * Make a `to_submit` row for every post of a Content Rewards campaign's clip that's out with a link and doesn't have
+ * Make a `to_submit` row for every post of a marketplace campaign's clip that's out with a link and doesn't have
  * one yet, on platforms the campaign pays for. Called after a post goes out, after stats find a post's link (TikTok
  * inbox drafts), after I link a post by hand, and at start.
  */
 export async function createDueSubmissions() {
-  const due = and(eq(schema.posts.status, 'published'), isNotNull(schema.posts.url), eq(schema.campaigns.origin, 'content_rewards'), isNull(schema.submissions.id));
+  const due = and(eq(schema.posts.status, 'published'), isNotNull(schema.posts.url), inArray(schema.campaigns.origin, [...MARKETS]), isNull(schema.submissions.id));
   // Clips (through their moment) and filmed videos (linked to the campaign themselves).
   const clips = db
     .select({ post: schema.posts, campaign: schema.campaigns })
@@ -85,7 +91,11 @@ export async function createDueSubmissions() {
   const byCampaign = new Map<string, { campaign: CampaignRow; n: number }>();
   for (const { campaign } of rows) byCampaign.set(campaign.id, { campaign, n: (byCampaign.get(campaign.id)?.n ?? 0) + 1 });
   for (const { campaign, n } of byCampaign.values())
-    await notify(`Submit ${n === 1 ? 'a clip' : `${n} clips`} to Content Rewards`, `${campaign.title}: ${n === 1 ? 'it’s' : 'they’re'} posted. Submit the link${n === 1 ? '' : 's'} on the campaign’s page.`, '/today');
+    await notify(
+      `Submit ${n === 1 ? 'a clip' : `${n} clips`} to ${isMarket(campaign.origin) ? MARKET_INFO[campaign.origin].label : 'the campaign'}`,
+      `${campaign.title}: ${n === 1 ? 'it’s' : 'they’re'} posted. Submit the link${n === 1 ? '' : 's'} on the campaign’s page.`,
+      '/today',
+    );
   return rows.length;
 }
 
@@ -217,7 +227,7 @@ export function campaignResults(campaignId: string): CampaignResults {
     paid: Math.round(paid * 100) / 100,
     estimated: Math.round(estimated * 100) / 100,
     perClip: posted && (earned || estimated) ? Math.round(((earned + estimated) / posted) * 100) / 100 : null,
-    budgetLow: c.origin === 'content_rewards' && budgetLow(c),
+    budgetLow: isMarket(c.origin) && budgetLow(c),
   };
 }
 
@@ -235,7 +245,7 @@ export function campaignPostIds(campaignId: string, workspaceId: string) {
   );
 }
 
-// ---------- reading Content Rewards ----------
+// ---------- reading the marketplaces ----------
 
 type SiteSubmission = {
   postUrl: string;
@@ -276,9 +286,21 @@ export type SubmissionsSync = { at: number; ok: boolean; note: string | null; se
 
 const STATUS_FROM_SITE: Record<SiteSubmission['status'], SubmissionStatus | null> = { pending: 'submitted', flagged: 'submitted', approved: 'approved', rejected: 'rejected', paid: 'paid', other: null };
 
+/** The marketplaces with submissions of mine on them (all of them when there are none yet, for "Check now"). */
+function marketsWithSubmissions(): Market[] {
+  const used = db
+    .selectDistinct({ origin: schema.campaigns.origin })
+    .from(schema.submissions)
+    .innerJoin(schema.campaigns, eq(schema.campaigns.id, schema.submissions.campaignId))
+    .all()
+    .map((r) => r.origin)
+    .filter(isMarket);
+  return used.length ? MARKETS.filter((m) => used.includes(m)) : ['content_rewards'];
+}
+
 /**
- * The `submissions.sync` job: read my submissions page on Content Rewards in the signed-in window and update the
- * ones that match my posts by link. One page read and one Haiku call.
+ * The `submissions.sync` job: read my submissions page on each marketplace I have submissions on, in the signed-in
+ * window, and update the ones that match my posts by link. One page read and one Haiku call each.
  */
 export async function syncSubmissions() {
   const record = (s: Omit<SubmissionsSync, 'at'>) => {
@@ -286,24 +308,41 @@ export async function syncSubmissions() {
     emit({ type: 'changed', entity: 'submissions' });
   };
   if (!desktopAvailable()) {
-    record({ ok: false, note: 'Reading Content Rewards needs the desktop app.', seen: 0, matched: 0 });
-    throw new JobError('Reading Content Rewards needs the desktop app.', { retry: false });
+    record({ ok: false, note: 'Reading the marketplaces needs the desktop app.', seen: 0, matched: 0 });
+    throw new JobError('Reading the marketplaces needs the desktop app.', { retry: false });
   }
-  const page = await readPage(SUBMISSIONS_URL, { scrolls: 8 });
-  if (page.loginWall) {
-    record({ ok: false, note: 'Sign in to Whop under Settings → Connected sites, then check again.', seen: 0, matched: 0 });
-    throw new JobError('Content Rewards asked to sign in.', { retry: false });
+  const rows: SiteSubmission[] = [];
+  const notes: string[] = [];
+  let read = 0;
+  for (const m of marketsWithSubmissions()) {
+    const label = MARKET_INFO[m].label;
+    const site = SITES[MARKET_INFO[m].site].label;
+    try {
+      const page = await readPage(submissionsUrl(m), { scrolls: 8 });
+      if (page.loginWall) {
+        notes.push(`Sign in to ${site} under Settings → Connected sites, then check again.`);
+        continue;
+      }
+      const out = await parsePage<{ submissions: SiteSubmission[] }>(page, {
+        what: `This is my ${m === 'vyro' ? 'earnings' : 'submissions'} page on ${label}: the posts I submitted to campaigns. List every submitted post on it with its post link, campaign, platform, status, the views counted and the earnings.`,
+        schema: SITE_SCHEMA,
+      });
+      rows.push(...out.submissions);
+      read++;
+    } catch (err) {
+      notes.push(`${label}: ${(err as Error).message.slice(0, 200)}`);
+    }
   }
-  const out = await parsePage<{ submissions: SiteSubmission[] }>(page, {
-    what: 'This is my submissions page on Content Rewards: the clips I submitted to campaigns. List every submission on it with its post link, campaign, platform, status, the views counted and the earnings.',
-    schema: SITE_SCHEMA,
-  });
+  if (!read) {
+    record({ ok: false, note: notes.join(' ') || 'Nothing could be read.', seen: 0, matched: 0 });
+    throw new JobError(notes[0] ?? 'Nothing could be read.', { retry: false });
+  }
   const mine = db.select().from(schema.submissions).where(inArray(schema.submissions.status, ['to_submit', 'submitted', 'approved', 'rejected', 'paid'])).all();
   const byKey = new Map(mine.map((s) => [postKey(s.url), s]));
   const touched = new Set<string>();
   let matched = 0;
   db.transaction((tx) => {
-    for (const row of out.submissions) {
+    for (const row of rows) {
       if (!row.postUrl) continue;
       const s = byKey.get(postKey(row.postUrl));
       if (!s) continue;
@@ -327,15 +366,16 @@ export async function syncSubmissions() {
       touched.add(s.campaignId);
     }
   });
-  const unmatched = out.submissions.length - matched;
+  const unmatched = rows.length - matched;
   record({
     ok: true,
-    note: !out.submissions.length ? 'The page showed no submissions.' : unmatched ? `${unmatched} submission${unmatched === 1 ? '' : 's'} on Content Rewards didn’t match a post made here.` : null,
-    seen: out.submissions.length,
+    note:
+      [!rows.length ? 'The pages showed no submissions.' : unmatched ? `${unmatched} submission${unmatched === 1 ? '' : 's'} there didn’t match a post made here.` : null, ...notes].filter(Boolean).join(' ') || null,
+    seen: rows.length,
     matched,
   });
   emitSubmissions(touched);
-  emit({ type: 'job', jobType: 'submissions.sync', status: 'done', message: matched ? `Updated ${matched} submission${matched === 1 ? '' : 's'}` : 'Nothing new on Content Rewards' });
+  emit({ type: 'job', jobType: 'submissions.sync', status: 'done', message: matched ? `Updated ${matched} submission${matched === 1 ? '' : 's'}` : 'No news on your submissions' });
 }
 
 export function onSyncFailed(_payload: unknown, message: string) {

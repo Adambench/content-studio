@@ -15,10 +15,11 @@ import { keys, queryClient, useSites } from '@/lib/queries';
 
 function SiteIcon({ id }: { id: SiteId }) {
   if (id === 'whop') return <BadgeDollarSign className="size-4 shrink-0 text-orange-400" aria-hidden />;
+  if (id === 'vyro') return <BadgeDollarSign className="size-4 shrink-0 text-sky-400" aria-hidden />;
   return <PlatformIcon platform={id} />;
 }
 
-/** Settings → Connected sites: the desktop app's signed-in windows for Whop, TikTok and Instagram. */
+/** Settings → Connected sites: the desktop app's signed-in windows for Content Rewards (Whop), Vyro, TikTok and Instagram. */
 export function ConnectedSitesCard() {
   const { data } = useSites();
   const [busy, setBusy] = useState<string | null>(null);
@@ -42,7 +43,7 @@ export function ConnectedSitesCard() {
           <Globe className="size-4" /> Connected sites
         </CardTitle>
         <CardDescription>
-          Content Studio reads pages on these sites as you — campaign rules on Whop, profiles for research — in its own browser profile on this computer. It reads slowly, one page at a time
+          Content Studio reads pages on these sites as you — campaigns you’ve joined on Content Rewards and Vyro, profiles for research — in its own browser profile on this computer. It reads slowly, one page at a time
           and at least 5 seconds apart, and never posts, follows or submits anything.
         </CardDescription>
       </CardHeader>

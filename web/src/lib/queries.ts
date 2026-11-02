@@ -13,7 +13,7 @@ import type { IdeaDetail, IdeaNode } from '@shared/ideas';
 import type { KnowledgeRule } from '@shared/knowledge';
 import type { OwnMeasures, ReferenceVideo } from '@shared/references';
 import type { Toolbox } from '@shared/toolbox';
-import type { SubmissionsSyncState } from './types';
+import type { JoinedSyncState, SubmissionsSyncState } from './types';
 import type { ReviewClip } from '@shared/clipping';
 import type { SitesStatus } from '@shared/sites';
 import type {
@@ -79,6 +79,7 @@ export const keys = {
   campaign: (id: string) => ['campaign', id] as const,
   review: ['review'] as const,
   submissionsSync: ['submissions-sync'] as const,
+  joinedSync: ['campaigns-joined'] as const,
   research: (wid: string) => ['research', wid] as const,
   ideas: (wid: string) => ['ideas', wid] as const,
   idea: (id: string) => ['idea', id] as const,
@@ -130,7 +131,11 @@ export const useFcm = () => useQuery({ queryKey: keys.fcm, queryFn: () => api<Fc
 export const useCampaigns = () => useQuery({ queryKey: keys.campaigns, queryFn: () => api<Campaign[]>('/campaigns') });
 export const useCampaign = (id: string) => useQuery({ queryKey: keys.campaign(id), queryFn: () => api<CampaignDetail>(`/campaigns/${id}`), enabled: !!id });
 
-/** When Content Rewards was last read for my submissions, and whether it can be (the desktop app). */
+/** When the campaigns I've joined were last checked on the marketplaces, and whether they can be (the desktop app). */
+export const useJoinedSync = () =>
+  useQuery({ queryKey: keys.joinedSync, queryFn: () => api<JoinedSyncState>('/campaigns/joined'), refetchInterval: (q) => (q.state.data?.running ? 4000 : false) });
+
+/** When the marketplaces were last read for my submissions, and whether they can be (the desktop app). */
 export const useSubmissionsSync = () =>
   useQuery({ queryKey: keys.submissionsSync, queryFn: () => api<SubmissionsSyncState>('/submissions/sync'), refetchInterval: (q) => (q.state.data?.running ? 5000 : false) });
 

@@ -1,7 +1,7 @@
 import { CircleAlert, Copy, ExternalLink, MoreHorizontal, Pencil, RefreshCw, Send } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { money, SUBMISSION_STATUS_LABELS, SUBMISSION_STATUSES, type CampaignDetail, type CampaignResults, type Submission, type SubmissionStatus } from '@shared/campaigns';
+import { isMarket, MARKET_INFO, money, SUBMISSION_STATUS_LABELS, SUBMISSION_STATUSES, type CampaignDetail, type CampaignOrigin, type CampaignResults, type Submission, type SubmissionStatus } from '@shared/campaigns';
 import { PlatformIcon } from '@/components/publish/common';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,10 +21,10 @@ import { keys, queryClient, useSubmissionsSync } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 /**
- * A Content Rewards page (a campaign, to submit a clip there): in the desktop app it opens in the signed-in window,
+ * A marketplace page (a campaign, to submit a clip there): in the desktop app it opens in the signed-in window,
  * elsewhere (the phone, a browser) in the browser, where I'm signed in myself.
  */
-export async function openOnContentRewards(url: string) {
+export async function openOnMarket(url: string) {
   if (isDesktop) {
     try {
       const { opened } = await api<{ opened: boolean }>('/sites/open', { body: { url } });
@@ -37,10 +37,10 @@ export async function openOnContentRewards(url: string) {
   openExternal(url);
 }
 
-export async function copyLink(url: string) {
+export async function copyLink(url: string, origin?: CampaignOrigin) {
   try {
     await navigator.clipboard.writeText(url);
-    toast.success('Link copied: paste it in the campaign’s Submit clip box');
+    toast.success(`Link copied: paste it in the campaign’s ${origin && isMarket(origin) ? MARKET_INFO[origin].submitButton : 'Submit'} box`);
   } catch {
     toast.error('Couldn’t copy. Long-press the link to copy it.');
   }
@@ -90,7 +90,7 @@ export function EarningsText({ s, className }: { s: Submission; className?: stri
 }
 
 /** A posted clip waiting to be submitted: copy its link, open the campaign, then say it's done. */
-export function SubmitRow({ s, campaign, workspace }: { s: Submission; campaign: { title: string; link: string | null } | undefined; workspace?: React.ReactNode }) {
+export function SubmitRow({ s, campaign, workspace }: { s: Submission; campaign: { title: string; link: string | null; origin: CampaignOrigin } | undefined; workspace?: React.ReactNode }) {
   const [busy, setBusy] = useState(false);
   async function set(status: SubmissionStatus) {
     setBusy(true);
@@ -126,11 +126,11 @@ export function SubmitRow({ s, campaign, workspace }: { s: Submission; campaign:
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        <Button size="sm" variant="outline" onClick={() => copyLink(s.url)}>
+        <Button size="sm" variant="outline" onClick={() => copyLink(s.url, campaign?.origin)}>
           <Copy /> Copy link
         </Button>
         {campaign?.link && (
-          <Button size="sm" variant="outline" onClick={() => openOnContentRewards(campaign.link!)}>
+          <Button size="sm" variant="outline" onClick={() => openOnMarket(campaign.link!)}>
             <ExternalLink /> Open campaign
           </Button>
         )}
@@ -152,7 +152,7 @@ export function SubmitRow({ s, campaign, workspace }: { s: Submission; campaign:
   );
 }
 
-/** Set a submission's status and the campaign's numbers by hand, when they can't be read from Content Rewards. */
+/** Set a submission's status and the campaign's numbers by hand, when they can't be read from the marketplace. */
 function EditDialog({ s, onClose }: { s: Submission | null; onClose: () => void }) {
   const [status, setStatus] = useState<SubmissionStatus>('submitted');
   const [views, setViews] = useState('');
@@ -188,7 +188,7 @@ function EditDialog({ s, onClose }: { s: Submission | null; onClose: () => void 
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{s?.pieceTitle}</DialogTitle>
-          <DialogDescription>What Content Rewards says about this clip. Its next read there replaces the status, views and earnings.</DialogDescription>
+          <DialogDescription>What the marketplace says about this clip. Its next read there replaces the status, views and earnings.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <div className="space-y-1.5">
@@ -234,7 +234,7 @@ function EditDialog({ s, onClose }: { s: Submission | null; onClose: () => void 
   );
 }
 
-/** "Check now" and when Content Rewards was last read. */
+/** "Check now" and when the marketplaces were last read. */
 function SyncLine() {
   const sync = useSubmissionsSync();
   const [busy, setBusy] = useState(false);
@@ -244,7 +244,7 @@ function SyncLine() {
     setBusy(true);
     try {
       queryClient.setQueryData(keys.submissionsSync, await api('/submissions/sync', { body: {} }));
-      toast('Reading your submissions on Content Rewards…', { description: 'About a minute: pages are read slowly.' });
+      toast('Reading your submissions…', { description: 'About a minute: pages are read slowly.' });
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -255,12 +255,12 @@ function SyncLine() {
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
       <span className="min-w-0 flex-1">
         {d.running
-          ? 'Reading Content Rewards…'
+          ? 'Reading your submissions…'
           : d.last
             ? `${d.last.ok ? 'Checked' : 'Last check failed'} ${timeAgo(d.last.at)}${d.last.ok ? ` · ${d.last.matched} matched` : ''}${d.last.note ? ` · ${d.last.note}` : ''}`
             : d.available
-              ? 'Checked on Content Rewards once a day while clips wait on the campaign.'
-              : 'Statuses and earnings are read from Content Rewards by the desktop app; set them by hand meanwhile.'}
+              ? 'Checked once a day while clips wait on the campaign.'
+              : 'Statuses and earnings are read from the marketplace by the desktop app; set them by hand meanwhile.'}
       </span>
       {d.available && (
         <Button size="sm" variant="outline" onClick={check} disabled={busy || d.running}>
@@ -271,7 +271,7 @@ function SyncLine() {
   );
 }
 
-function SubmissionRow({ s, onEdit, link }: { s: Submission; onEdit: () => void; link: string | null }) {
+function SubmissionRow({ s, onEdit, link, origin }: { s: Submission; onEdit: () => void; link: string | null; origin: CampaignOrigin }) {
   const views = s.views ?? s.postViews;
   return (
     <li className="flex items-start gap-3 p-3">
@@ -295,7 +295,7 @@ function SubmissionRow({ s, onEdit, link }: { s: Submission; onEdit: () => void;
         <SubmissionBadge status={s.status} />
         <div className="flex items-center gap-0.5">
           {s.status === 'to_submit' && link && (
-            <Button size="sm" variant="outline" onClick={() => (void copyLink(s.url), void openOnContentRewards(link))}>
+            <Button size="sm" variant="outline" onClick={() => (void copyLink(s.url, origin), void openOnMarket(link))}>
               <Send /> Submit
             </Button>
           )}
@@ -314,7 +314,8 @@ function SubmissionRow({ s, onEdit, link }: { s: Submission; onEdit: () => void;
 /** The campaign's posted clips and their submissions: what to submit, what the campaign said, what they earned. */
 export function SubmissionsCard({ campaign }: { campaign: CampaignDetail }) {
   const [editing, setEditing] = useState<Submission | null>(null);
-  if (campaign.origin !== 'content_rewards' || (!campaign.submissions.length && !campaign.results.posted)) return null;
+  if (!isMarket(campaign.origin) || (!campaign.submissions.length && !campaign.results.posted)) return null;
+  const market = MARKET_INFO[campaign.origin];
   const toSubmit = campaign.submissions.filter((s) => s.status === 'to_submit').length;
   return (
     <Card>
@@ -323,7 +324,7 @@ export function SubmissionsCard({ campaign }: { campaign: CampaignDetail }) {
           Submissions {toSubmit > 0 && <Badge className="bg-brand text-white">{toSubmit} to submit</Badge>}
         </CardTitle>
         <CardDescription>
-          Each posted clip’s link goes in the campaign’s <span className="text-foreground">Submit clip</span> box on Content Rewards; you submit it, then tap Done.
+          Each posted clip’s link goes in the campaign’s <span className="text-foreground">{market.submitButton}</span> box on {market.label}; you submit it, then tap Done.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -331,7 +332,7 @@ export function SubmissionsCard({ campaign }: { campaign: CampaignDetail }) {
         {campaign.submissions.length ? (
           <ul className="divide-y rounded-lg border">
             {campaign.submissions.map((s) => (
-              <SubmissionRow key={s.id} s={s} link={campaign.link} onEdit={() => setEditing(s)} />
+              <SubmissionRow key={s.id} s={s} link={campaign.link} origin={campaign.origin} onEdit={() => setEditing(s)} />
             ))}
           </ul>
         ) : (
@@ -365,7 +366,7 @@ export function ResultsTiles({ r, origin }: { r: CampaignResults; origin: Campai
         note={`${r.clips.made} clip${r.clips.made === 1 ? '' : 's'} made · ${r.clips.approved} approved by you${r.clips.rejected ? ` · ${r.clips.rejected} rejected` : ''}${r.filmed ? ` · ${r.filmed} filmed` : ''}`}
       />
       <Tile label="Views" value={compact(r.views)} note={r.posts ? `on ${r.posts} post${r.posts === 1 ? '' : 's'}` : 'nothing posted yet'} />
-      {origin === 'content_rewards' ? (
+      {isMarket(origin) ? (
         <>
           <Tile label="Approved by the campaign" value={percent(r.approvalRate, 0)} note={decided ? `${s.approved + s.paid} of ${decided} decided${s.submitted ? ` · ${s.submitted} waiting` : ''}` : s.submitted ? `${s.submitted} waiting` : 'none decided yet'} />
           <Tile
@@ -388,7 +389,10 @@ export function ResultsCard({ campaign }: { campaign: CampaignDetail }) {
     <Card>
       <CardHeader>
         <CardTitle>Results</CardTitle>
-        <CardDescription>Views from the platforms; earnings from Content Rewards, or estimated from views × the rate until it says.</CardDescription>
+        <CardDescription>
+          Views from the platforms;{' '}
+          {isMarket(campaign.origin) ? `earnings from ${MARKET_INFO[campaign.origin].label}, or estimated from views × the rate until it says.` : 'earnings aren’t tracked for your own business.'}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <ResultsTiles r={r} origin={campaign.origin} />

@@ -1,13 +1,14 @@
-import { eq, inArray } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { CHECK_TYPES, isCampaignLink, RULE_KINDS, SUBMISSION_STATUSES } from '../../../shared/campaigns';
+import { CHECK_TYPES, isMarket, MARKET_INFO, MARKETS, parseCampaignLink, RULE_KINDS, SUBMISSION_STATUSES } from '../../../shared/campaigns';
 import { db, newId, schema } from '../db';
 import { badRequest } from '../lib/http';
 import { enqueue, hasPendingJob } from '../jobs/queue';
 import { deleteCampaign, emitCampaign, getCampaignDetail, getCampaignRow, getSource, listCampaigns, listSources, pagesOf, setPages, updateCampaign } from '../campaigns/campaigns';
 import { addSourceLink, deleteSource, freeSourceVideos, saveSourceUpload, startSource, stopSource } from '../campaigns/sources';
 import { getSubmission, listSubmissions, updateSubmission } from '../campaigns/submissions';
+import { addCampaignLink, dismissCampaign, isReading, joinedState, startRead } from '../campaigns/joined';
 import { desktopAvailable } from '../lib/desktop';
 import { getSetting } from '../lib/settings';
 
@@ -25,13 +26,7 @@ function checkPages(ids: string[]) {
   if (found.length !== new Set(ids).size) throw badRequest('One of those pages doesn’t exist.');
 }
 
-const reading = (id: string) => hasPendingJob('campaign.read', 'campaignId', id);
-const withReading = <T extends { id: string }>(c: T) => ({ ...c, reading: reading(c.id) });
-
-function startRead(id: string) {
-  if (!reading(id)) enqueue('campaign.read', { campaignId: id }, { maxAttempts: 2 });
-  emitCampaign(id);
-}
+const withReading = <T extends { id: string }>(c: T) => ({ ...c, reading: isReading(c.id) });
 
 /** Campaigns (outside workspaces): add from a link or a brief, confirm and assign, sources. See campaigns/. */
 export async function campaignRoutes(app: FastifyInstance) {
@@ -39,20 +34,20 @@ export async function campaignRoutes(app: FastifyInstance) {
 
   app.post('/api/campaigns', async (req) => {
     const body = z
-      .discriminatedUnion('origin', [
-        z.object({ origin: z.literal('content_rewards'), link: z.string().trim().url().max(500) }),
+      .union([
+        // A marketplace campaign's link (Content Rewards or Vyro; `origin` is read from the link).
+        z.object({ origin: z.enum(MARKETS).optional(), link: z.string().trim().url().max(500) }),
         z.object({ origin: z.literal('business'), businessWorkspaceId: z.string().min(1), title: z.string().trim().min(1).max(120), brief: z.string().trim().min(1).max(20_000) }),
       ])
       .parse(req.body);
-    if (body.origin === 'content_rewards') {
-      if (!isCampaignLink(body.link)) throw badRequest('Give the campaign’s Content Rewards link (contentrewards.com/c/campaigns/…).');
-      const link = body.link.replace(/[?#].*$/, '');
-      const existing = db.select({ id: schema.campaigns.id }).from(schema.campaigns).where(eq(schema.campaigns.link, link)).get();
-      if (existing) return withReading(getCampaignDetail(existing.id));
-      const id = newId();
-      db.insert(schema.campaigns).values({ id, origin: 'content_rewards', link, status: 'reading' }).run();
-      startRead(id);
-      return withReading(getCampaignDetail(id));
+    if ('link' in body) {
+      if (!parseCampaignLink(body.link))
+        throw badRequest(
+          /whop\.com/i.test(body.link)
+            ? 'That’s Whop’s page, which doesn’t say which campaign is open. Use the campaign’s own link: the link button on its banner, or open it on contentrewards.com.'
+            : `Give the campaign’s own link: ${MARKETS.map((m) => MARKET_INFO[m].linkExample).join(' or ')}.`,
+        );
+      return withReading(getCampaignDetail(addCampaignLink(body.link).id));
     }
     checkPages([body.businessWorkspaceId]);
     const id = newId();
@@ -61,6 +56,14 @@ export async function campaignRoutes(app: FastifyInstance) {
       .run();
     startRead(id);
     return withReading(getCampaignDetail(id));
+  });
+
+  // The campaigns I've joined on the marketplaces: when they were last checked, and "Check joined" (a page read each).
+  app.get('/api/campaigns/joined', async () => joinedState());
+  app.post('/api/campaigns/joined', async () => {
+    if (!desktopAvailable()) throw badRequest('Checking joined campaigns needs the desktop app: open Content Studio on the computer.');
+    if (!hasPendingJob('campaigns.joined')) enqueue('campaigns.joined', {}, { maxAttempts: 1 });
+    return joinedState();
   });
 
   app.get('/api/campaigns/:id', async (req) => withReading(getCampaignDetail(idParam.parse(req.params).id)));
@@ -125,7 +128,7 @@ export async function campaignRoutes(app: FastifyInstance) {
   app.post('/api/campaigns/:id/read', async (req) => {
     const { id } = idParam.parse(req.params);
     const c = getCampaignRow(id);
-    if (c.origin === 'content_rewards' && !c.link) throw badRequest('This campaign has no link to read.');
+    if (isMarket(c.origin) && !c.link) throw badRequest('This campaign has no link to read.');
     startRead(id);
     return withReading(getCampaignDetail(id));
   });
@@ -134,6 +137,8 @@ export async function campaignRoutes(app: FastifyInstance) {
     const { id } = idParam.parse(req.params);
     // Downloads still writing into its folder stop first.
     for (const s of listSources(id)) stopSource(s.id);
+    // A joined campaign I delete isn't added back by the joined check.
+    dismissCampaign(getCampaignRow(id));
     await deleteCampaign(id);
     return { ok: true };
   });
@@ -179,7 +184,7 @@ export async function campaignRoutes(app: FastifyInstance) {
   });
 }
 
-/** Submissions to Content Rewards: the list, my changes, and reading their status there. */
+/** Submissions to the marketplaces: the list, my changes, and reading their status there. */
 export async function submissionRoutes(app: FastifyInstance) {
   const syncState = () => ({ last: getSetting('submissionsSync') ?? null, available: desktopAvailable(), running: hasPendingJob('submissions.sync') });
 
@@ -205,9 +210,9 @@ export async function submissionRoutes(app: FastifyInstance) {
 
   app.get('/api/submissions/sync', async () => syncState());
 
-  // "Check now": read my submissions page on Content Rewards (one page read, one Haiku call).
+  // "Check now": read my submissions pages on the marketplaces (one page read and one Haiku call each).
   app.post('/api/submissions/sync', async () => {
-    if (!desktopAvailable()) throw badRequest('Reading Content Rewards needs the desktop app: open Content Studio on the computer.');
+    if (!desktopAvailable()) throw badRequest('Reading the marketplaces needs the desktop app: open Content Studio on the computer.');
     if (!hasPendingJob('submissions.sync')) enqueue('submissions.sync', {}, { maxAttempts: 1 });
     return syncState();
   });

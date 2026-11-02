@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull } from 'drizzle-orm';
 import { BENCHMARK_AGE_MS, DAY_PARTS, dayPart, engagementRate, median, valueAt, type DayPart, type PostStats } from '../../../shared/analytics';
 import { PUBLISH_PLATFORM_LABELS } from '../../../shared/publish';
+import { isMarket, MARKET_INFO } from '../../../shared/campaigns';
 import { normalizeDraft } from '../../../shared/types';
 import { campaignsForWorkspace } from '../campaigns/campaigns';
 import { campaignPostIds, campaignResults } from '../campaigns/submissions';
@@ -374,9 +375,9 @@ export function digest(workspaceId: string, days: number, opts: { pieceId?: stri
       const subs = r.submissions;
       out.push(
         [
-          `- “${c.title}” (${c.origin === 'business' ? 'my own business' : 'Content Rewards'}, ${c.status}${c.ratePer1k !== null ? `, $${c.ratePer1k} per 1,000 views` : ''}${c.budgetLeft !== null ? `, $${n(c.budgetLeft)} budget left${r.budgetLow ? ' — running low' : ''}` : ''}).`,
+          `- “${c.title}” (${isMarket(c.origin) ? MARKET_INFO[c.origin].label : 'my own business'}, ${c.status}${c.ratePer1k !== null ? `, $${c.ratePer1k} per 1,000 views` : ''}${c.budgetLeft !== null ? `, $${n(c.budgetLeft)} budget left${r.budgetLow ? ' — running low' : ''}` : ''}).`,
           `  Clips: ${r.clips.made} made, ${r.clips.approved} approved by me, ${r.clips.rejected} rejected by me, ${r.posted} posted (${r.posts} post${r.posts === 1 ? '' : 's'}${r.views !== null ? `, ${n(r.views)} views` : ''}).`,
-          c.origin === 'content_rewards'
+          isMarket(c.origin)
             ? `  Submissions: ${subs.to_submit} to submit, ${subs.submitted} waiting on the campaign, ${subs.approved + subs.paid} approved, ${subs.rejected} rejected${r.approvalRate !== null ? ` (${Math.round(r.approvalRate * 100)}% approved)` : ''}. Earned $${r.earned.toFixed(2)}${r.estimated ? ` + about $${r.estimated.toFixed(2)} estimated from views` : ''}${r.perClip !== null ? `, $${r.perClip.toFixed(2)} per clip posted` : ''}.`
             : '',
         ]

@@ -137,7 +137,7 @@ export const MODULE_INFO: Record<ModuleId, { label: string; hint: string }> = {
   ideas: { label: 'Ideas & scripts', hint: 'Capture ideas by voice or text; Claude turns them into cards and scripts' },
   filming: { label: 'Filming', hint: 'You film yourself: Claude plans shots and delivery' },
   grading: { label: 'Grading', hint: 'Colour grades (LUTs) in the video editor and brand assets' },
-  campaigns: { label: 'Campaigns', hint: 'Content Rewards campaigns and your businesses’ own' },
+  campaigns: { label: 'Campaigns', hint: 'Content Rewards and Vyro campaigns, and your businesses’ own' },
   clipping: { label: 'Clipping', hint: 'Long videos in, clips out: sources and the moments found in them' },
   research: { label: 'Research brief', hint: 'A daily look at what’s working in the niche' },
 };

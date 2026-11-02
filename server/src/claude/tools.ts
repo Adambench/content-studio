@@ -443,7 +443,7 @@ export function buildTools(workspaceId: string) {
 
     tool(
       'get_campaigns',
-      'List the campaigns this page works on (Content Rewards campaigns assigned to it, or this business’s own): status, payout per 1,000 views, budget left, deadline, ' +
+      'List the campaigns this page works on (marketplace campaigns from Content Rewards or Vyro assigned to it, or this business’s own): status, payout per 1,000 views, budget left, deadline, ' +
         'platforms and the halal screen. Read-only: adding, confirming and assigning campaigns is the creator’s click.',
       {},
       safe(async () => {
@@ -471,7 +471,7 @@ export function buildTools(workspaceId: string) {
       'get_campaign',
       'Read one campaign in full: the brief, every rule (kind and what the app can check), creator requirements, payouts per platform, budget, the halal screen with ' +
         'its reasons, its source videos (title, length, whether they are downloaded and transcribed), its results (clips made, approved, posted, views, the ' +
-        'campaign’s approval rate, earnings) and its submissions on Content Rewards. Check its rules before suggesting anything for it. Read-only.',
+        'campaign’s approval rate, earnings) and its submissions on its marketplace. Check its rules before suggesting anything for it. Read-only.',
       { campaignId: z.string().describe('From get_campaigns') },
       safe(async ({ campaignId }) => {
         const c = campaignsForWorkspace(workspaceId).find((x) => x.id === campaignId);

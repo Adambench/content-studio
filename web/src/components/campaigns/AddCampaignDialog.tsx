@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { isCampaignLink, type CampaignDetail } from '@shared/campaigns';
+import { MARKET_INFO, parseCampaignLink, type CampaignDetail } from '@shared/campaigns';
 import { WorkspaceDot } from '@/components/WorkspaceDot';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -14,12 +14,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { api, errorMessage } from '@/lib/api';
 import { keys, queryClient, useWorkspaces } from '@/lib/queries';
 
-/** Add a campaign: a Content Rewards link (the app reads and screens it), or one of my businesses' own (a brief). */
+/** Add a campaign: a Content Rewards or Vyro link (the app reads and screens it), or one of my businesses' own (a brief). */
 export function AddCampaignDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const navigate = useNavigate();
   const { data: workspaces = [] } = useWorkspaces();
   const businesses = workspaces.filter((w) => w.kind === 'business');
-  const [tab, setTab] = useState<'content_rewards' | 'business'>('content_rewards');
+  const [tab, setTab] = useState<'link' | 'business'>('link');
   const [link, setLink] = useState('');
   const [business, setBusiness] = useState('');
   const [title, setTitle] = useState('');
@@ -31,7 +31,7 @@ export function AddCampaignDialog({ open, onOpenChange }: { open: boolean; onOpe
     e.preventDefault();
     setBusy(true);
     try {
-      const body = tab === 'content_rewards' ? { origin: tab, link: link.trim() } : { origin: tab, businessWorkspaceId: businessId, title: title.trim(), brief: brief.trim() };
+      const body = tab === 'link' ? { link: link.trim() } : { origin: tab, businessWorkspaceId: businessId, title: title.trim(), brief: brief.trim() };
       const c = await api<CampaignDetail>('/campaigns', { body });
       queryClient.invalidateQueries({ queryKey: keys.campaigns });
       onOpenChange(false);
@@ -46,7 +46,9 @@ export function AddCampaignDialog({ open, onOpenChange }: { open: boolean; onOpe
     }
   }
 
-  const ready = tab === 'content_rewards' ? isCampaignLink(link.trim()) : !!businessId && !!title.trim() && !!brief.trim();
+  const parsed = parseCampaignLink(link.trim());
+  const whopPage = !parsed && /whop\.com/i.test(link);
+  const ready = tab === 'link' ? !!parsed : !!businessId && !!title.trim() && !!brief.trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -58,13 +60,22 @@ export function AddCampaignDialog({ open, onOpenChange }: { open: boolean; onOpe
           </DialogHeader>
           <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
             <TabsList className="w-full">
-              <TabsTrigger value="content_rewards">Content Rewards</TabsTrigger>
+              <TabsTrigger value="link">Content Rewards or Vyro</TabsTrigger>
               <TabsTrigger value="business">My business</TabsTrigger>
             </TabsList>
-            <TabsContent value="content_rewards" className="space-y-2 pt-3">
+            <TabsContent value="link" className="space-y-2 pt-3">
               <Label htmlFor="campaign-link">The campaign’s link</Label>
-              <Input id="campaign-link" type="url" inputMode="url" autoFocus value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://contentrewards.com/c/campaigns/…" />
-              <p className="text-xs text-muted-foreground">Join it on Content Rewards and sign in to Whop under Settings → Connected sites first, so its rules and source files can be read.</p>
+              <Input id="campaign-link" type="url" inputMode="url" autoFocus value={link} onChange={(e) => setLink(e.target.value)} placeholder={MARKET_INFO.content_rewards.linkExample} />
+              {whopPage ? (
+                <p className="text-xs text-amber-400">
+                  That’s Whop’s page, which doesn’t say which campaign is open. Use the link button on the campaign’s banner, or open it on contentrewards.com.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {parsed ? `A ${MARKET_INFO[parsed.market].label} campaign. ` : `Like ${MARKET_INFO.content_rewards.linkExample} or ${MARKET_INFO.vyro.linkExample}. `}
+                  Campaigns you’ve joined come in by themselves; join it first and sign in under Settings → Connected sites, so its rules and source files can be read.
+                </p>
+              )}
             </TabsContent>
             <TabsContent value="business" className="space-y-3 pt-3">
               {businesses.length ? (

@@ -2,7 +2,7 @@
 // separate from the app's), so the server can read pages there through the desktop bridge. Shared by the desktop
 // app (which opens the windows), the server (which asks it to read pages) and the web app (Settings → Connected sites).
 
-export const SITE_IDS = ['whop', 'tiktok', 'instagram'] as const;
+export const SITE_IDS = ['whop', 'vyro', 'tiktok', 'instagram'] as const;
 export type SiteId = (typeof SITE_IDS)[number];
 
 export type SiteInfo = {
@@ -13,8 +13,12 @@ export type SiteInfo = {
   signInUrl: string;
   /** The site's registrable domains: its cookies, and the storage cleared on sign out. */
   domains: string[];
-  /** HttpOnly cookies that only exist while you're signed in. */
+  /** Cookies that only exist while you're signed in (HttpOnly ones unless `scriptCookie`). */
   sessionCookie: RegExp;
+  /** The sign-in cookie is set by the page's script, so it isn't HttpOnly. */
+  scriptCookie?: boolean;
+  /** Origins its pages live on besides the domains' own and www (their storage is cleared on sign out too). */
+  appOrigins?: string[];
   /** Its sign-in pages: a read that lands on one ran into a login wall. */
   loginPath: RegExp;
 };
@@ -22,7 +26,7 @@ export type SiteInfo = {
 export const SITES: Record<SiteId, SiteInfo> = {
   whop: {
     id: 'whop',
-    label: 'Whop',
+    label: 'Content Rewards (Whop)',
     use: 'Content Rewards campaigns you’ve joined: rules, source files and your submissions.',
     // Campaigns live on contentrewards.com, which has its own sign-in (email code or Google); whop.com is kept too.
     signInUrl: 'https://contentrewards.com/login',
@@ -31,6 +35,18 @@ export const SITES: Record<SiteId, SiteInfo> = {
     // Signed-out visitors get only `cr-surface` and Cloudflare's bot checks as HttpOnly cookies there.
     sessionCookie: /^(?!.*(csrf|xsrf)|cr-surface$|cr_session$|intercom-|__cf_bm$|_cfuvid$|cf_clearance$).*(auth|token|jwt|session|sid)/i,
     loginPath: /^\/(login|signin|sign-in)\b/,
+  },
+  vyro: {
+    id: 'vyro',
+    label: 'Vyro',
+    use: 'Vyro campaigns you’ve joined: rules, source files and your earnings.',
+    signInUrl: 'https://app.vyro.com/login',
+    domains: ['vyro.com'],
+    appOrigins: ['https://app.vyro.com', 'https://api.vyro.com'],
+    // Its app keeps the session id in this cookie on .vyro.com (SESSION_COOKIE_NAME in its config), set by script.
+    sessionCookie: /^vyro_sid$/,
+    scriptCookie: true,
+    loginPath: /^\/(login|sign-up)\b/,
   },
   tiktok: {
     id: 'tiktok',

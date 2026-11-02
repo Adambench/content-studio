@@ -1,8 +1,9 @@
-// Reading a campaign: its Content Rewards page (signed in through the desktop bridge when it can, so the rules and
-// files of a joined campaign show; a plain fetch otherwise) or the brief I typed for a business, turned by one Haiku
-// call into the campaign's details, a rule checklist and the halal screen.
-import { CAMPAIGN_PLATFORMS, CHECK_TYPES, RULE_KINDS, sourceKindOf, type CampaignPlatform, type HalalVerdict, type Payout, type RuleItem } from '../../../shared/campaigns';
-import type { PageRead } from '../../../shared/sites';
+// Reading a campaign: its marketplace page (Content Rewards or Vyro; signed in through the desktop bridge when it can,
+// so the rules and files of a joined campaign show; a plain fetch otherwise, which Vyro's app doesn't answer) or the
+// brief I typed for a business, turned by one Haiku call into the campaign's details, a rule checklist and the halal
+// screen.
+import { CAMPAIGN_PLATFORMS, CHECK_TYPES, isMarket, MARKET_INFO, RULE_KINDS, sourceKindOf, type CampaignPlatform, type HalalVerdict, type Payout, type RuleItem } from '../../../shared/campaigns';
+import { SITES, type PageRead } from '../../../shared/sites';
 import { parsePage } from '../claude/extract';
 import { playbook } from '../claude/plugin';
 import { and, eq } from 'drizzle-orm';
@@ -11,6 +12,7 @@ import { db, now, schema } from '../db';
 import { desktopAvailable, readPage } from '../lib/desktop';
 import { emit } from '../lib/events';
 import { notify } from '../lib/push';
+import { JobError } from '../jobs/queue';
 import { getCampaignRow, updateCampaign } from './campaigns';
 import { insertSource } from './sources';
 
@@ -97,7 +99,13 @@ const SCHEMA = {
         type: 'object',
         additionalProperties: false,
         required: ['platform', 'ratePer1k', 'minPayout', 'maxPayout', 'flatFee'],
-        properties: { platform: { type: 'string', enum: CAMPAIGN_PLATFORMS }, ratePer1k: money, minPayout: money, maxPayout: money, flatFee: money },
+        properties: {
+          platform: { type: 'string', enum: CAMPAIGN_PLATFORMS },
+          ratePer1k: { ...money, description: 'Pay per 1,000 views (a rate per 1M views divided by 1,000)' },
+          minPayout: money,
+          maxPayout: { ...money, description: 'The most one clip can earn' },
+          flatFee: money,
+        },
       },
     },
     budgetUsed: { ...money, description: 'Budget already paid out' },
@@ -140,7 +148,7 @@ const SCHEMA = {
 };
 
 const INSTRUCTIONS = [
-  'You read clipping campaigns for a creator who runs niche pages on TikTok, Instagram and YouTube Shorts. On Content Rewards (Whop) a campaign pays creators per 1,000 views for short clips cut from its videos.',
+  'You read clipping campaigns for a creator who runs niche pages on TikTok, Instagram and YouTube Shorts. On the marketplaces (Content Rewards on Whop, Vyro) a campaign pays creators per 1,000 views for short clips cut from its videos (or for videos they film, UGC).',
   'Checklist: one item per rule for the clips. `text` is short and says what to do, in the page’s words when they are short. `kind`: required (every clip must do it), forbidden (a clip must never do it), format (length, shape, quality, language), caption (what the caption or on-screen text must hold).',
   '`check` is set only when the app can test the rule itself: maxSeconds or minSeconds (a number of seconds), mention (the @handle, with @), hashtag (with #), text (exact words or a link the caption must contain), platform (tiktok, instagram, youtube or x, when clips may only go there), watermark ("none" when watermarks are banned, otherwise the watermark required). Otherwise null.',
   'Never invent rules. Requirements about the creator’s account go in `requirements`, not the checklist. A rule asking for music, a song or a trending sound can never be followed: leave it out of the checklist and name it in the halal reasons.',
@@ -171,24 +179,29 @@ function cleanChecklist(items: RuleItem[]): RuleItem[] {
 /** The `campaign.read` job: read the page or brief, then fill in the campaign. A new campaign then waits for my OK. */
 export async function readCampaign({ campaignId }: { campaignId: string }) {
   const c = getCampaignRow(campaignId);
+  const market = isMarket(c.origin) ? MARKET_INFO[c.origin] : null;
+  const signIn = market && `sign in to ${SITES[market.site].label} under Settings → Connected sites`;
   let page: PageRead;
   let note: string | null = null;
-  if (c.origin === 'business' || !c.link) {
+  if (!market || !c.link) {
     page = { url: '', title: c.title, text: c.pageText, links: [], loginWall: null };
   } else if (desktopAvailable()) {
     page = await readPage(c.link, { scrolls: 4 });
+  } else if (c.origin === 'vyro') {
+    // Vyro's pages are drawn by its app: a plain fetch gets an empty shell.
+    throw new JobError('Reading a Vyro campaign needs the desktop app (its signed-in window).', { retry: false });
   } else {
     page = await fetchPage(c.link);
     note = 'Read without the desktop app, so only what anyone can see. Open Content Studio on the computer and read it again for the rules.';
   }
-  if (page.loginWall) note = 'The page asked to sign in: sign in to Whop under Settings → Connected sites, then read it again.';
+  if (page.loginWall) note = `The page asked to sign in: ${signIn}, then read it again.`;
 
   const out = await parsePage<CampaignRead>(page, {
     system: [playbook('halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'),
     what:
-      c.origin === 'business'
+      !market
         ? `This is the brief for a campaign of my own business${c.title ? ` (“${c.title}”)` : ''}, written by me. Fill in the campaign from it (leave payouts and budget empty unless it states them), make the checklist and screen it.`
-        : 'This is a campaign page on Content Rewards. Fill in the campaign from it, make the checklist from its rules and screen it.',
+        : `This is a campaign page on ${market.label}. Fill in the campaign from it, make the checklist from its rules and screen it.`,
     schema: SCHEMA,
   });
 
@@ -201,15 +214,15 @@ export async function readCampaign({ campaignId }: { campaignId: string }) {
   const left = num(out.budgetLeft);
   const total = num(out.budgetTotal) ?? (used !== null && left !== null ? used + left : null);
   const mine = c.checklist.filter((r) => r.by === 'you');
-  const locked = !!out.rulesLocked && c.origin !== 'business';
-  if (locked && !note) note = 'The rules and source files are locked: join the campaign on Content Rewards, sign in to Whop under Settings → Connected sites, then read it again.';
+  const locked = !!out.rulesLocked && !!market;
+  if (locked && !note) note = `The rules and source files are locked: join the campaign on ${market!.label}, ${signIn}, then read it again.`;
 
   updateCampaign(campaignId, {
-    title: out.title.replace(/\s*[|·–-]\s*Content Rewards\s*$/i, '').trim() || c.title || 'Untitled campaign',
+    title: out.title.replace(/\s*[|·–-]\s*(Content Rewards|Vyro)\s*$/i, '').trim() || c.title || 'Untitled campaign',
     brand: out.brand.trim(),
     type: out.type.trim(),
     category: out.category.trim(),
-    description: out.description.trim() || (c.origin === 'business' ? c.pageText : ''),
+    description: out.description.trim() || (!market ? c.pageText : ''),
     accepting: out.accepting,
     payouts,
     platforms: [...new Set(payouts.map((p) => p.platform))],
@@ -223,7 +236,7 @@ export async function readCampaign({ campaignId }: { campaignId: string }) {
     requirements: out.requirements.trim(),
     halalVerdict: out.halal.verdict,
     halalReasons: out.halal.reasons.map((r) => r.trim()).filter(Boolean).slice(0, 10),
-    pageText: c.origin === 'business' ? c.pageText : page.text.slice(0, 200_000),
+    pageText: !market ? c.pageText : page.text.slice(0, 200_000),
     readAt: Date.now(),
     readNote: note,
     status: c.status === 'reading' ? 'to_confirm' : c.status,

@@ -2,7 +2,7 @@ import { Camera, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
-import type { CampaignDetail } from '@shared/campaigns';
+import { isMarket, type CampaignDetail } from '@shared/campaigns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -36,7 +36,7 @@ export function UgcCard({ campaign: c, workspaces }: { campaign: CampaignDetail;
   );
 
   if (c.status !== 'active' && !c.ugc.length) return null;
-  if (!isUgc && !c.ugc.length && c.origin === 'content_rewards' && c.sources.length) return null;
+  if (!isUgc && !c.ugc.length && isMarket(c.origin) && c.sources.length) return null;
 
   async function write() {
     setWriting(true);

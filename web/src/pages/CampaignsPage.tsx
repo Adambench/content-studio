@@ -1,8 +1,9 @@
 import { BadgeDollarSign, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import type { Campaign, CampaignPlatform } from '@shared/campaigns';
+import { isMarket, MARKET_INFO, type Campaign, type CampaignPlatform } from '@shared/campaigns';
 import { AddCampaignDialog } from '@/components/campaigns/AddCampaignDialog';
+import { JoinedCheck } from '@/components/campaigns/JoinedCheck';
 import { BudgetBar, deadlineText, HalalBadge, PageChips, rateText, StatusBadge } from '@/components/campaigns/common';
 import { PageHeader } from '@/components/PageHeader';
 import { PlatformIcon } from '@/components/publish/common';
@@ -26,7 +27,7 @@ export function PlatformIcons({ platforms }: { platforms: CampaignPlatform[] }) 
 
 function CampaignCard({ c, workspaces }: { c: Campaign; workspaces: Workspace[] }) {
   const business = c.origin === 'business' ? workspaces.find((w) => w.id === c.businessWorkspaceId) : undefined;
-  const meta = [c.brand, c.type, c.origin === 'business' ? `${business?.name ?? 'Your business'}’s own` : null].filter(Boolean).join(' · ');
+  const meta = [isMarket(c.origin) ? MARKET_INFO[c.origin].label : `${business?.name ?? 'Your business'}’s own`, c.brand, c.type].filter(Boolean).join(' · ');
   const deadline = deadlineText(c.deadline);
   return (
     <Link to={`/campaigns/${c.id}`} className="block space-y-2.5 rounded-lg border bg-card p-3 hover:border-foreground/20">
@@ -45,7 +46,7 @@ function CampaignCard({ c, workspaces }: { c: Campaign; workspaces: Workspace[] 
         {c.platforms.length > 0 && <PlatformIcons platforms={c.platforms} />}
         {deadline && <span>{deadline}</span>}
       </div>
-      {c.origin === 'content_rewards' && <BudgetBar left={c.budgetLeft} total={c.budgetTotal} />}
+      {isMarket(c.origin) && <BudgetBar left={c.budgetLeft} total={c.budgetTotal} />}
       <PageChips pageIds={c.pageIds} workspaces={workspaces} />
     </Link>
   );
@@ -83,7 +84,7 @@ export function CampaignsPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Campaigns"
-        description="Content Rewards campaigns and your businesses’ own"
+        description="Content Rewards and Vyro campaigns, and your businesses’ own"
         actions={
           <Button size="sm" onClick={() => setAdding(true)}>
             <Plus /> Add campaign
@@ -92,6 +93,7 @@ export function CampaignsPage() {
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
+          <JoinedCheck />
           {!campaigns.data ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <Skeleton className="h-32 rounded-lg" />
@@ -105,8 +107,8 @@ export function CampaignsPage() {
                 </EmptyMedia>
                 <EmptyTitle>No campaigns yet</EmptyTitle>
                 <EmptyDescription>
-                  Pick a campaign on Content Rewards and paste its link, or set up one for your own business. Content Studio reads the rules, checks them against the halal rules and
-                  waits for your OK.
+                  Join campaigns on Content Rewards or Vyro and they come in by themselves (or paste a link), or set up one for your own business. Content Studio reads the rules,
+                  checks them against the halal rules and waits for your OK.
                 </EmptyDescription>
               </EmptyHeader>
               <Button onClick={() => setAdding(true)}>
