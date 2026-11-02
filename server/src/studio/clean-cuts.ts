@@ -13,6 +13,17 @@ const RATE = 16000;
 const STEP = 0.01;
 /** A pause this long between sounds is a gap a cut can sit in (stop consonants inside a word are shorter). */
 const MIN_GAP = 0.06;
+/**
+ * How far a cut may reach into a neighbouring word's times: a word longer than its letters need has likely been given
+ * part of the gap beside it (up to 0.18 s of it); a word of normal length, barely at all.
+ */
+const stretch = (w: TranscriptWord) => {
+  const letters = w.word.replace(/[^\p{L}\p{N}]/gu, '').length;
+  return Math.min(0.18, Math.max(0.04, w.end - w.start - (0.06 * letters + 0.05)));
+};
+
+/** How far past a word's edge (by Whisper's times) the pause beside it may start. */
+const EDGE = 0.25;
 /** A pause this long inside a word's times means Whisper gave that word sound that isn't it (a filler, a breath). */
 const INNER_GAP = 0.15;
 
@@ -71,12 +82,13 @@ export function pauses(env: Envelope, from: number, to: number, min = MIN_GAP, s
   return out;
 }
 
-/** The quietest moment between two times. */
+/** The quietest moment between two times (over 30 ms, so one quiet frame inside a word doesn't count). */
 function quietest(env: Envelope, from: number, to: number) {
   const a = Math.max(0, Math.floor(from / STEP));
   const b = Math.min(env.db.length - 1, Math.ceil(to / STEP));
+  const level = (i: number) => Math.max(env.db[Math.max(0, i - 1)], env.db[i], env.db[Math.min(env.db.length - 1, i + 1)]);
   let best = a;
-  for (let i = a; i <= b; i++) if (env.db[i] < env.db[best]) best = i;
+  for (let i = a; i <= b; i++) if (level(i) < level(best)) best = i;
   return best * STEP;
 }
 
@@ -130,11 +142,12 @@ export function snapCuts(
     for (let j = from; j < ws.length && mid(ws[j]) < c.out; j++) last = j;
     return last;
   };
-  // The voice stops right after a word / starts right on it: a pause touching its edge.
+  // The voice stops soon after a word / starts soon before it: a pause near its edge (word times in a noisy track can
+  // be a quarter of a second off), never past the next word or before the one before.
   const outPause = (l: TranscriptWord, to: number) =>
-    pauses(env, l.end - 0.05, to).find((g) => g[0] <= l.end + 0.12) ?? pauses(env, l.end - 0.05, to, MIN_GAP, true).find((g) => g[0] <= l.end + 0.12);
+    pauses(env, l.end - 0.05, to).find((g) => g[0] <= l.end + EDGE) ?? pauses(env, l.end - 0.05, to, MIN_GAP, true).find((g) => g[0] <= l.end + EDGE);
   const inPause = (k: TranscriptWord, from: number) =>
-    pauses(env, from, k.start + 0.05).findLast((g) => g[1] >= k.start - 0.12) ?? pauses(env, from, k.start + 0.05, MIN_GAP, true).findLast((g) => g[1] >= k.start - 0.12);
+    pauses(env, from, k.start + 0.05).findLast((g) => g[1] >= k.start - EDGE) ?? pauses(env, from, k.start + 0.05, MIN_GAP, true).findLast((g) => g[1] >= k.start - EDGE);
 
   // Short cuts with no clean pause either side: keep what's between.
   const merged: EditClip[] = [];
@@ -169,16 +182,26 @@ export function snapCuts(
     if (!joined(merged[i - 1], c)) {
       const from = Math.max(0, before ? before.end : k.start - 1, k.start - 1.2);
       const g = inPause(k, from);
-      inAt = g ? Math.max(g[0], g[1] - 0.12) : quietest(env, Math.max(from, k.start - 0.1), k.start + 0.02);
-      if (before) inAt = Math.max(inAt, before.end);
+      if (g) inAt = Math.max(g[0], g[1] - 0.12, before ? before.end : 0);
+      else {
+        // No pause: the deepest dip just before the word. Whisper's edges can be off, so the dip may sit a little
+        // inside the word before's times (a word is loud; the gap between two is where it's quietest).
+        const lo = Math.max(0, k.start - EDGE, before ? before.end - stretch(before) : 0);
+        inAt = quietest(env, lo, k.start + 0.02);
+      }
     }
     let outAt = c.out;
     if (!joined(c, merged[i + 1])) {
       const to = Math.min(env.seconds, after ? after.start : l.end + 1, l.end + 1.2);
       const g = outPause(l, to);
-      // A little of the pause kept as air, never more than half of it.
-      outAt = g ? Math.min(g[1] - 0.03, g[0] + Math.min(0.16, (g[1] - g[0]) * 0.5)) : quietest(env, l.end - 0.02, Math.min(to, l.end + 0.1));
-      if (after) outAt = Math.min(outAt, after.start);
+      if (g) {
+        // A little of the pause kept as air, never more than half of it.
+        outAt = Math.min(g[1] - 0.03, g[0] + Math.min(0.16, (g[1] - g[0]) * 0.5));
+        if (after) outAt = Math.min(outAt, after.start);
+      } else {
+        const hi = Math.min(env.seconds, l.end + EDGE, after ? after.start + stretch(after) : Infinity);
+        outAt = quietest(env, l.end - 0.02, Math.max(l.end, hi));
+      }
     }
     if (outAt - inAt < 0.2) return c;
     return { ...c, in: round(inAt), out: round(outAt) };
