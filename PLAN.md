@@ -714,6 +714,8 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
   captions below; the clip maker picks it for games (campaign or page) and for wide footage with a face under a third
   of the time; editor switch *Show the whole picture*; Claude's clips take `fit`. Text overlays can sit at their own
   height (`y`), e.g. a hook under a watermark.
+  Not done: in fast talk over game sound Whisper's word times are up to 0.3 s off, so a few cuts still need picking
+  by hand on the loudness (the Clash Royale clip did); a forced aligner (WhisperX-style) would fix it for good.
 
 Accounts (2026-10-27): each page gets its own mascot (not one shared). Once every buildable step is done, I go over
 each account with Claude (name, goal, niche, language, the mascot's look): steps 5 and 6 are built after that.
