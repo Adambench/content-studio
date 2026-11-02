@@ -103,6 +103,7 @@ orange. No watermark yet (clipping campaigns often forbid one). The mascot SVGs 
 |---|---|
 | Music | Never music or instruments anywhere: no tracks, beds, stingers, trending sounds, TikTok auto-add-music; no music asset type |
 | Nasheeds | Vocal-only, only with my OK per edit; only the UI sets it, Claude can suggest |
+| Voice-only sound | The line is instruments (2026-11-02): a hum, wordless voices, a vocal bed aren't music. Fine in references and sources (never a caution); in an edit only as the nasheed |
 | SFX | Allowed: whooshes, pops, clicks, impacts, dings, risers; nothing tonal-melodic |
 | Source audio | Music in source footage removed (Demucs voice stem) or the clip dropped |
 | Content | Music promotions hidden; nothing haram promoted (gambling, alcohol/drugs/smoking, dating, immodest imagery, interest-based finance). Briefs screened when added, moments by transcript and frames |
@@ -690,6 +691,29 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
     Not tried: a TikTok or Instagram link; the chat calling `get_references`.
   - Not done: the quality score doesn't use the references' numbers as its targets yet (they're beside my numbers on
     the card); *Measure as a reference* from Research or a saved post on Ideas.
+  - **Reworked as inspiration (2026-11-02).** The reads graded my references against the playbook ("weak by the
+    rules") and drafted small rules that missed why the videos moved me. Now Knowledge opens on *Inspiration*, page by
+    page: each video is read for how it's built (why it works, its shape over time) and split into 6–10 ingredients
+    (idea, story, visuals, quality, voice, text, pace, sound, feel), each one I mark *Want* or *Not for me*, with a
+    note, and a "what moved me" note per video. The page's **style** (`page_styles`, job `inspiration.build`, my click
+    *Write it from my marks*) is written from those marks (my notes count most, *not for me* goes under "Leave out",
+    the brand guide wins where they differ); I can edit it, and it says when my marks changed since. Every prompt that
+    makes something for the page carries it (`inspirationText`: the chat, directions, idea capture, script drafting,
+    the research brief, UGC); `get_references` gives the chat the ingredients and marks. No more lessons drafted from
+    references (the 17 waiting were deleted); the rules are the *Playbook* tab. Voice-only beds aren't cautioned
+    (`voiceBed`: the voice track sounding in the pauses); a transcript in the wrong language is heard again as English
+    (`transcribe.py --language`). The 6 Gentle Return references were read again; the style waits for my marks.
+- **Clean cuts (2026-11-02, from my review of the 6 clips).** Cuts were placed on Whisper's word times with fixed
+  padding, so a clip could start on an "um" Whisper never wrote down (the $60B one, 2 s) or end on the first sound of
+  the next sentence. `studio/clean-cuts.ts`: the voice's loudness every 10 ms; word times fitted to it (a pause inside
+  a word's times means the sound before it isn't that word); every cut moved into the pause beside it (a soft pause
+  in a noisy track); a short cut with no clean pause keeps the words instead; a shot without a whole word is dropped.
+  The render fades the sound 12 ms at every cut and 120 ms at the end. Used by the clip maker and the editor's
+  *Tighten*. **Whole picture** (`EditClip.fit: 'whole'`): a game or a screen shows all of itself, as wide as the
+  frame, over a blurred copy (baked by FFmpeg in the render, CSS in the preview), the hook card above and the
+  captions below; the clip maker picks it for games (campaign or page) and for wide footage with a face under a third
+  of the time; editor switch *Show the whole picture*; Claude's clips take `fit`. Text overlays can sit at their own
+  height (`y`), e.g. a hook under a watermark.
 
 Accounts (2026-10-27): each page gets its own mascot (not one shared). Once every buildable step is done, I go over
 each account with Claude (name, goal, niche, language, the mascot's look): steps 5 and 6 are built after that.

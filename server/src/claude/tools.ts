@@ -110,7 +110,7 @@ export function toolLabel(fullName: string, input: Record<string, any>): string 
     case 'get_knowledge':
       return `Read the Knowledge rules${input.topics?.length ? `: ${input.topics.join(', ')}` : ''}`;
     case 'get_references':
-      return 'Read the measured references';
+      return 'Read the videos that inspire this page';
     case 'suggest_rule':
       return `Suggested a rule: ${input.title ?? ''}`;
     case 'add_ideas':
@@ -668,12 +668,12 @@ export function buildTools(workspaceId: string) {
 
     tool(
       'get_references',
-      'The reference videos the creator measured on the Knowledge page (for every page or this one), newest first: each one’s measured numbers (changes on screen per 10 s, the longest still stretch, cuts, sound effects and how many land on a change, speech pace) and how it hooks, its promise and payoff, its beats, motion and sound. ' +
-        'Use it when they ask for a video like a reference, or to set a pace and a sound density. Learn the moves, never the words; never copy a reference’s music.',
+      'The videos that moved the creator, on the Knowledge page (for every page or this one), newest first: what moved them, why each works, how it’s built, its ingredients (idea, story, visuals, quality, voice, text, pace, sound, feel) with the creator’s marks (wanted, not for them), and its measured numbers. ' +
+        'Use it when they ask for a video like one of them, or to match their style. Take what they marked wanted, leave what they marked not for them; learn the moves and the feel, never the words; never anything with instruments.',
       {},
       safe(async () => {
         const list = referencesText(workspaceId);
-        return ok(list.length ? list.join('\n\n') : 'No references measured yet. The creator pastes links on the Knowledge page → References.');
+        return ok(list.length ? list.join('\n\n') : 'No references yet. The creator pastes videos that moved them on the Knowledge page → Inspiration.');
       }),
     ),
 

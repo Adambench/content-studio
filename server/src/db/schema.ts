@@ -10,7 +10,7 @@ import type { PieceDirections } from '../../../shared/direction';
 import type { IdeaAssist, IdeaKind } from '../../../shared/ideas';
 import type { KnowledgeSource, KnowledgeStatus, KnowledgeTopic } from '../../../shared/knowledge';
 import type { QualityReport } from '../../../shared/quality';
-import type { ReferenceMeasures, ReferencePlatform, ReferenceRead, ReferenceStatus } from '../../../shared/references';
+import type { Ingredient, PageStyle, ReferenceMeasures, ReferencePlatform, ReferenceRead, ReferenceStatus } from '../../../shared/references';
 import type { FindKind, FindStatus, ToolKind } from '../../../shared/toolbox';
 import type { AnalysisStatus, ItemPlatform, ResearchAnalysis, ResearchBriefBody, ResearchSettings, ResearchSource } from '../../../shared/research';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
@@ -698,8 +698,9 @@ export const aiSpend = sqliteTable(
 );
 
 /**
- * A video I pasted on the Knowledge page to learn from (shared/references.ts): measured (`measures`), read by the model
- * (`read`), its lessons drafted as suggested rules (`knowledge.referenceId`). `workspaceId` null = for every page.
+ * A video that moved me, pasted on the Knowledge page as inspiration (shared/references.ts): measured (`measures`), read
+ * by the model (`read`, `ingredients`), each ingredient marked by me. `workspaceId` null = for every page. (Rules once
+ * drafted from it keep `knowledge.referenceId`.)
  */
 export const referenceVideos = sqliteTable(
   'reference_videos',
@@ -721,11 +722,32 @@ export const referenceVideos = sqliteTable(
     /** What's said, a line per sentence ({ at, text }). */
     lines: text('lines', { mode: 'json' }).$type<{ at: number; text: string }[]>().notNull().default(sql`'[]'`),
     hasFrames: integer('has_frames', { mode: 'boolean' }).notNull().default(false),
+    /** What it's made of, each with my mark. */
+    ingredients: text('ingredients', { mode: 'json' }).$type<Ingredient[]>().notNull().default(sql`'[]'`),
+    /** What moved me. */
+    note: text('note').notNull().default(''),
     createdAt: createdAt(),
     measuredAt: integer('measured_at'),
   },
   (t) => [uniqueIndex('reference_videos_key_idx').on(t.platform, t.externalId), index('reference_videos_created_idx').on(t.createdAt)],
 );
+
+/** A page's style, written from what I marked on its references (shared/references.ts `PageStyle`), editable by me. */
+export const pageStyles = sqliteTable('page_styles', {
+  workspaceId: text('workspace_id')
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  body: text('body').notNull().default(''),
+  status: text('status').$type<PageStyle['status']>().notNull().default('idle'),
+  error: text('error'),
+  builtAt: integer('built_at'),
+  /** What it was written from (references, marks, notes), to tell when it's out of date. */
+  builtFrom: text('built_from').notNull().default(''),
+  /** The words as written, to tell whether I've changed them. */
+  builtBody: text('built_body').notNull().default(''),
+  references: integer('reference_count').notNull().default(0),
+  updatedAt: updatedAt(),
+});
 
 /**
  * A rule on the Knowledge page (shared/knowledge.ts). Seeded ones keep the playbook text they came from (`seedKey` =

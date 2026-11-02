@@ -13,15 +13,20 @@ doubt, leave it out or flag it for the user.
 - no trending sounds or songs, and TikTok's "auto add music" is always off
 - no humming or singing of a song in a voiceover the app makes
 
+**The line is instruments.** Sound made only by voices is not music here: a hum, voices without words, a vocal
+drone, a nasheed with no instruments. In a reference or a source it's fine and never a reason for a caution (many of
+the videos the user loves have one, like noor__app's). In an edit it goes in only as a nasheed does (below).
+
 **Allowed:** non-musical sound effects. Whooshes, swishes, pops, clicks, ticks, keyboard and mouse sounds, camera
 shutters, impacts, thuds, booms, dings, chimes, notification sounds, tonal risers and sweeps, paper, footsteps,
 crowd reactions without music. A sound is fine when it's a noise, not a melody or a beat.
 
-**Nasheeds:** a vocal-only nasheed (voice only, no instruments, no instrument-like vocal effects) can go on an edit
-only when the user OKs that edit. You can suggest one. You never add one yourself, and the app's tools can't.
+**Nasheeds and voice-only beds:** a vocal-only nasheed or bed (voice only, no instruments, no instrument-like vocal
+effects such as beatboxed drums) can go on an edit only when the user OKs that edit. You can suggest one. You never add
+one yourself, and the app's tools can't.
 
-**Source footage:** background music under the speaker (a stream's music, a podcast's intro bed, a song in a vlog) is
-removed with voice isolation before a clip is used. If it can't be cleaned, the clip is dropped. When picking
+**Source footage:** background music with instruments under the speaker (a stream's music, a podcast's intro bed, a
+song in a vlog) is removed with voice isolation before a clip is used. If it can't be cleaned, the clip is dropped. When picking
 moments, prefer stretches with no music, and skip anything where a song is the point (someone singing, a music
 break, a reaction to a song).
 

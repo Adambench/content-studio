@@ -1,6 +1,6 @@
 """Transcribe an audio file with faster-whisper and write JSON with word timestamps.
 
-Usage: transcribe.py AUDIO --out OUT.json [--model small]
+Usage: transcribe.py AUDIO --out OUT.json [--model small] [--language en]
 """
 import argparse
 import json
@@ -14,6 +14,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("audio")
 parser.add_argument("--out", required=True)
 parser.add_argument("--model", default="small")
+parser.add_argument("--language", default=None)
 args = parser.parse_args()
 
 def load():
@@ -35,7 +36,7 @@ model = load()
 with wave.open(args.audio, "rb") as w:
     pcm = w.readframes(w.getnframes())
 audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-segments, info = model.transcribe(audio, word_timestamps=True, vad_filter=True)
+segments, info = model.transcribe(audio, word_timestamps=True, vad_filter=True, language=args.language)
 
 result = {"language": info.language, "duration": round(info.duration, 2), "segments": []}
 texts = []

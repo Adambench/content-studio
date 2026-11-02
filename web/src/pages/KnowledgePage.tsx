@@ -1,8 +1,9 @@
-import { BookOpen, Check, Film, Lock, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { BookOpen, Check, Heart, Lock, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { KNOWLEDGE_SOURCE_LABELS, KNOWLEDGE_TOPIC_INFO, KNOWLEDGE_TOPICS, RULE_BODY_MAX, RULE_TITLE_MAX, type KnowledgeRule, type KnowledgeTopic } from '@shared/knowledge';
-import { References } from '@/components/knowledge/References';
+import { useSearchParams } from 'react-router';
+import { Inspiration } from '@/components/knowledge/Inspiration';
 import { Markdown } from '@/components/Markdown';
 import { PageHeader } from '@/components/PageHeader';
 import { Badge } from '@/components/ui/badge';
@@ -12,9 +13,10 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { api, errorMessage } from '@/lib/api';
-import { keys, queryClient, useKnowledge, useReferences } from '@/lib/queries';
+import { keys, queryClient, useKnowledge } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 const refresh = () => queryClient.invalidateQueries({ queryKey: keys.knowledge });
@@ -30,16 +32,57 @@ async function act<T>(fn: () => Promise<T>) {
   }
 }
 
-/** The playbook as rules: read them, change them, add to them. Every prompt uses what's on here. */
+/**
+ * Knowledge: first the videos that moved me, read for how they're built and marked for what each page takes from them
+ * (its style); then the playbook underneath, as rules I can read, change and add to. Every prompt uses both.
+ */
 export function KnowledgePage() {
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'playbook' ? 'playbook' : 'inspiration';
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader title="Knowledge" description="Videos that moved you become each page’s style; the playbook is the rules underneath" />
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <Tabs
+          value={tab}
+          onValueChange={(v) =>
+            setParams(
+              (p) => {
+                if (v === 'playbook') p.set('tab', 'playbook');
+                else p.delete('tab');
+                return p;
+              },
+              { replace: true },
+            )
+          }
+          className="mx-auto max-w-5xl gap-4 p-4 md:p-6"
+        >
+          <TabsList>
+            <TabsTrigger value="inspiration">
+              <Heart /> Inspiration
+            </TabsTrigger>
+            <TabsTrigger value="playbook">
+              <BookOpen /> Playbook
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="inspiration">
+            <Inspiration />
+          </TabsContent>
+          <TabsContent value="playbook">
+            <Playbook />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
+
+/** The playbook as rules: read them, change them, add to them. Every prompt uses what's on here. */
+function Playbook() {
   const knowledge = useKnowledge();
   const [topic, setTopic] = useState<KnowledgeTopic>('content-model');
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
-  // The References view instead of a topic's rules; `highlight` opens one reference there.
-  const [references, setReferences] = useState(false);
-  const [highlight, setHighlight] = useState<string | null>(null);
-  const refs = useReferences();
   const rules = knowledge.data ?? [];
   const suggested = rules.filter((r) => r.status === 'proposed');
   const q = query.trim().toLowerCase();
@@ -48,125 +91,87 @@ export function KnowledgePage() {
     [rules, q, topic],
   );
   const count = (t: KnowledgeTopic) => rules.filter((r) => r.topic === t && r.status === 'active').length;
-  const onRefs = references && !q;
-  const showReference = (id: string) => {
-    setReferences(true);
-    setQuery('');
-    setHighlight(id);
-    requestAnimationFrame(() => document.getElementById(`reference-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
-  };
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        title="Knowledge"
-        description="The playbook every video follows: change a rule and every prompt uses it"
-        actions={
-          <Button size="sm" onClick={() => setAdding(true)} disabled={!!q || references}>
+    <div className="flex flex-col gap-4 md:flex-row md:gap-6">
+      <nav className="flex gap-1 overflow-x-auto [scrollbar-width:none] md:w-52 md:shrink-0 md:flex-col md:overflow-visible" aria-label="Topics">
+        {KNOWLEDGE_TOPICS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => {
+              setTopic(t);
+              setQuery('');
+            }}
+            className={cn(
+              'flex shrink-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-accent',
+              t === topic && !q ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground',
+            )}
+          >
+            {KNOWLEDGE_TOPIC_INFO[t].label}
+            <span className="ml-auto text-xs tabular-nums text-muted-foreground">{count(t) || ''}</span>
+          </button>
+        ))}
+      </nav>
+
+      <div className="min-w-0 flex-1 space-y-4">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search every rule" className="pl-8" aria-label="Search every rule" />
+          </div>
+          <Button onClick={() => setAdding(true)} disabled={!!q}>
             <Plus /> Add a rule
           </Button>
-        }
-      />
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:flex-row md:gap-6 md:p-6">
-          <nav className="flex gap-1 overflow-x-auto [scrollbar-width:none] md:w-52 md:shrink-0 md:flex-col md:overflow-visible" aria-label="Topics">
-            {KNOWLEDGE_TOPICS.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => {
-                  setTopic(t);
-                  setReferences(false);
-                  setQuery('');
-                }}
-                className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-accent',
-                  t === topic && !q && !references ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground',
-                )}
-              >
-                {KNOWLEDGE_TOPIC_INFO[t].label}
-                <span className="ml-auto text-xs tabular-nums text-muted-foreground">{count(t) || ''}</span>
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => {
-                setReferences(true);
-                setHighlight(null);
-                setAdding(false);
-                setQuery('');
-              }}
-              className={cn(
-                'flex shrink-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-accent md:mt-2 md:border-t md:pt-3',
-                onRefs ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground',
-              )}
-            >
-              <Film className="size-4" /> References
-              <span className="ml-auto text-xs tabular-nums text-muted-foreground">{refs.data?.length || ''}</span>
-            </button>
-          </nav>
-
-          <div className="min-w-0 flex-1 space-y-4">
-            <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search every rule" className="pl-8" aria-label="Search every rule" />
-            </div>
-
-            {suggested.length > 0 && !q && (
-              <section id="suggested" className="scroll-mt-4 space-y-2">
-                <h2 className="flex items-center gap-1.5 text-sm font-medium">
-                  <Sparkles className="size-4 text-brand" /> Suggested
-                </h2>
-                {suggested.map((r) => (
-                  <SuggestedRule key={r.id} rule={r} reference={refs.data?.find((x) => x.id === r.referenceId)?.title ?? null} onReference={showReference} />
-                ))}
-              </section>
-            )}
-
-            {onRefs ? (
-              <References highlight={highlight} onShowSuggested={() => document.getElementById('suggested')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })} />
-            ) : (
-              <>
-                {!q && (
-                  <div>
-                    <h2 className="text-sm font-medium">{KNOWLEDGE_TOPIC_INFO[topic].label}</h2>
-                    <p className="text-xs text-muted-foreground">{KNOWLEDGE_TOPIC_INFO[topic].hint}</p>
-                  </div>
-                )}
-
-                {adding && !q && <NewRule topic={topic} onDone={() => setAdding(false)} />}
-
-                {!knowledge.data ? (
-                  <div className="space-y-3">
-                    <Skeleton className="h-28 rounded-lg" />
-                    <Skeleton className="h-28 rounded-lg" />
-                  </div>
-                ) : shown.length ? (
-                  <ul className="space-y-3">
-                    {shown.map((r) => (
-                      <RuleCard key={r.id} rule={r} showTopic={!!q} />
-                    ))}
-                  </ul>
-                ) : (
-                  <Empty className="border">
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <BookOpen />
-                      </EmptyMedia>
-                      <EmptyTitle>{q ? 'Nothing matches' : 'No rules here yet'}</EmptyTitle>
-                      <EmptyDescription>{q ? 'Try another word.' : 'Add what you know works: every prompt about this topic will use it.'}</EmptyDescription>
-                    </EmptyHeader>
-                    {!q && (
-                      <Button size="sm" onClick={() => setAdding(true)}>
-                        <Plus /> Add a rule
-                      </Button>
-                    )}
-                  </Empty>
-                )}
-              </>
-            )}
-          </div>
         </div>
+
+        {suggested.length > 0 && !q && (
+          <section id="suggested" className="scroll-mt-4 space-y-2">
+            <h2 className="flex items-center gap-1.5 text-sm font-medium">
+              <Sparkles className="size-4 text-brand" /> Suggested
+            </h2>
+            {suggested.map((r) => (
+              <SuggestedRule key={r.id} rule={r} />
+            ))}
+          </section>
+        )}
+
+        {!q && (
+          <div>
+            <h2 className="text-sm font-medium">{KNOWLEDGE_TOPIC_INFO[topic].label}</h2>
+            <p className="text-xs text-muted-foreground">{KNOWLEDGE_TOPIC_INFO[topic].hint}</p>
+          </div>
+        )}
+
+        {adding && !q && <NewRule topic={topic} onDone={() => setAdding(false)} />}
+
+        {!knowledge.data ? (
+          <div className="space-y-3">
+            <Skeleton className="h-28 rounded-lg" />
+            <Skeleton className="h-28 rounded-lg" />
+          </div>
+        ) : shown.length ? (
+          <ul className="space-y-3">
+            {shown.map((r) => (
+              <RuleCard key={r.id} rule={r} showTopic={!!q} />
+            ))}
+          </ul>
+        ) : (
+          <Empty className="border">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <BookOpen />
+              </EmptyMedia>
+              <EmptyTitle>{q ? 'Nothing matches' : 'No rules here yet'}</EmptyTitle>
+              <EmptyDescription>{q ? 'Try another word.' : 'Add what you know works: every prompt about this topic will use it.'}</EmptyDescription>
+            </EmptyHeader>
+            {!q && (
+              <Button size="sm" onClick={() => setAdding(true)}>
+                <Plus /> Add a rule
+              </Button>
+            )}
+          </Empty>
+        )}
       </div>
     </div>
   );
@@ -292,7 +297,7 @@ function RuleCard({ rule, showTopic }: { rule: KnowledgeRule; showTopic: boolean
   );
 }
 
-function SuggestedRule({ rule, reference, onReference }: { rule: KnowledgeRule; reference: string | null; onReference: (id: string) => void }) {
+function SuggestedRule({ rule }: { rule: KnowledgeRule }) {
   const [editing, setEditing] = useState(false);
   const approve = (v?: { title: string; body: string }) => act(() => api(`/knowledge/${rule.id}`, { method: 'PATCH', body: { ...v, status: 'active' } }));
   return (
@@ -307,11 +312,6 @@ function SuggestedRule({ rule, reference, onReference }: { rule: KnowledgeRule; 
           </div>
           <Markdown className="mt-2 text-muted-foreground">{rule.body}</Markdown>
           {rule.note && <p className="mt-2 text-xs text-muted-foreground">Why: {rule.note}</p>}
-          {rule.referenceId && (
-            <button type="button" className="mt-1 flex items-center gap-1 text-left text-xs text-brand hover:underline" onClick={() => onReference(rule.referenceId!)}>
-              <Film className="size-3.5 shrink-0" /> From the reference{reference ? `: ${reference}` : ''}
-            </button>
-          )}
           <div className="mt-3 flex flex-wrap gap-2">
             <Button size="sm" onClick={() => approve()}>
               <Check /> Approve

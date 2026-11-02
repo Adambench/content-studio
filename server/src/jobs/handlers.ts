@@ -7,7 +7,7 @@ import { statsJob } from '../analytics/schedule';
 import { onReadFailed, readCampaign, refreshBudgets } from '../campaigns/read';
 import { onSyncFailed, syncSubmissions } from '../campaigns/submissions';
 import { analyseItem, onAnalyseFailed } from '../research/analyse';
-import { draftLessons, measureReference, onLessonsFailed, onMeasureFailed } from '../knowledge/references';
+import { buildStyle, inspirationText, measureReference, onMeasureFailed, onReferenceReadFailed, onStyleFailed, readReference } from '../knowledge/references';
 import { onBriefFailed, writeBrief } from '../research/brief';
 import { onSweepFailed, researchSweep } from '../research/sweep';
 import { downloadSource, onSourceFailed, transcribeSource } from '../campaigns/sources';
@@ -133,6 +133,7 @@ async function structureCapture(payload: { workspaceId: string; mediaId?: string
         ws.description && `About the brand: ${ws.description}`,
         ws.brandGuide && `Brand guide:\n${ws.brandGuide}`,
         ws.voiceMemory && `What you've learned about their voice:\n${ws.voiceMemory}`,
+        inspirationText(ws.id),
         'Keep their meaning; do not invent facts, claims or numbers they did not say. Match the language they spoke in.',
       ]
         .filter(Boolean)
@@ -266,11 +267,13 @@ export function registerHandlers() {
   registerJob('research.analyse', analyseItem, 1);
   onJobFailed('research.analyse', onAnalyseFailed);
   // References on the Knowledge page: measured (yt-dlp, FFmpeg, Whisper, Demucs; no model), then read with one call
-  // that drafts lessons as suggested rules.
+  // (how it's built, its ingredients for my marks); a page's style is written from the marks.
   registerJob('reference.measure', measureReference, 1);
   onJobFailed('reference.measure', onMeasureFailed);
-  registerJob('reference.lessons', draftLessons, 1);
-  onJobFailed('reference.lessons', onLessonsFailed);
+  registerJob('reference.lessons', readReference, 1);
+  onJobFailed('reference.lessons', onReferenceReadFailed);
+  registerJob('inspiration.build', buildStyle, 1);
+  onJobFailed('inspiration.build', onStyleFailed);
   // Effects that cut the person out: the matte (a local model) then FFmpeg; one at a time, they fill the CPU.
   registerJob('media.effect', applyEffect, 1);
   // One at a time: they all run on the same home PC's card.

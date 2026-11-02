@@ -51,6 +51,8 @@ export const TOOL_INFO: Record<ComputeTool, ToolInfo> = {
 
 export type ToolParams = {
   model?: string;
+  /** Transcribe: the language spoken, when Whisper's own guess is wrong. */
+  language?: string;
   fps?: number;
   /** Generation: what to make, at what size, from which seed; frames for a clip. */
   prompt?: string;
@@ -66,7 +68,7 @@ export function commandFor(tool: ComputeTool, files: Record<string, string>, par
   const script = (name: string) => `${m.scriptsDir}/${name}`;
   switch (tool) {
     case 'transcribe':
-      return { bin: m.whisperPython, args: [script('transcribe.py'), files.audio, '--out', files.json, '--model', params.model ?? 'small'] };
+      return { bin: m.whisperPython, args: [script('transcribe.py'), files.audio, '--out', files.json, '--model', params.model ?? 'small', ...(params.language ? ['--language', params.language] : [])] };
     case 'separate':
       return { bin: m.toolsPython, args: [script('separate.py'), files.audio, '--vocals', files.vocals, '--rest', files.rest] };
     case 'matte':

@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { basename, dirname } from 'node:path';
 import { z } from 'zod';
-import { deleteReference, getReference, listReferences, ownMeasures, queueReference, redraftLessons, referenceFrame, retryReference } from '../knowledge/references';
+import { deleteReference, getReference, getStyle, listReferences, markReference, ownMeasures, queueReference, queueStyle, referenceFrame, rereadReference, retryReference, saveStyle } from '../knowledge/references';
 
-/** References on the Knowledge page: videos measured to learn from (server/src/knowledge/references.ts). */
+/** References on the Knowledge page: videos that moved me, read for their ingredients; a page's style from my marks. */
 export async function referenceRoutes(app: FastifyInstance) {
   app.get('/api/references', async () => listReferences());
 
@@ -16,7 +16,24 @@ export async function referenceRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>('/api/references/:id/retry', async (req) => retryReference(req.params.id));
 
-  app.post<{ Params: { id: string } }>('/api/references/:id/redraft', async (req) => redraftLessons(req.params.id));
+  app.post<{ Params: { id: string } }>('/api/references/:id/redraft', async (req) => rereadReference(req.params.id));
+
+  // My marks: what moved me, each ingredient wanted or not, the page it's for.
+  app.patch<{ Params: { id: string } }>('/api/references/:id', async (req) => {
+    const b = z
+      .object({
+        note: z.string().max(2000).optional(),
+        workspaceId: z.string().max(64).nullable().optional(),
+        ingredients: z.array(z.object({ id: z.string().max(32), mark: z.enum(['want', 'skip']).nullable().optional(), note: z.string().max(500).optional() })).max(20).optional(),
+      })
+      .parse(req.body);
+    return markReference(req.params.id, b);
+  });
+
+  // A page's style, written from its references and my marks.
+  app.get<{ Params: { workspaceId: string } }>('/api/styles/:workspaceId', async (req) => getStyle(req.params.workspaceId));
+  app.put<{ Params: { workspaceId: string } }>('/api/styles/:workspaceId', async (req) => saveStyle(req.params.workspaceId, z.object({ body: z.string().max(8000) }).parse(req.body).body));
+  app.post<{ Params: { workspaceId: string } }>('/api/styles/:workspaceId/build', async (req) => queueStyle(req.params.workspaceId));
 
   app.delete<{ Params: { id: string } }>('/api/references/:id', async (req) => {
     await deleteReference(req.params.id);

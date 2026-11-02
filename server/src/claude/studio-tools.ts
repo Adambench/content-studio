@@ -67,6 +67,7 @@ const clipShape = z.object({
   focusX: z.number().min(0).max(1).optional().describe('Reframe: horizontal position of the subject, 0 = left, 1 = right'),
   focusY: z.number().min(0).max(1).optional(),
   zoom: z.number().min(1).max(3).optional().describe('1 = fill the frame; 1.1–1.2 is a punch-in'),
+  fit: z.enum(['fill', 'whole']).optional().describe('fill = crop to fill the frame (people); whole = show all of a wide picture over a blurred copy of itself (games, screens, anything with text or a HUD near its edges)'),
   volume: z.number().min(0).max(2).optional().describe('Clip sound, 0 = muted'),
   transition: z
     .object({

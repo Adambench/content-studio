@@ -11,7 +11,7 @@ import type { Campaign, CampaignDetail } from '@shared/campaigns';
 import type { ResearchOverview } from '@shared/research';
 import type { IdeaDetail, IdeaNode } from '@shared/ideas';
 import type { KnowledgeRule } from '@shared/knowledge';
-import type { OwnMeasures, ReferenceVideo } from '@shared/references';
+import type { OwnMeasures, PageStyle, ReferenceVideo } from '@shared/references';
 import type { Toolbox } from '@shared/toolbox';
 import type { SubmissionsSyncState } from './types';
 import type { ReviewClip } from '@shared/clipping';
@@ -87,6 +87,7 @@ export const keys = {
   ai: ['ai'] as const,
   knowledge: ['knowledge'] as const,
   references: ['references'] as const,
+  style: (wid: string) => ['style', wid] as const,
   ownMeasures: (wid: string | null) => ['own-measures', wid ?? 'all'] as const,
   toolbox: ['toolbox'] as const,
 };
@@ -139,6 +140,8 @@ export const useSubmissionsSync = () =>
 export const useKnowledge = () => useQuery({ queryKey: keys.knowledge, queryFn: () => api<KnowledgeRule[]>('/knowledge') });
 /** Videos measured to learn from (Knowledge → References). */
 export const useReferences = () => useQuery({ queryKey: keys.references, queryFn: () => api<ReferenceVideo[]>('/references') });
+/** A page's style, written from its references and my marks. */
+export const useStyle = (wid: string | null) => useQuery({ queryKey: keys.style(wid ?? ''), queryFn: () => api<PageStyle>(`/styles/${wid}`), enabled: !!wid });
 /** The same measures from my own latest edits (one page's, or all). */
 export const useOwnMeasures = (wid: string | null) =>
   useQuery({ queryKey: keys.ownMeasures(wid), queryFn: () => api<OwnMeasures>(`/references/own${wid ? `?workspaceId=${wid}` : ''}`), staleTime: 60_000 });

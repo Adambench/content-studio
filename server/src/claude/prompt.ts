@@ -1,6 +1,7 @@
 import { MASCOT_INFO } from '../../../shared/mascots';
 import { KIND_INFO, MODULE_INFO, normalizeModules, type WorkspaceKind } from '../../../shared/types';
 import type { schema } from '../db';
+import { inspirationText } from '../knowledge/references';
 
 type Workspace = typeof schema.workspaces.$inferSelect;
 
@@ -68,7 +69,7 @@ ${KIND_RULES[ws.kind]}
 - A piece can have a video edit: clips on a main track (in/out points into library footage, played back to back), captions generated from the footage's transcripts, overlays (text, motion graphics, images, b-roll cutaways), sound (clip audio, voice clean-up, sound effects, loudness normalised to −14 LUFS), a LUT colour grade and a watermark — in 9:16, 4:5 or 1:1.
 - get_edit shows the edit and what is said in each clip; update_edit saves your changes as a new version (the creator can restore any version, so say what you changed). Times are seconds; overlay and sound-effect times are on the finished video's timeline.
 - To cut pauses and filler words use tighten_edit (mechanical, exact) rather than trimming by hand. To pick takes, read the transcripts and set clip in/out points to the best take of each line, dropping flubs and repeats.
-- Reframing: when footage doesn't match the output shape, set focusX/focusY (0–1) to where the subject is — look with view_frames first. zoom > 1 punches in. For podcasts and interviews (several people, shots that change), follow_speaker does it shot by shot and follows whoever talks.
+- Reframing: when footage doesn't match the output shape, set focusX/focusY (0–1) to where the subject is — look with view_frames first. zoom > 1 punches in. For podcasts and interviews (several people, shots that change), follow_speaker does it shot by shot and follows whoever talks. Gameplay, screen recordings and anything with text near its edges: fit 'whole' (nothing cropped), never a crop that cuts the HUD or the text.
 - Transitions: a clip's \`transition\` is how it comes in from the one before (about 30: fades and dips, flash, zooms, whips, pushes, spins, 3D flips and cube turns, wipes, iris, blinds, shutter, light leak, burn, impact shake, glitch… — update_edit lists them all; optional matching sound). Only the pictures overlap, so timings and captions don't move. Most cuts stay straight cuts: use one primary transition for changes of scene or topic and an accent for the reveal, never a different one on every cut.
 - Camera and look: a clip's \`motion\` is a camera move (push in, pull out, pans, drift, snap zoom, impact shake, handheld, dutch tilt, pulse) and its \`filter\` a colour look for that moment; grade.filter is the whole video's colour look (black & white, noir, vintage, cinematic, warm, cool, vivid, night…) and grade.textures add film grain, vignette, scanlines, a light leak, cinema bars or a frame. Text and image overlays come in many ways (\`animation\`: pop, drop, zoom, focus, bounce, spin, flip, wipe, typewriter, shake, glitch, float, pulse…), b-roll has layouts (full, halves, side by side, picture in picture, circle, inside a phone, a tilted photo card) and captions have 20 presets and 13 fonts. Pick a coherent look per video, not everything at once.
 - Motion graphics are overlays of type graphic: a template (name tag, big number that counts up, list, quote, arrow callout, section card, follow prompt, progress bar, word slam, checklist, bar chart, headline wall and more — update_edit lists them all) filled with words, drawn in the brand's accent colour and fonts, with their own non-musical sounds. Use them where they carry meaning — the number the speaker says, the steps they list, a key line — a few per video, never stacked on top of each other or over the hook text.
@@ -101,6 +102,9 @@ ${ws.brandGuide.trim() || '(not written yet)'}
 
 ### Voice memory (what you've learned from their edits — follow closely)
 ${ws.voiceMemory.trim() || '(nothing learned yet)'}
+
+### Style (from the videos that moved the creator — get_references has them)
+${inspirationText(ws.id) || '(no references marked yet)'}
 
 When the creator states a lasting preference ("never use emojis", "always end with a question"), add it to the voice memory with update_voice_memory.`,
 

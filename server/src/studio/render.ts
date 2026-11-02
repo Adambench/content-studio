@@ -188,7 +188,11 @@ export async function renderJob({ renderId }: { renderId: string }) {
     const brolls = spec.overlays.map((o, i) => ({ o, i })).filter((x) => x.o.type === 'broll');
     const total = spec.clips.length + brolls.length;
     let done = 0;
-    const picture = async (m: MediaRow, name: string, cut: { start: number; duration: number; zoom: number; audio: boolean; before?: number; after?: number }): Promise<ComposeSource> => {
+    const picture = async (
+      m: MediaRow,
+      name: string,
+      cut: { start: number; duration: number; zoom: number; whole?: { focusX: number; focusY: number } | null; audio: boolean; before?: number; after?: number; fadeIn?: number; fadeOut?: number },
+    ): Promise<ComposeSource> => {
       if (abort.signal.aborted) throw new Error('cancelled');
       progress(0.05 + 0.25 * (done / total), `Preparing footage ${done + 1} of ${total}`);
       done++;
@@ -204,14 +208,24 @@ export async function renderJob({ renderId }: { renderId: string }) {
       const from = Math.max(0, cut.start - (cut.before ?? 0));
       const fileEnd = info.durationMs ? info.durationMs / 1000 : Infinity;
       const to = Math.min(fileEnd, cut.start + cut.duration + (cut.after ?? 0));
-      await cutSegment({ file: mediaPath(m), out: join(dir, 'media', `${name}.mp4`), info, start: from, duration: to - from, zoom: cut.zoom, audio: cut.audio && info.hasAudio, box, lut, cwd: dir, signal: abort.signal });
-      return { src: `media/${name}.mp4`, mediaStart: Math.round((cut.start - from) * 1000) / 1000, duration: to - from, silent: !info.hasAudio };
+      const fades = cut.fadeIn || cut.fadeOut ? { at: cut.start - from, length: cut.duration, fadeIn: cut.fadeIn ?? 0, fadeOut: cut.fadeOut ?? 0 } : null;
+      await cutSegment({ file: mediaPath(m), out: join(dir, 'media', `${name}.mp4`), info, start: from, duration: to - from, zoom: cut.zoom, whole: cut.whole, audio: cut.audio && info.hasAudio, fades, box, lut, cwd: dir, signal: abort.signal });
+      return { src: `media/${name}.mp4`, mediaStart: Math.round((cut.start - from) * 1000) / 1000, duration: to - from, silent: !info.hasAudio, framed: !!cut.whole };
     };
     const clipSources: ComposeSource[] = [];
     const handles = transitionHandles(spec);
     for (const [i, clip] of spec.clips.entries()) {
       const m = byId.get(clip.mediaId);
-      clipSources[i] = m ? await picture(m, `c${i}`, { start: clip.in, duration: clipLength(clip), zoom: clip.zoom, audio: clip.volume > 0, ...handles[i] }) : null;
+      const whole = clip.fit === 'whole' && m?.kind === 'video' ? { focusX: clip.focusX, focusY: clip.focusY } : null;
+      // The sound fades a hair at every real cut (a shot running straight on into the next, the same file, doesn't),
+      // and a little longer where the video ends.
+      const prev = spec.clips[i - 1];
+      const next = spec.clips[i + 1];
+      const joinedIn = !!prev && prev.mediaId === clip.mediaId && Math.abs(prev.out - clip.in) < 0.02;
+      const joinedOut = !!next && next.mediaId === clip.mediaId && Math.abs(clip.out - next.in) < 0.02;
+      const fadeIn = joinedIn ? 0 : 0.012;
+      const fadeOut = !next ? 0.12 : joinedOut ? 0 : 0.012;
+      clipSources[i] = m ? await picture(m, `c${i}`, { start: clip.in, duration: clipLength(clip), zoom: clip.zoom, whole, audio: clip.volume > 0, fadeIn, fadeOut, ...handles[i] }) : null;
     }
     const brollSources: ComposeSource[] = [];
     for (const { o, i } of brolls) {

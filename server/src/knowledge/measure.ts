@@ -175,6 +175,26 @@ export function bedShare(levels: number[]) {
   return on / windows;
 }
 
+/**
+ * Voice with no words: the share of the pauses between words (half a second or more, their edges left out) where the
+ * voice track stays well above silence: humming, voices without words, a vocal bed. Levels are 10 ms apart.
+ */
+export function voiceInPauses(levels: number[], words: { start: number; end: number }[]) {
+  const gaps: [number, number][] = [];
+  for (let i = 1; i < words.length; i++) if (words[i].start - words[i - 1].end >= 0.5) gaps.push([words[i - 1].end + 0.15, words[i].start - 0.15]);
+  let on = 0;
+  let all = 0;
+  for (const [a, b] of gaps)
+    for (let t = a; t + 0.1 <= b; t += 0.1) {
+      const part = levels.slice(Math.floor(t * 100), Math.floor(t * 100) + 10);
+      if (!part.length) continue;
+      const rms = 10 * Math.log10(part.reduce((x, v) => x + 10 ** (v / 10), 0) / part.length);
+      if (rms > -45) on++;
+      all++;
+    }
+  return all >= 10 ? Math.round((on / all) * 100) / 100 : null;
+}
+
 /** A sound lands on a change when it's from 0.12 s before to 0.25 s after it (as the quality score counts). */
 const onChange = (sound: number, change: number) => sound >= change - 0.12 && sound <= change + 0.25;
 
@@ -188,6 +208,8 @@ export type MeasureInput = {
   rest: number[] | null;
   /** The whole sound, when `rest` is null. */
   mix: number[] | null;
+  /** The voice alone (Demucs' vocals), for what sounds in the pauses between words; null without it. */
+  voice?: number[] | null;
   words: { start: number; end: number; text: string }[];
 };
 
@@ -218,6 +240,7 @@ export function measure(input: MeasureInput): ReferenceMeasures {
     soundsOnChanges: sounds.length ? r2(sounds.filter((s) => changes.some((c) => onChange(s, c))).length / sounds.length) : null,
     soundsFrom: input.rest ? 'rest' : input.mix ? 'pauses' : 'none',
     background: bed === null ? null : bed > 0.6 ? 'bed' : bed > 0.3 ? 'some' : 'none',
+    voiceBed: input.voice ? voiceInPauses(input.voice, words) : null,
     beat,
     words: words.length,
     wordsPerSecond: words.length && seconds > 0 ? r1(words.length / seconds) : null,

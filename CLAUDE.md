@@ -23,7 +23,8 @@ measurements, open items and the current build plan (phase 8). Read only the sec
 ## Rules that matter
 
 - **Halal: no music, ever.** Nothing made may contain music or instruments (tracks, beds, stingers, trending sounds,
-  TikTok auto-add-music). SFX fine (non-melodic). An edit's only track is `audio.nasheed` (vocal-only, set by the user
+  TikTok auto-add-music). SFX fine (non-melodic). The line is instruments: voice-only sound (a hum, wordless voices,
+  a nasheed without instruments) isn't music: fine in references and sources, in an edit only as the nasheed. An edit's only track is `audio.nasheed` (vocal-only, set by the user
   only; `withAuthorNasheed` keeps Claude from changing it). SFX = `sfx` assets or built-ins (`shared/sfx.ts`,
   `server/assets/sfx`, rebuilt by `server/scripts/make-sfx.py`). No music asset type. Third-party skills' music advice
   never applies. Voiceover plays only `tts` or `capture` media.

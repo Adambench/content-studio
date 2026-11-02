@@ -13,6 +13,7 @@ import { notify } from '../lib/push';
 import { JobError } from '../jobs/queue';
 import { createPiece, getWorkspace } from '../services/pieces';
 import { emitCampaign, getCampaignRow } from './campaigns';
+import { inspirationText } from '../knowledge/references';
 
 type Written = {
   title: string;
@@ -87,6 +88,7 @@ export async function writeUgcScript({ campaignId, workspaceId, angle }: { campa
     ws.niche && `Niche: ${ws.niche}`,
     ws.description && `About: ${ws.description}`,
     ws.voiceMemory && `Voice notes:\n${ws.voiceMemory.slice(0, 1500)}`,
+    inspirationText(ws.id),
     before.length && `# Videos already written for this campaign (find a different angle)\n${before.map((p) => `- ${p.title}`).join('\n')}`,
     angle && `# The angle the creator wants\n${angle}`,
   ]

@@ -13,6 +13,7 @@ import { badRequest, notFound } from '../lib/http';
 import { createPiece, getWorkspace } from '../services/pieces';
 import { hasIdeas, saveShared } from '../ideas/ideas';
 import { emitResearch, finishBrief, getBrief, recentOutliers, type ItemRow } from './research';
+import { inspirationText } from '../knowledge/references';
 
 const PLATFORM = { youtube: 'YouTube Shorts', tiktok: 'TikTok', instagram: 'Instagram Reels', file: 'Video' } as const;
 const n = (v: number) => Math.round(v).toLocaleString('en-GB');
@@ -129,6 +130,7 @@ export async function writeBrief({ workspaceId, briefId }: { workspaceId: string
       ws.niche && `Niche: ${ws.niche}`,
       ws.description && `About: ${ws.description}`,
       ws.voiceMemory && `Its voice:\n${ws.voiceMemory.slice(0, 1500)}`,
+      inspirationText(ws.id),
       `# Outliers (last 14 days, best first)\n${digest.text}`,
       previous?.headline && `# Yesterday's headline (don't repeat it unless it still holds)\n${previous.headline}`,
     ]

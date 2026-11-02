@@ -13,7 +13,7 @@ export const AI_TASK_INFO: Record<AiTask, { label: string; hint: string }> = {
   ugc: { label: 'UGC scripts', hint: 'Scripts for UGC videos from a campaign brief' },
   review: { label: 'Weekly review', hint: 'Reading the week’s results and suggesting what to change' },
   research: { label: 'Research', hint: 'Why outliers worked, and the daily brief' },
-  lessons: { label: 'Lessons from references', hint: 'Reading a reference video you measured and drafting rules for Knowledge' },
+  lessons: { label: 'References', hint: 'Reading a video that moved you (how it’s built, its ingredients) and writing a page’s style from your marks' },
   inbox: { label: 'Inbox filing', hint: 'Which idea a shared file belongs to' },
   ideas: { label: 'Ideas and voice', hint: 'Help on Ideas cards, fleshing out a locked-in idea, voice memos into cards, learning from your rewrites' },
   pages: { label: 'Reading pages', hint: 'Campaign rules, submissions and listings read from sites' },

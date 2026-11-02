@@ -148,6 +148,13 @@
       "when": 1793381876801,
       "tag": "0020_chief_gabe_jones",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1793656975058,
+      "tag": "0021_kind_tarantula",
+      "breakpoints": true
     }
   ]
 }

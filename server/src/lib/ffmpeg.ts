@@ -1,6 +1,7 @@
 import { execFile as execFileCb } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { promisify } from 'node:util';
+import { wholeGeometry } from '../../../shared/edit';
 import { requireBinary } from './bin';
 
 const execFile = promisify(execFileCb);
@@ -135,14 +136,36 @@ export async function cutSegment(input: {
   duration: number;
   box: { width: number; height: number };
   zoom: number;
+  /** Show all of the picture, laid out in a frame-sized file over a blurred, darkened copy of itself. */
+  whole?: { focusX: number; focusY: number } | null;
   audio: boolean;
+  /**
+   * Fades on the sound at the clip's own in and out (seconds from the file's start, and the clip's length), so a cut
+   * never clicks or leaves half a syllable: a few milliseconds each side, longer where the video ends.
+   */
+  fades?: { at: number; length: number; fadeIn: number; fadeOut: number } | null;
   lut?: { file: string; intensity: number } | null;
   cwd: string;
   signal?: AbortSignal;
 }) {
   const { info, box } = input;
-  const size = fillSize(info.width ?? box.width, info.height ?? box.height, box.width, box.height, input.zoom);
-  const base = [info.hdr && TONEMAP, `scale=${size.width}:${size.height}:flags=lanczos`, 'fps=30'].filter(Boolean).join(',');
+  let base: string;
+  if (input.whole) {
+    const sw = info.width ?? box.width;
+    const sh = info.height ?? box.height;
+    const g = wholeGeometry(sw, sh, box.width, box.height, input.whole.focusX, input.whole.focusY, input.zoom);
+    const small = { width: even(box.width / 8), height: even(box.height / 8) };
+    base = [
+      [info.hdr && TONEMAP, 'fps=30', 'split[wa][wb]'].filter(Boolean).join(','),
+      // The blur is made small and scaled up: soft, and fast.
+      `[wa]scale=${small.width}:${small.height}:force_original_aspect_ratio=increase,crop=${small.width}:${small.height},boxblur=4:2,scale=${box.width}:${box.height}:flags=bilinear,colorchannelmixer=rr=0.45:gg=0.45:bb=0.45[wbg]`,
+      `[wb]scale=${even(g.width)}:${even(g.height)}:flags=lanczos[wfg]`,
+      `[wbg][wfg]overlay=x=${Math.round(g.left)}:y=${Math.round(g.top)}`,
+    ].join(';');
+  } else {
+    const size = fillSize(info.width ?? box.width, info.height ?? box.height, box.width, box.height, input.zoom);
+    base = [info.hdr && TONEMAP, `scale=${size.width}:${size.height}:flags=lanczos`, 'fps=30'].filter(Boolean).join(',');
+  }
   let vf = `${base},format=yuv420p`;
   if (input.lut && input.lut.intensity > 0) {
     const lut = `lut3d=file=${input.lut.file}:interp=tetrahedral`;
@@ -159,6 +182,7 @@ export async function cutSegment(input: {
       '-map', '0:v:0', ...(input.audio ? ['-map', '0:a:0?'] : ['-an']),
       // A single-input graph (even with split/blend inside) is still a simple -vf graph.
       '-vf', vf,
+      ...(input.audio && input.fades ? ['-af', clipFades(input.fades)] : []),
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '15', '-g', '30', '-keyint_min', '30', '-sc_threshold', '0',
       ...(input.audio ? ['-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2'] : []),
       '-movflags', '+faststart', input.out,
@@ -166,6 +190,14 @@ export async function cutSegment(input: {
     { cwd: input.cwd, signal: input.signal },
   );
 }
+
+const clipFades = (f: { at: number; length: number; fadeIn: number; fadeOut: number }) =>
+  [
+    f.fadeIn > 0 && `afade=t=in:st=${Math.max(0, f.at).toFixed(3)}:d=${f.fadeIn.toFixed(3)}`,
+    f.fadeOut > 0 && `afade=t=out:st=${Math.max(0, f.at + f.length - f.fadeOut).toFixed(3)}:d=${f.fadeOut.toFixed(3)}`,
+  ]
+    .filter(Boolean)
+    .join(',') || 'anull';
 
 /** A photo graded with a LUT (`lut` relative to `cwd`). */
 export async function gradeImage(file: string, out: string, lut: { file: string; intensity: number }, cwd: string) {

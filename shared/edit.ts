@@ -22,6 +22,9 @@ export const EDIT_FORMATS = {
 export type EditFormat = keyof typeof EDIT_FORMATS;
 const FORMAT_IDS = Object.keys(EDIT_FORMATS) as EditFormat[];
 
+export const CLIP_FITS = ['fill', 'whole'] as const;
+export type ClipFit = (typeof CLIP_FITS)[number];
+
 /** One shot on the main track. Clips play back to back in order. */
 export type EditClip = {
   id: string;
@@ -34,6 +37,11 @@ export type EditClip = {
   focusY: number;
   /** Extra zoom on top of filling the frame; 1 = just fills it. */
   zoom: number;
+  /**
+   * `fill` crops the picture to fill the frame; `whole` shows all of it (a game, a screen, a wide shot with text in it),
+   * as wide as the frame, over a blurred, darkened copy of itself. `zoom` then grows the picture past the frame's width.
+   */
+  fit: ClipFit;
   /** Clip sound, 0 = muted, 1 = as recorded. */
   volume: number;
   /** How this clip comes in after the one before it (ignored on the first clip); null = a straight cut. */
@@ -213,6 +221,8 @@ export type TextOverlay = OverlayBase & {
   text: string;
   style: 'title' | 'label' | 'note';
   position: 'top' | 'center' | 'bottom';
+  /** Where its line sits (0–1 down the frame), when `position`'s place is taken (a watermark, a picture); null = by position. */
+  y?: number | null;
   animation: OverlayAnimation;
 };
 export type ImageOverlay = OverlayBase & {
@@ -727,6 +737,7 @@ function normalizeClip(input: Loose): EditClip | null {
     focusX: round(num(input.focusX, 0.5, 0, 1)),
     focusY: round(num(input.focusY, 0.5, 0, 1)),
     zoom: round(num(input.zoom, 1, 1, 3)),
+    fit: oneOf(input.fit, CLIP_FITS, 'fill'),
     volume: round(num(input.volume, 1, 0, 2)),
     transition: normalizeTransition(input.transition),
     motion: oneOf(input.motion, CLIP_MOTIONS, 'none'),
@@ -747,6 +758,7 @@ function normalizeOverlay(input: Loose): EditOverlay | null {
         text: input.text.slice(0, 300),
         style: oneOf(input.style, ['title', 'label', 'note'] as const, 'title'),
         position: oneOf(input.position, ['top', 'center', 'bottom'] as const, 'top'),
+        y: typeof input.y === 'number' && Number.isFinite(input.y) ? round(num(input.y, 0.15, 0.05, 0.95)) : null,
         animation,
       };
     case 'image':
@@ -1091,6 +1103,22 @@ export function splitClipAt(spec: EditSpec, time: number): EditSpec {
  * Where a source of `srcW`×`srcH` sits inside a `boxW`×`boxH` frame: scaled to fill it (times `zoom`) and shifted so the
  * focus point is as central as the edges allow. Returns pixel geometry for absolute positioning.
  */
+/**
+ * Where a source sits in the frame for a `whole` clip: as wide (or tall) as the frame allows with all of it showing,
+ * times `zoom`, in the middle; past the frame's edges (zoomed) the focus point picks what stays in view.
+ */
+export function wholeGeometry(srcW: number, srcH: number, boxW: number, boxH: number, focusX: number, focusY: number, zoom = 1) {
+  const scale = Math.min(boxW / srcW, boxH / srcH) * zoom;
+  const width = srcW * scale;
+  const height = srcH * scale;
+  const place = (size: number, box: number, focus: number) => (size <= box ? (box - size) / 2 : -Math.min(Math.max(focus * size - box / 2, 0), size - box));
+  return { width: round(width), height: round(height), left: round(place(width, boxW, focusX)), top: round(place(height, boxH, focusY)) };
+}
+
+/** A clip's geometry in the frame, whichever way it fits. */
+export const clipGeometry = (clip: Pick<EditClip, 'fit' | 'focusX' | 'focusY' | 'zoom'>, srcW: number, srcH: number, boxW: number, boxH: number) =>
+  (clip.fit === 'whole' ? wholeGeometry : fillGeometry)(srcW, srcH, boxW, boxH, clip.focusX, clip.focusY, clip.zoom);
+
 export function fillGeometry(srcW: number, srcH: number, boxW: number, boxH: number, focusX: number, focusY: number, zoom = 1) {
   const scale = Math.max(boxW / srcW, boxH / srcH) * zoom;
   const width = srcW * scale;

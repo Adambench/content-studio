@@ -1,7 +1,8 @@
-// References (phase 12 step 7): a video I paste on the Knowledge page is downloaded and measured (measure.ts, no
-// model), then read by one model call (task `lessons`), which marks its beats, its promise and payoff, and drafts a
-// few lessons as suggested Knowledge rules: approving them is my click. Two jobs, so a failed read can be tried again
-// without measuring again: `reference.measure` (yt-dlp, FFmpeg, Whisper, Demucs) then `reference.lessons`.
+// References: videos that moved me, pasted on the Knowledge page as inspiration. Each is downloaded and measured
+// (measure.ts, no model), then read by one model call (task `lessons`): how it's built, why it works, and its
+// ingredients for me to mark *want* or *not for me*. A page's style is written from those marks (job
+// `inspiration.build`, my click) and goes into every prompt that makes something for the page (`inspirationText`).
+// Jobs: `reference.measure` (yt-dlp, FFmpeg, Whisper, Demucs) then `reference.lessons` (the read; its old name).
 import { execFile as execFileCb } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rename, rm } from 'node:fs/promises';
@@ -9,9 +10,8 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { and, desc, eq } from 'drizzle-orm';
 import { editDuration, normalizeEdit, timelineWords } from '../../../shared/edit';
-import { KNOWLEDGE_TOPICS, RULE_BODY_MAX, RULE_TITLE_MAX, type KnowledgeTopic } from '../../../shared/knowledge';
 import { screenEvents } from '../../../shared/quality';
-import { BEAT_KINDS, type OwnMeasures, type ReferenceMeasures, type ReferenceRead, type ReferenceVideo } from '../../../shared/references';
+import { ASPECT_LABELS, INGREDIENT_ASPECTS, type Ingredient, type IngredientMark, type OwnMeasures, type PageStyle, type ReferenceMeasures, type ReferenceRead, type ReferenceVideo } from '../../../shared/references';
 import { KIND_INFO, type Transcript } from '../../../shared/types';
 import { askStructured, type PromptImage } from '../claude/oneshot';
 import { resolveModel } from '../claude/options';
@@ -30,15 +30,12 @@ import { downloadPost, postOf, whisper } from '../research/analyse';
 import { clipToolsInstalled } from '../services/cliptools';
 import { getWorkspace } from '../services/pieces';
 import { specMedia, specTranscripts } from '../studio/edits';
-import { createRule } from './knowledge';
 import { frameDiffs, hardCuts, measure, soundLevels } from './measure';
 
 const execFile = promisify(execFileCb);
 
 type Row = typeof schema.referenceVideos.$inferSelect;
 
-/** Topics a lesson can go under (halal is the user's own; clipping is paused). */
-const LESSON_TOPICS = KNOWLEDGE_TOPICS.filter((t): t is Exclude<KnowledgeTopic, 'halal' | 'clipping'> => t !== 'halal' && t !== 'clipping');
 /** Longer videos aren't references for shorts (and Demucs on a laptop is slow). */
 const MAX_SECONDS = 4 * 60;
 /** Frames on the contact sheet. */
@@ -47,12 +44,10 @@ const SHEET = { cols: 4, rows: 3 };
 const emitReferences = (id?: string) => emit({ type: 'changed', entity: 'references', id });
 const dirOf = (id: string) => join(config.referencesDir, id);
 
+/** An old read (from before references were inspiration) shows as unread until it's read again. */
+const readOf = (r: Row): ReferenceRead | null => (r.read && typeof (r.read as Partial<ReferenceRead>).why === 'string' ? { ...r.read, shape: r.read.shape ?? [], cautions: r.read.cautions ?? [] } : null);
+
 function toReference(r: Row): ReferenceVideo {
-  const lessons = db
-    .select({ id: schema.knowledge.id, title: schema.knowledge.title, status: schema.knowledge.status })
-    .from(schema.knowledge)
-    .where(eq(schema.knowledge.referenceId, r.id))
-    .all();
   return {
     id: r.id,
     workspaceId: r.workspaceId,
@@ -66,10 +61,11 @@ function toReference(r: Row): ReferenceVideo {
     step: r.step,
     error: r.error,
     measures: r.measures,
-    read: r.read,
+    read: readOf(r),
     lines: r.lines,
     hasFrames: r.hasFrames,
-    lessons,
+    ingredients: readOf(r) ? r.ingredients : [],
+    note: r.note,
     createdAt: r.createdAt,
     measuredAt: r.measuredAt,
   };
@@ -126,15 +122,11 @@ export function retryReference(id: string) {
   return getReference(id);
 }
 
-/** Read it again and draft new lessons: its suggestions still waiting go (approved ones stay). */
-export function redraftLessons(id: string) {
+/** Read it again (my marks stay with the ingredients of the same name). */
+export function rereadReference(id: string) {
   const r = getRow(id);
   if (!r.measures) throw badRequest('It hasn’t been measured yet.');
   if (r.status === 'measuring' || r.status === 'drafting' || r.status === 'queued') return getReference(id);
-  db.delete(schema.knowledge)
-    .where(and(eq(schema.knowledge.referenceId, id), eq(schema.knowledge.status, 'proposed')))
-    .run();
-  emit({ type: 'changed', entity: 'knowledge' });
   update(id, { status: 'drafting', step: 'Waiting to read it', error: null });
   enqueue('reference.lessons', { referenceId: id }, { maxAttempts: 2 });
   return getReference(id);
@@ -146,8 +138,10 @@ export async function deleteReference(id: string) {
   db.delete(schema.knowledge)
     .where(and(eq(schema.knowledge.referenceId, id), eq(schema.knowledge.status, 'proposed')))
     .run();
+  const r = getRow(id);
   db.delete(schema.referenceVideos).where(eq(schema.referenceVideos.id, id)).run();
   await rm(dirOf(id), { recursive: true, force: true });
+  for (const w of stylePages(r.workspaceId)) emitStyle(w);
   emit({ type: 'changed', entity: 'knowledge' });
   emitReferences(id);
 }
@@ -186,15 +180,19 @@ async function saveFrames(file: string, seconds: number, dir: string, work: stri
   return { times, tiles };
 }
 
-/** What's said: Whisper (its word times are the ones measured against), else YouTube's captions. */
+/**
+ * What's said: Whisper (its word times are the ones measured against), else YouTube's captions. The pages are in
+ * English (with Arabic in places): a language Whisper guessed wrong from a short opening is heard again as English.
+ */
 async function transcribe(file: string, url: string, platform: Row['platform'], work: string): Promise<Transcript | null> {
-  const t = await whisper(file, work).catch(() => null);
+  let t = await whisper(file, work).catch(() => null);
+  if (t && !['en', 'ar'].includes(t.language)) t = (await whisper(file, work, 'en').catch(() => null)) ?? t;
   if (t) return t;
   return platform === 'youtube' ? youtubeCaptions(url).catch(() => null) : null;
 }
 
-/** The `reference.measure` job. */
-export async function measureReference({ referenceId }: { referenceId: string }) {
+/** The `reference.measure` job (then the read, unless `measureOnly`). */
+export async function measureReference({ referenceId, measureOnly }: { referenceId: string; measureOnly?: boolean }) {
   const r = getRow(referenceId);
   if (r.measures) return;
   const step = (text: string) => update(referenceId, { status: 'measuring', step: text });
@@ -227,6 +225,7 @@ export async function measureReference({ referenceId }: { referenceId: string })
     // The sound effects are found in what isn't voice: Demucs splits it out; with nothing said, it's all of it.
     let rest: number[] | null = null;
     let mix: number[] | null = null;
+    let voice: number[] | null = null;
     if (p.hasAudio) {
       if (!words.length) rest = await soundLevels(file);
       else if (clipToolsInstalled()) {
@@ -235,13 +234,14 @@ export async function measureReference({ referenceId }: { referenceId: string })
         await execFile(requireBinary('ffmpeg'), ['-y', '-v', 'error', '-nostdin', '-i', file, '-vn', '-ar', '44100', '-c:a', 'pcm_s16le', wav], { maxBuffer: 10 * 1024 * 1024 });
         await runTool('separate', { audio: wav, vocals: join(work, 'voice.wav'), rest: join(work, 'rest.wav') }, {}, { timeoutMs: 20 * 60_000, track: `reference:${referenceId}` });
         rest = await soundLevels(join(work, 'rest.wav'));
+        voice = await soundLevels(join(work, 'voice.wav'));
       } else mix = await soundLevels(file);
     }
     step('Measuring the sound');
-    const measures = measure({ seconds, width: p.width ?? 0, height: p.height ?? 0, diffs, cuts, rest, mix, words });
+    const measures = measure({ seconds, width: p.width ?? 0, height: p.height ?? 0, diffs, cuts, rest, mix, voice, words });
     const lines = (transcript?.segments ?? []).map((s) => ({ at: Math.round(s.start * 10) / 10, text: s.text.trim() })).filter((l) => l.text);
     update(referenceId, { measures, lines, measuredAt: now(), status: 'drafting', step: 'Waiting to read it', error: null });
-    enqueue('reference.lessons', { referenceId }, { maxAttempts: 2 });
+    if (!measureOnly) enqueue('reference.lessons', { referenceId }, { maxAttempts: 2 });
   } finally {
     await rm(work, { recursive: true, force: true });
   }
@@ -255,74 +255,55 @@ export function onMeasureFailed({ referenceId }: { referenceId: string }, messag
   }
 }
 
-const READ_SCHEMA = {
+const INGREDIENT_ITEMS = {
   type: 'object',
   additionalProperties: false,
-  required: ['summary', 'hook', 'promise', 'payoff', 'payoffAt', 'beats', 'motion', 'sound', 'cautions', 'lessons'],
+  required: ['aspect', 'name', 'what', 'why', 'at'],
   properties: {
-    summary: { type: 'string', description: 'What the video is and how it is made, in one or two sentences' },
-    hook: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['picture', 'words', 'text', 'why'],
-      properties: {
-        picture: { type: 'string', description: 'What the first frame shows and what moves in the first 1–3 s' },
-        words: { type: 'string', description: 'What is said in the first 3 s, briefly (quote at most a few words)' },
-        text: { type: 'string', description: 'The text on screen at the start; empty if none' },
-        why: { type: 'string', description: 'Why it stops the scroll, by the rules' },
-      },
-    },
-    promise: { type: 'string', description: 'The promise the opening makes: what the viewer stays for' },
-    payoff: { type: 'string', description: 'What pays the promise off; empty if it never does' },
-    payoffAt: { type: ['number', 'null'], description: 'The second the payoff lands, or null' },
-    beats: {
-      type: 'array',
-      maxItems: 10,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['at', 'kind', 'what'],
-        properties: { at: { type: 'number', description: 'Seconds' }, kind: { type: 'string', enum: [...BEAT_KINDS] }, what: { type: 'string', description: 'One line' } },
-      },
-      description: 'The beats in order: hook, setup, build, re-hooks, payoff, call to action, end',
-    },
-    motion: { type: 'string', description: 'How the picture moves and changes, from the measured numbers and the frames: cuts, animation, graphics, kinetic type' },
-    sound: { type: 'string', description: 'Voice and sound effects from the measured hits; if it has music, only say that it has music (never copied)' },
-    cautions: { type: 'array', items: { type: 'string' }, description: 'Music, anything haram, claims to check; empty if none' },
-    lessons: {
-      type: 'array',
-      maxItems: 4,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['topic', 'title', 'body', 'why'],
-        properties: {
-          topic: { type: 'string', enum: [...LESSON_TOPICS] },
-          title: { type: 'string', description: `The rule's name, at most ${RULE_TITLE_MAX} characters` },
-          body: { type: 'string', description: 'The rule, as an instruction for future videos: 1–4 sentences, with the measured numbers that make it concrete' },
-          why: { type: 'string', description: 'What in this video shows it: the times and the numbers' },
-        },
-      },
-      description: 'Rules worth adding to the knowledge base: only what is new or sharper than the rules already there; none is fine',
-    },
+    aspect: { type: 'string', enum: [...INGREDIENT_ASPECTS] },
+    name: { type: 'string', description: 'A few words a person would use, e.g. "Calm illustrated night scenes", "One question carried to the end"' },
+    what: { type: 'string', description: 'How this video does it, concretely: what the frames show, the times, the measured numbers. 1–2 sentences' },
+    why: { type: 'string', description: 'What it does for the viewer. One sentence' },
+    at: { type: ['number', 'null'], description: 'The second it shows best, or null' },
   },
 };
 
-type ReadOut = Omit<ReferenceRead, 'beats'> & { beats: ReferenceRead['beats']; lessons: { topic: string; title: string; body: string; why: string }[] };
+const READ_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['summary', 'why', 'shape', 'ingredients', 'cautions'],
+  properties: {
+    summary: { type: 'string', description: 'What the video is and how it is made, in one or two sentences' },
+    why: { type: 'string', description: 'Why it moves people: the heart of it, 1–3 sentences' },
+    shape: {
+      type: 'array',
+      maxItems: 7,
+      items: { type: 'object', additionalProperties: false, required: ['at', 'what'], properties: { at: { type: 'number', description: 'Seconds' }, what: { type: 'string', description: 'One line' } } },
+      description: 'How it is built over time, 3–7 steps: how it opens, what it builds, where it turns, how it closes and how the end answers the start',
+    },
+    ingredients: { type: 'array', minItems: 4, maxItems: 10, items: INGREDIENT_ITEMS, description: 'The distinct choices its maker made, each one the creator can take or leave on its own' },
+    cautions: { type: 'array', items: { type: 'string' }, description: 'Only what is real and matters; empty is fine' },
+  },
+};
 
-const INSTRUCTIONS = `You study a short vertical video the creator chose as a reference, to learn how it is made and what their own videos should take from it. You get the numbers measured from it (trust them; never invent numbers or times), what is said with times, its first frame, and a contact sheet of 12 frames across it.
+type ReadOut = { summary: string; why: string; shape: { at: number; what: string }[]; ingredients: Omit<Ingredient, 'id' | 'mark' | 'note'>[]; cautions: string[] };
 
-- The content model: every video has a hook (a promise in the first 1–3 s), content that builds toward it and a payoff near the end. Name the promise, the payoff and the second it lands, and mark the beats with their times.
-- Lessons become rules in the creator's knowledge base, used for every video they make: write them as instructions, concrete (numbers, timings, moves), about how to make videos, never about this video's topic or its words. Only add what the rules above don't already say, or say it sharper with the numbers. Fewer, better lessons; none if it teaches nothing new.
-- Explain, don't copy: never write a script from it or reuse its lines.
-- The creator never uses music or instruments. If it has music (a beat, a bed), say so in cautions and in the sound notes, and never suggest music, beats or anything synced to music. Sound lessons are about non-melodic sound effects and the voice only. Flag anything haram it shows or promotes.
-- Plain, specific language.`;
+const INSTRUCTIONS = `The creator dropped this short video on the Knowledge page because it moved them: it's inspiration for their own videos. You study how it was built, so their videos can carry what makes it powerful without copying it. You get the numbers measured from it (trust them; never invent numbers or times), what is said with times, its first frame, and a contact sheet of 12 frames across it.
+
+- Describe, never grade. The creator chose it because it works for them: never judge it against rules, never say what it lacks or how to fix it. Say what it does and why it lands.
+- \`why\`: the heart of it, what makes someone stop, feel and remember it.
+- \`shape\`: how it is built over time: how it opens, what it builds, where it turns, how it closes, and how the end answers the start.
+- \`ingredients\`: 6–10 distinct choices its maker made, each one the creator can take or leave on its own: the idea or angle, how the story is told, the visual style and kind of imagery, the production quality (sharpness, polish, consistency, how finished it looks), the voice and delivery, the text on screen and captions, the pace and motion, the sound, the feel it leaves. Keep separate things separate, so liking one never means taking another: the look of a clip and the message in it are two ingredients.
+- When the message itself is something to leave (an unsourced claim, blame of a whole group, anything haram), make it its own ingredient, say so plainly in it, and add a caution.
+- Sound: voice-only backgrounds (humming, voices, a vocal drone, a nasheed with no instruments) are fine for this creator; only musical instruments are out. The measurements can't tell an instrument from an ambience or a hum, so never say a bed "may be music". Mention instruments only when a steady beat was measured.
+- \`cautions\`: only what is real and matters: something haram shown or promoted, a Qur'an or hadith quote with no reference on screen (to check before taking anything from it), a claim that needs a source. Not a list of what the video "should" have done.
+- Never write a script from it or reuse its lines. Plain, specific language.`;
 
 const pct = (n: number | null) => (n === null ? '—' : `${Math.round(n * 100)} %`);
 const times = (xs: number[], max = 60) => (xs.length ? xs.slice(0, max).join(', ') + (xs.length > max ? ` … (${xs.length} in all)` : '') : 'none');
 
-/** The measured numbers as the model reads them, with the page's own videos beside them. */
-function measuredText(m: ReferenceMeasures, own: OwnMeasures | null) {
+/** The measured numbers as the model reads them. */
+function measuredText(m: ReferenceMeasures) {
   const per2: string[] = [];
   for (let t = 0; t < m.seconds; t += 2) {
     const inWin = (xs: number[]) => xs.filter((x) => x >= t && x < t + 2).length;
@@ -330,42 +311,35 @@ function measuredText(m: ReferenceMeasures, own: OwnMeasures | null) {
     const level = motion.length ? motion.reduce((a, b) => a + b, 0) / motion.length : 0;
     per2.push(`${t}–${t + 2} s: ${inWin(m.changes)} changes, ${inWin(m.sounds)} sounds, motion ${level.toFixed(2)}`);
   }
+  const under =
+    m.background === 'bed' ? 'Something runs under the voice most of the time (an ambience, a pad, a hum or instruments: the numbers can’t tell which).' : m.background === 'some' ? 'Something runs under the voice part of the time (the numbers can’t tell what).' : '';
+  const vocal = m.voiceBed != null && m.voiceBed >= 0.4 ? ` The voice track keeps sounding in ${pct(m.voiceBed)} of the pauses between words: humming or voices without words.` : '';
   return [
     `Length ${m.seconds} s, ${m.width}×${m.height}.`,
     `Picture: ${m.cuts.length} hard cuts (${m.cutsPerSecond} a second) at ${times(m.cuts)}. ${m.changes.length} changes on screen (cuts, and things starting to move): ${m.changesPer10} per 10 s, at ${times(m.changes)}. The picture moves ${pct(m.moving)} of the time; the longest still stretch is ${m.longestStill.seconds} s from ${m.longestStill.at} s.`,
     `Sound: ${
       m.soundsFrom === 'none'
         ? 'no sound to measure.'
-        : `${m.sounds.length} sound-effect hits (${m.soundsPer10} per 10 s${m.soundsFrom === 'pauses' ? ', only counted in the pauses between words: the voice couldn’t be split out' : ''}) at ${times(m.sounds)}. ${pct(m.soundOnChange)} of the changes have a sound on their frame; ${pct(m.soundsOnChanges)} of the sounds land on a change.`
-    }${m.beat ? ` It has music: a steady beat every ${m.beat} s.` : ''}${m.background === 'bed' ? ' A bed runs under the voice most of the time (music or ambience).' : m.background === 'some' ? ' Something runs under the voice part of the time (music or ambience).' : ''}`,
+        : `${m.sounds.length} sound-effect hits (${m.soundsPer10} per 10 s${m.soundsFrom === 'pauses' ? ', only counted in the pauses between words' : ''}) at ${times(m.sounds)}. ${pct(m.soundOnChange)} of the changes have a sound on their frame.`
+    }${m.beat ? ` A steady beat every ${m.beat} s (percussion or instruments).` : ''} ${under}${vocal}`,
     `Speech: ${m.words ? `${m.words} words, ${m.wordsPerSecond} a second, the first at ${m.firstWordAt} s. First 3 s: “${m.firstWords}”` : 'nothing said.'}`,
-    `First 3 s: ${m.hook.changes} changes (the first at ${m.hook.firstChangeAt ?? '—'} s), ${m.hook.sounds} sounds.`,
     `Every 2 s:\n${per2.join('\n')}`,
-    own?.videos
-      ? `The creator's own latest ${own.videos} edits, measured the same way: ${own.changesPer10 ?? '—'} changes per 10 s, longest stretch with nothing changing ${own.longestStill ?? '—'} s, ${pct(own.soundOnChange)} of moves with a sound on their frame, first word at ${own.firstWordAt ?? '—'} s.`
-      : '',
   ]
     .filter(Boolean)
     .join('\n\n');
 }
 
-/** The `reference.lessons` job: one model call, then the lessons as suggested rules. */
-export async function draftLessons({ referenceId }: { referenceId: string }) {
+const pageLine = (w: { name: string; kind: keyof typeof KIND_INFO; niche: string }) => `${w.name} (${KIND_INFO[w.kind].label.toLowerCase()})${w.niche ? ` — ${w.niche}` : ''}`;
+
+/** The read job (`reference.lessons`, its old name): one model call, how it's built and its ingredients for my marks. */
+export async function readReference({ referenceId }: { referenceId: string }) {
   const r = getRow(referenceId);
   if (!r.measures) throw new JobError('It hasn’t been measured.', { retry: false });
   await waitForUsage('lessons');
-  update(referenceId, { status: 'drafting', step: 'Reading it and drafting lessons' });
+  update(referenceId, { status: 'drafting', step: 'Reading how it’s made' });
   const m = r.measures;
   const ws = r.workspaceId ? getWorkspace(r.workspaceId) : null;
-  const pages = ws
-    ? `${ws.name} (${KIND_INFO[ws.kind].label.toLowerCase()})${ws.niche ? ` — ${ws.niche}` : ''}`
-    : db
-        .select()
-        .from(schema.workspaces)
-        .all()
-        .map((w) => `${w.name} (${KIND_INFO[w.kind].label.toLowerCase()})${w.niche ? ` — ${w.niche}` : ''}`)
-        .join('; ');
-  const own = await ownMeasures(r.workspaceId).catch(() => null);
+  const pages = ws ? `The page ${pageLine(ws)}.` : `Every page: ${db.select().from(schema.workspaces).all().map(pageLine).join('; ') || '(none yet)'}.`;
   const images: PromptImage[] = [];
   for (const name of ['first', 'sheet'] as const) {
     const file = join(dirOf(referenceId), `${name}.jpg`);
@@ -375,11 +349,11 @@ export async function draftLessons({ referenceId }: { referenceId: string }) {
   const sheetTimes = Array.from({ length: n }, (_, i) => Math.round((((i + 0.5) * m.seconds) / n) * 10) / 10);
   const out = await askStructured<ReadOut>({
     task: 'lessons',
-    system: [playbook('content-model', 'hooks', 'retention', 'packaging', 'motion', 'sound-design', 'halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'),
+    system: [playbook('halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'),
     prompt: [
-      `# Who learns from it\n${ws ? `The page ${pages}.` : `Every page: ${pages || '(none yet)'}.`}`,
-      `# The reference\n${[r.platform, r.channel && `by ${r.channel}`, r.views !== null && `${r.views.toLocaleString('en-GB')} views`].filter(Boolean).join(' · ')}${r.title ? `\nTitle or caption: “${r.title.slice(0, 400)}”` : ''}`,
-      `# Measured\n${measuredText(m, own)}`,
+      `# Inspiration for\n${pages}`,
+      `# The video\n${[r.platform, r.channel && `by ${r.channel}`, r.views !== null && `${r.views.toLocaleString('en-GB')} views`].filter(Boolean).join(' · ')}${r.title ? `\nTitle or caption: “${r.title.slice(0, 400)}”` : ''}${r.note ? `\nWhat the creator says moved them: “${r.note.slice(0, 600)}”` : ''}`,
+      `# Measured\n${measuredText(m)}`,
       `# What's said\n${r.lines.length ? r.lines.map((l) => `[${l.at} s] ${l.text}`).join('\n').slice(0, 8000) : '(nothing)'}`,
       `# The pictures\n${images.length === 2 ? `The first frame, then the contact sheet: 12 frames left to right, top to bottom, at ${sheetTimes.join(', ')} s.` : '(none)'}`,
     ].join('\n\n'),
@@ -387,47 +361,188 @@ export async function draftLessons({ referenceId }: { referenceId: string }) {
     images,
     model: resolveModel(),
   });
+  const inRange = (t: unknown) => (typeof t === 'number' && t >= 0 && t <= m.seconds ? Math.round(t * 10) / 10 : null);
   const read: ReferenceRead = {
     summary: out.summary?.trim() ?? '',
-    hook: { picture: out.hook?.picture ?? '', words: out.hook?.words ?? '', text: out.hook?.text ?? '', why: out.hook?.why ?? '' },
-    promise: out.promise ?? '',
-    payoff: out.payoff ?? '',
-    payoffAt: typeof out.payoffAt === 'number' && out.payoffAt >= 0 && out.payoffAt <= m.seconds ? Math.round(out.payoffAt * 10) / 10 : null,
-    beats: (out.beats ?? [])
-      .filter((b) => (BEAT_KINDS as readonly string[]).includes(b.kind) && typeof b.at === 'number' && b.at >= 0 && b.at <= m.seconds)
-      .map((b) => ({ at: Math.round(b.at * 10) / 10, kind: b.kind, what: b.what.trim() }))
+    why: out.why?.trim() ?? '',
+    shape: (out.shape ?? [])
+      .map((x) => ({ at: inRange(x.at), what: (x.what ?? '').trim() }))
+      .filter((x): x is { at: number; what: string } => x.at !== null && !!x.what)
       .sort((a, b) => a.at - b.at),
-    motion: out.motion ?? '',
-    sound: out.sound ?? '',
     cautions: (out.cautions ?? []).map((c) => c.trim()).filter(Boolean),
   };
-  // A new read replaces the suggestions still waiting (a retry after a failure may have left some).
-  db.delete(schema.knowledge)
-    .where(and(eq(schema.knowledge.referenceId, referenceId), eq(schema.knowledge.status, 'proposed')))
-    .run();
-  for (const l of (out.lessons ?? []).slice(0, 4)) {
-    if (!(LESSON_TOPICS as readonly string[]).includes(l.topic) || !l.title?.trim() || !l.body?.trim()) continue;
-    createRule({
-      topic: l.topic as KnowledgeTopic,
-      title: l.title.trim().slice(0, RULE_TITLE_MAX),
-      body: l.body.trim().slice(0, RULE_BODY_MAX),
-      source: 'reference',
-      status: 'proposed',
-      note: l.why ?? '',
-      workspaceId: r.workspaceId,
-      referenceId,
+  // Marks I already made stay with the ingredient of the same name.
+  const before = new Map(getRow(referenceId).ingredients.map((g) => [`${g.aspect}:${g.name.toLowerCase()}`, g]));
+  const ingredients: Ingredient[] = (out.ingredients ?? [])
+    .filter((g) => (INGREDIENT_ASPECTS as readonly string[]).includes(g.aspect) && g.name?.trim() && g.what?.trim())
+    .slice(0, 10)
+    .map((g) => {
+      const old = before.get(`${g.aspect}:${g.name.trim().toLowerCase()}`);
+      return { id: newId().slice(0, 8), aspect: g.aspect, name: g.name.trim().slice(0, 80), what: g.what.trim().slice(0, 600), why: (g.why ?? '').trim().slice(0, 300), at: inRange(g.at), mark: old?.mark ?? null, note: old?.note ?? '' };
     });
-  }
-  update(referenceId, { read, status: 'done', step: '', error: null });
-  emit({ type: 'job', jobType: 'reference.lessons', status: 'done', message: 'A reference is measured, its lessons are on Knowledge' });
+  update(referenceId, { read, ingredients, status: 'done', step: '', error: null });
+  emit({ type: 'job', jobType: 'reference.lessons', status: 'done', message: 'A reference is read: mark what you want from it on Knowledge' });
 }
 
-export function onLessonsFailed({ referenceId }: { referenceId: string }, message: string) {
+export function onReferenceReadFailed({ referenceId }: { referenceId: string }, message: string) {
   try {
     update(referenceId, { status: 'error', step: '', error: `Measured, but it couldn’t be read: ${message}`.slice(0, 300) });
   } catch {
     /* deleted */
   }
+}
+
+/** My marks on a reference: what moved me, each ingredient wanted or not, and which page it's for. */
+export function markReference(id: string, input: { note?: string; workspaceId?: string | null; ingredients?: { id: string; mark?: IngredientMark; note?: string }[] }) {
+  const r = getRow(id);
+  if (input.workspaceId) getWorkspace(input.workspaceId);
+  const changes = new Map((input.ingredients ?? []).map((g) => [g.id, g]));
+  const ingredients = r.ingredients.map((g) => {
+    const c = changes.get(g.id);
+    if (!c) return g;
+    return { ...g, ...(c.mark !== undefined && { mark: c.mark === 'want' || c.mark === 'skip' ? c.mark : null }), ...(c.note !== undefined && { note: c.note.slice(0, 500) }) };
+  });
+  update(id, { ingredients, ...(input.note !== undefined && { note: input.note.slice(0, 2000) }), ...(input.workspaceId !== undefined && { workspaceId: input.workspaceId }) });
+  for (const w of stylePages(r.workspaceId, input.workspaceId)) emitStyle(w);
+  return getReference(id);
+}
+
+// ---------- a page's style ----------
+
+const emitStyle = (workspaceId: string) => emit({ type: 'changed', entity: 'references', id: `style:${workspaceId}` });
+/** The pages a reference's change touches: its page, or every page when it's for all of them. */
+const stylePages = (...ids: (string | null | undefined)[]) =>
+  ids.includes(null) || ids.every((x) => x === undefined) ? db.select({ id: schema.workspaces.id }).from(schema.workspaces).all().map((w) => w.id) : [...new Set(ids.filter((x): x is string => !!x))];
+
+/** The references a page's style is written from: its own, and those for every page, read. */
+const styleReferences = (workspaceId: string) =>
+  db
+    .select()
+    .from(schema.referenceVideos)
+    .orderBy(desc(schema.referenceVideos.createdAt))
+    .all()
+    .filter((r) => (r.workspaceId === workspaceId || r.workspaceId === null) && r.status === 'done' && r.ingredients.length);
+
+/** What a style is written from, so a change to any of it shows it's out of date. */
+const fingerprint = (refs: Row[]) => JSON.stringify(refs.map((r) => [r.id, r.note, r.ingredients.map((g) => [g.id, g.mark, g.note])]));
+
+export function getStyle(workspaceId: string): PageStyle {
+  getWorkspace(workspaceId);
+  const row = db.select().from(schema.pageStyles).where(eq(schema.pageStyles.workspaceId, workspaceId)).get();
+  const refs = styleReferences(workspaceId);
+  return {
+    workspaceId,
+    body: row?.body ?? '',
+    status: row?.status ?? 'idle',
+    error: row?.error ?? null,
+    builtAt: row?.builtAt ?? null,
+    references: row?.references ?? 0,
+    stale: !!refs.length && (!row?.builtAt || row.builtFrom !== fingerprint(refs)),
+    edited: !!row && row.body !== row.builtBody,
+  };
+}
+
+function setStyle(workspaceId: string, values: Partial<typeof schema.pageStyles.$inferInsert>) {
+  db.insert(schema.pageStyles)
+    .values({ workspaceId, ...values, updatedAt: now() })
+    .onConflictDoUpdate({ target: schema.pageStyles.workspaceId, set: { ...values, updatedAt: now() } })
+    .run();
+  emitStyle(workspaceId);
+}
+
+/** My own words for the style. */
+export function saveStyle(workspaceId: string, body: string) {
+  getWorkspace(workspaceId);
+  setStyle(workspaceId, { body: body.slice(0, 8000) });
+  return getStyle(workspaceId);
+}
+
+/** Write the style again from the references and my marks (my click). */
+export function queueStyle(workspaceId: string) {
+  getWorkspace(workspaceId);
+  if (!styleReferences(workspaceId).length) throw badRequest('Add a video that moved you first: the style is written from what you mark on it.');
+  setStyle(workspaceId, { status: 'building', error: null });
+  enqueue('inspiration.build', { workspaceId }, { maxAttempts: 2 });
+  return getStyle(workspaceId);
+}
+
+const STYLE_INSTRUCTIONS = `You write a page's style: what its videos are like, from the videos its creator chose as inspiration and what they marked on each. It's inspiration, never a template or a copy: name the qualities to aim for, concretely enough that someone could make a new video from it on any topic the page covers.
+
+- What the creator marked *want* matters most; their own notes matter even more. Unmarked ingredients were in a video they loved: count them a little. *Not for me* goes under "Leave out", briefly, and nowhere else.
+- Never take a reference's topic, claims or lines as content to make: only how it's built and how it feels.
+- The page's brand guide wins wherever a reference differs (what the voice may say, how sources and Arabic are shown, the palette): the style never contradicts it.
+- Where references differ, give the range ("calm narration, or a scholar's own voice").
+- Say where an idea comes from, briefly: (from @channel).
+- No musical instruments ever; voice-only backgrounds (humming, voices, a nasheed with no instruments) are fine.
+- Markdown: these ## headings, each with 2–5 short bullets: What our videos are · How a video is built · Look and quality · Voice and words · Text on screen · Pace and motion · Sound · Feel · Leave out. At most about 400 words.
+- If the creator edited the current style, keep their wording wherever it still fits.`;
+
+/** The `inspiration.build` job: one model call writes the page's style. */
+export async function buildStyle({ workspaceId }: { workspaceId: string }) {
+  const ws = getWorkspace(workspaceId);
+  const refs = styleReferences(workspaceId);
+  if (!refs.length) {
+    setStyle(workspaceId, { status: 'idle' });
+    return;
+  }
+  await waitForUsage('lessons');
+  const current = db.select().from(schema.pageStyles).where(eq(schema.pageStyles.workspaceId, workspaceId)).get();
+  const markText = (g: Ingredient) => (g.mark === 'want' ? 'WANT' : g.mark === 'skip' ? 'NOT FOR ME' : 'unmarked');
+  const out = await askStructured<{ body: string }>({
+    task: 'lessons',
+    system: [playbook('halal'), STYLE_INSTRUCTIONS].join('\n\n'),
+    prompt: [
+      `# The page\n${pageLine(ws)}${ws.description ? `\n${ws.description.slice(0, 600)}` : ''}${ws.brandGuide ? `\n\nBrand guide (its look and voice are set there; the style adds how the videos are made and feel):\n${ws.brandGuide.slice(0, 2500)}` : ''}`,
+      current?.body && current.body !== current.builtBody ? `# The current style, as the creator edited it\n${current.body}` : '',
+      `# The videos that moved them (${refs.length})`,
+      ...refs.map((r) =>
+        [
+          `## ${r.channel ? `@${r.channel}` : r.url}${r.workspaceId ? '' : ' (for every page)'}`,
+          r.note ? `What moved them: “${r.note}”` : '',
+          r.read?.summary ?? '',
+          r.read?.why ? `Why it works: ${r.read.why}` : '',
+          r.read?.shape?.length ? `Shape: ${r.read.shape.map((x) => `${x.at} s ${x.what}`).join(' → ')}` : '',
+          'Ingredients:',
+          ...r.ingredients.map((g) => `- [${markText(g)}] ${ASPECT_LABELS[g.aspect]}: ${g.name}. ${g.what}${g.note ? ` (their note: “${g.note}”)` : ''}`),
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      ),
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+    schema: { type: 'object', additionalProperties: false, required: ['body'], properties: { body: { type: 'string', description: 'The style, in markdown' } } },
+    model: resolveModel(),
+  });
+  const body = (out.body ?? '').trim().slice(0, 8000);
+  if (!body) throw new Error('No style came back.');
+  setStyle(workspaceId, { body, builtBody: body, builtAt: now(), builtFrom: fingerprint(refs), references: refs.length, status: 'idle', error: null });
+  emit({ type: 'job', jobType: 'inspiration.build', status: 'done', message: `${ws.name}’s style is written from its references` });
+}
+
+export function onStyleFailed({ workspaceId }: { workspaceId: string }, message: string) {
+  try {
+    setStyle(workspaceId, { status: 'error', error: message.slice(0, 300) });
+  } catch {
+    /* deleted */
+  }
+}
+
+/**
+ * For every prompt that makes something for a page: its style, or (before one is written) what I marked wanted and
+ * not on its references. Empty when there's nothing.
+ */
+export function inspirationText(workspaceId: string) {
+  const row = db.select().from(schema.pageStyles).where(eq(schema.pageStyles.workspaceId, workspaceId)).get();
+  if (row?.body.trim()) return `The page's style, from the videos that moved its creator (follow it; never copy those videos):\n${row.body.trim()}`;
+  const marked = styleReferences(workspaceId).flatMap((r) => r.ingredients.filter((g) => g.mark).map((g) => ({ g, from: r.channel })));
+  if (!marked.length) return '';
+  const list = (mark: IngredientMark) =>
+    marked
+      .filter((x) => x.g.mark === mark)
+      .map((x) => `- ${ASPECT_LABELS[x.g.aspect]}: ${x.g.name}${x.g.note ? ` (${x.g.note})` : ''}${x.from ? ` (from @${x.from})` : ''}`)
+      .join('\n');
+  return [`What the creator wants from the videos that moved them (inspiration, never a copy):\n${list('want')}`, list('skip') && `Not for them:\n${list('skip')}`].filter(Boolean).join('\n');
 }
 
 /**
@@ -473,7 +588,7 @@ export async function ownMeasures(workspaceId: string | null): Promise<OwnMeasur
   };
 }
 
-/** For the chat: every reference measured (for every page, or this one), briefly. */
+/** For the chat: the references for this page (and every page), how each is built, and what I marked on them. */
 export function referencesText(workspaceId: string) {
   const rows = db
     .select()
@@ -483,13 +598,18 @@ export function referencesText(workspaceId: string) {
     .all()
     .filter((r) => !r.workspaceId || r.workspaceId === workspaceId)
     .slice(0, 12);
+  const mark = (g: Ingredient) => (g.mark === 'want' ? 'wanted' : g.mark === 'skip' ? 'not for them' : 'unmarked');
   return rows.map((r) => {
     const m = r.measures!;
+    const read = readOf(r);
     return [
       `## ${r.title || r.url}${r.channel ? ` (${r.channel})` : ''}`,
       `id ${r.id} · ${r.url}`,
-      `${m.seconds} s · ${m.changesPer10} changes per 10 s · longest still ${m.longestStill.seconds} s · ${m.cutsPerSecond} cuts a second · ${m.soundsPer10} sounds per 10 s, ${pct(m.soundOnChange)} of changes with a sound · ${m.wordsPerSecond ?? 0} words a second${m.beat ? ' · has music (never copied)' : m.background === 'bed' ? ' · a bed under the voice, maybe music (never copied)' : ''}`,
-      r.read ? `${r.read.summary}\nHook: ${r.read.hook.picture} ${r.read.hook.why}\nPromise: ${r.read.promise} → payoff at ${r.read.payoffAt ?? '?'} s: ${r.read.payoff}\nBeats: ${r.read.beats.map((b) => `${b.at} s ${b.kind}: ${b.what}`).join('; ')}\nMotion: ${r.read.motion}\nSound: ${r.read.sound}` : '',
+      `${m.seconds} s · ${m.changesPer10} changes per 10 s · longest still ${m.longestStill.seconds} s · ${m.cutsPerSecond} cuts a second · ${m.wordsPerSecond ?? 0} words a second`,
+      r.note && `What moved the creator: ${r.note}`,
+      read && `${read.summary}\nWhy it works: ${read.why}\nShape: ${read.shape.map((x) => `${x.at} s ${x.what}`).join(' → ')}`,
+      read && r.ingredients.length && `Ingredients:\n${r.ingredients.map((g) => `- ${ASPECT_LABELS[g.aspect]}: ${g.name} (${mark(g)}${g.note ? `: ${g.note}` : ''}). ${g.what}`).join('\n')}`,
+      read?.cautions.length && `Cautions: ${read.cautions.join(' · ')}`,
     ]
       .filter(Boolean)
       .join('\n');

@@ -15,6 +15,7 @@ import { emit } from '../lib/events';
 import { enqueue, hasPendingJob, JobError } from '../jobs/queue';
 import { getPiece, getPieceDetail, getWorkspace } from '../services/pieces';
 import { recentArsenalUse } from './arsenal';
+import { inspirationText } from '../knowledge/references';
 
 export function setDirections(pieceId: string, value: PieceDirections | null) {
   const piece = getPiece(pieceId);
@@ -112,6 +113,7 @@ export async function pitchDirections({ pieceId }: { pieceId: string }) {
     `Page: ${ws.name} (${KIND_INFO[ws.kind].label.toLowerCase()})${ws.niche ? `, niche: ${ws.niche}` : ''}`,
     ws.brandGuide.trim() && `Brand guide:\n${ws.brandGuide.trim().slice(0, 3000)}`,
     ws.voiceMemory.trim() && `Voice memory:\n${ws.voiceMemory.trim().slice(0, 1500)}`,
+    inspirationText(ws.id),
     `The video: “${piece.title}”`,
     draft && (draft.hook || draft.script || draft.notes) && `Its idea so far:\nHook: ${draft.hook || '(none)'}\nScript: ${draft.script || '(none)'}\nNotes: ${draft.notes || '(none)'}`,
     footage.length

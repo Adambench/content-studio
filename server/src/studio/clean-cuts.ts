@@ -1,0 +1,197 @@
+// Clean cuts: every cut lands in a real pause of the voice, so a clip never starts on an "um", never ends with the first
+// sound of the next sentence and never clips a word. Whisper's word times are close but not exact (faster-whisper gives
+// a pause, or a filler it didn't write down, to the next word's start), so the cut points come from the voice's own
+// loudness, 10 ms at a time. Mechanical: no model involved.
+import { execFile as execFileCb } from 'node:child_process';
+import { promisify } from 'node:util';
+import type { EditClip } from '../../../shared/edit';
+import type { Transcript, TranscriptWord } from '../../../shared/types';
+import { requireBinary } from '../lib/bin';
+
+const execFile = promisify(execFileCb);
+const RATE = 16000;
+const STEP = 0.01;
+/** A pause this long between sounds is a gap a cut can sit in (stop consonants inside a word are shorter). */
+const MIN_GAP = 0.06;
+/** A pause this long inside a word's times means Whisper gave that word sound that isn't it (a filler, a breath). */
+const INNER_GAP = 0.15;
+
+export type Envelope = { db: Float32Array; quiet: number; seconds: number };
+
+/** The voice's loudness every 10 ms (dB), and the level under which it counts as a pause. */
+export async function voiceEnvelope(file: string, signal?: AbortSignal): Promise<Envelope> {
+  const { stdout } = await execFile(requireBinary('ffmpeg'), ['-hide_banner', '-nostdin', '-v', 'error', '-i', file, '-map', '0:a:0', '-ac', '1', '-ar', String(RATE), '-f', 'f32le', 'pipe:1'], {
+    encoding: 'buffer',
+    maxBuffer: 1024 * 1024 * 1024,
+    signal,
+  });
+  const buf = stdout as Buffer;
+  const samples = new Float32Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 4));
+  const hop = Math.round(RATE * STEP);
+  const n = Math.floor(samples.length / hop);
+  const db = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    for (let j = i * hop; j < (i + 1) * hop; j++) sum += samples[j] * samples[j];
+    db[i] = 10 * Math.log10(sum / hop + 1e-12);
+  }
+  const sorted = Float32Array.from(db).sort();
+  const pct = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] ?? -100;
+  const floor = pct(0.1);
+  const loud = pct(0.9);
+  // A third of the way from the room to the voice, and always well under the voice.
+  const quiet = Math.min(floor + 0.33 * (loud - floor), loud - 20);
+  return { db, quiet, seconds: n * STEP };
+}
+
+/** How much louder than `quiet` a soft pause may be: the dip between two words in a noisy voice track. */
+const SOFT = 6;
+
+/** Pauses (runs of quiet at least `min` long) between two times, in order; `soft` counts dips a little above quiet. */
+export function pauses(env: Envelope, from: number, to: number, min = MIN_GAP, soft = false): [number, number][] {
+  const a = Math.max(0, Math.floor(from / STEP));
+  const b = Math.min(env.db.length, Math.ceil(to / STEP));
+  const level = env.quiet + (soft ? SOFT : 0);
+  // A frame is quiet when it and its neighbours mostly are (one loud click doesn't end a pause).
+  const isQuiet = (i: number) => {
+    let q = 0;
+    for (let k = i - 1; k <= i + 1; k++) if (k < 0 || k >= env.db.length || env.db[k] < level) q++;
+    return q >= 2;
+  };
+  const out: [number, number][] = [];
+  let start = -1;
+  for (let i = a; i <= b; i++) {
+    const q = i < b && isQuiet(i);
+    if (q && start < 0) start = i;
+    if (!q && start >= 0) {
+      if ((i - start) * STEP >= min) out.push([start * STEP, i * STEP]);
+      start = -1;
+    }
+  }
+  return out;
+}
+
+/** The quietest moment between two times. */
+function quietest(env: Envelope, from: number, to: number) {
+  const a = Math.max(0, Math.floor(from / STEP));
+  const b = Math.min(env.db.length - 1, Math.ceil(to / STEP));
+  let best = a;
+  for (let i = a; i <= b; i++) if (env.db[i] < env.db[best]) best = i;
+  return best * STEP;
+}
+
+const isSpeech = (env: Envelope, t: number) => (env.db[Math.floor(t / STEP)] ?? -100) >= env.quiet;
+
+/**
+ * Word times fitted to the voice: a word whose times hold a real pause keeps only the sound after it (what came before
+ * is a filler or a breath Whisper didn't write down), and each word's start and end move in to where its sound is.
+ */
+export function refineWords(t: Transcript, env: Envelope): Transcript {
+  const fit = (w: TranscriptWord): TranscriptWord => {
+    let { start, end } = w;
+    if (end - start < 0.08) return w;
+    const inside = (gaps: [number, number][]) => gaps.filter(([a, b]) => a > start + 0.02 && b < end - 0.04);
+    // A real pause first; failing that a soft one, a little longer (a noisy track never goes fully quiet).
+    let inner = inside(pauses(env, start, end, INNER_GAP));
+    if (!inner.length) inner = inside(pauses(env, start, end, INNER_GAP + 0.03, true));
+    if (inner.length) start = inner[inner.length - 1][1] - 0.02;
+    // Leading and trailing quiet inside the word's times.
+    let s = start;
+    while (s < end - 0.05 && !isSpeech(env, s)) s += STEP;
+    let e = end;
+    while (e > s + 0.05 && !isSpeech(env, e - STEP)) e -= STEP;
+    // Nothing loud enough in it (a soft word): leave it as Whisper had it.
+    if (e - s < 0.05) return w;
+    return { ...w, start: round(Math.max(w.start, s - 0.02)), end: round(Math.min(w.end, e + 0.03)) };
+  };
+  return { ...t, segments: t.segments.map((seg) => ({ ...seg, words: seg.words?.map(fit) })) };
+}
+
+/**
+ * Every clip's in and out moved into the pause beside it: in just before the first word's sound (never on what comes
+ * before it), out after the last word's sound has died away (never on the next word's first sound). Where a short cut
+ * (one tightening made, under 2 s) has no clean pause on one side (words Whisper didn't write down run straight into
+ * the kept ones), the words stay and the two shots become one: a cut into sound is worse than a pause. `words` are the
+ * media's words (refined), in source time.
+ */
+export function snapCuts(
+  clips: EditClip[],
+  mediaId: string,
+  env: Envelope,
+  words: TranscriptWord[],
+  /** Whether two shots may become one again (false for a cut made on purpose: a line taken out). */
+  mayJoin: (a: EditClip, b: EditClip) => boolean = () => true,
+): EditClip[] {
+  const ws = words.filter((w) => w.word.trim()).sort((a, b) => a.start - b.start);
+  const mid = (w: TranscriptWord) => (w.start + w.end) / 2;
+  const firstWord = (c: EditClip) => ws.findIndex((w) => mid(w) >= c.in && mid(w) < c.out);
+  const lastWord = (c: EditClip, from: number) => {
+    let last = from;
+    for (let j = from; j < ws.length && mid(ws[j]) < c.out; j++) last = j;
+    return last;
+  };
+  // The voice stops right after a word / starts right on it: a pause touching its edge.
+  const outPause = (l: TranscriptWord, to: number) =>
+    pauses(env, l.end - 0.05, to).find((g) => g[0] <= l.end + 0.12) ?? pauses(env, l.end - 0.05, to, MIN_GAP, true).find((g) => g[0] <= l.end + 0.12);
+  const inPause = (k: TranscriptWord, from: number) =>
+    pauses(env, from, k.start + 0.05).findLast((g) => g[1] >= k.start - 0.12) ?? pauses(env, from, k.start + 0.05, MIN_GAP, true).findLast((g) => g[1] >= k.start - 0.12);
+
+  // Short cuts with no clean pause either side: keep what's between.
+  const merged: EditClip[] = [];
+  for (const c of clips) {
+    const p = merged[merged.length - 1];
+    if (p && p.mediaId === mediaId && c.mediaId === mediaId && c.in > p.out + 0.01 && c.in - p.out < 2 && mayJoin(p, c)) {
+      const pf = firstWord(p);
+      const k = ws[firstWord(c)];
+      const l = pf >= 0 ? ws[lastWord(p, pf)] : undefined;
+      if (l && k && (!outPause(l, k.start) || !inPause(k, l.end))) {
+        merged[merged.length - 1] = { ...p, out: c.out };
+        continue;
+      }
+    }
+    merged.push(c);
+  }
+
+  // Where one shot runs straight on into the next (a reframe, not a cut), the join stays where it is.
+  const joined = (a: EditClip | undefined, b: EditClip | undefined) => !!a && !!b && a.mediaId === b.mediaId && Math.abs(a.out - b.in) < 0.02;
+  const out = merged.map((c, i) => {
+    if (c.mediaId !== mediaId) return c;
+    const first = firstWord(c);
+    // A shot with no whole word in it is only the edge of one: a sound fragment, never worth keeping.
+    if (first < 0) return null;
+    const last = lastWord(c, first);
+    const k = ws[first];
+    const before = ws[first - 1];
+    const l = ws[last];
+    const after = ws[last + 1];
+
+    let inAt = c.in;
+    if (!joined(merged[i - 1], c)) {
+      const from = Math.max(0, before ? before.end : k.start - 1, k.start - 1.2);
+      const g = inPause(k, from);
+      inAt = g ? Math.max(g[0], g[1] - 0.12) : quietest(env, Math.max(from, k.start - 0.1), k.start + 0.02);
+      if (before) inAt = Math.max(inAt, before.end);
+    }
+    let outAt = c.out;
+    if (!joined(c, merged[i + 1])) {
+      const to = Math.min(env.seconds, after ? after.start : l.end + 1, l.end + 1.2);
+      const g = outPause(l, to);
+      // A little of the pause kept as air, never more than half of it.
+      outAt = g ? Math.min(g[1] - 0.03, g[0] + Math.min(0.16, (g[1] - g[0]) * 0.5)) : quietest(env, l.end - 0.02, Math.min(to, l.end + 0.1));
+      if (after) outAt = Math.min(outAt, after.start);
+    }
+    if (outAt - inAt < 0.2) return c;
+    return { ...c, in: round(inAt), out: round(outAt) };
+  });
+  const kept = out.filter((c): c is EditClip => !!c);
+  return kept.length ? kept : clips;
+}
+
+/** Whether a cut lands in sound (for checking a finished edit): the share of its 30 ms either side that's speech. */
+export function cutInSpeech(env: Envelope, t: number) {
+  let loud = 0;
+  for (let x = t - 0.03; x <= t + 0.03; x += STEP) if (isSpeech(env, x)) loud++;
+  return loud / 7;
+}
+
+const round = (n: number) => Math.round(n * 1000) / 1000;

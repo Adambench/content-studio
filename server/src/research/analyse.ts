@@ -2,6 +2,7 @@
 // numbers are measured (length, cuts per second from FFmpeg's scene detection, words per second from the captions or
 // Whisper); Claude looks at the transcript, four frames and those numbers and explains the hook, structure and edit,
 // and what the page can borrow. It never copies the words.
+import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -132,12 +133,12 @@ export async function downloadPost(url: string, dir: string) {
 }
 
 /** What's said in a video, by Whisper (null when it isn't installed). */
-export async function whisper(file: string, dir: string): Promise<Transcript | null> {
+export async function whisper(file: string, dir: string, language?: string): Promise<Transcript | null> {
   if (!whisperInstalled()) return null;
   const wav = join(dir, 'audio.wav');
   const out = join(dir, 'transcript.json');
-  await extractAudio(file, wav);
-  await runTool('transcribe', { audio: wav, json: out }, { model: getSetting('whisperModel') ?? 'small' }, { timeoutMs: 20 * 60_000 });
+  if (!existsSync(wav)) await extractAudio(file, wav);
+  await runTool('transcribe', { audio: wav, json: out }, { model: getSetting('whisperModel') ?? 'small', ...(language && { language }) }, { timeoutMs: 20 * 60_000 });
   return JSON.parse(await readFile(out, 'utf8')) as Transcript;
 }
 

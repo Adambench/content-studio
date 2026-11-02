@@ -142,6 +142,8 @@ function apply(event: LiveEvent) {
         break;
       case 'references':
         inv(keys.references);
+        // A page's style (written, or out of date after a mark).
+        inv(['style']);
         break;
       case 'toolbox':
         inv(keys.toolbox);

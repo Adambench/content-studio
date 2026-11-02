@@ -29,7 +29,8 @@ import { createPiece, getWorkspace } from '../services/pieces';
 import { applyLook, lookTag, pickLook } from '../studio/clip-looks';
 import { isLectureCampaign, speakerTag } from '../islamic/lectures';
 import { createEdit, saveEditVersion } from '../studio/edits';
-import { applyFocusSpans, focusSpans, scanSpeakers } from '../studio/reframe';
+import { refineWords, snapCuts, voiceEnvelope } from '../studio/clean-cuts';
+import { applyFocusSpans, focusSpans, scanSpeakers, type SpeakerScan } from '../studio/reframe';
 import { cancelRender, queueRender } from '../studio/render';
 import { getMoment, momentExists, updateMoment } from './moments';
 import { runTool } from '../compute/run';
@@ -220,6 +221,9 @@ export async function makeClip({ momentId }: { momentId: string }) {
       if (!whole) throw new JobError('There’s no transcript to caption it from.', { retry: false });
       transcript = sliceTranscript(whole, cutStart, cutEnd);
     }
+    // Word times fitted to the voice itself, so every cut lands in a real pause (and fillers Whisper left out stay out).
+    const envelope = await voiceEnvelope(voice);
+    transcript = refineWords(transcript, envelope);
     const words = transcript.segments.flatMap((seg) => seg.words ?? []);
 
     step('Checking for music');
@@ -298,19 +302,30 @@ export async function makeClip({ momentId }: { momentId: string }) {
     base.mediaId = media.id;
     base.in = Math.max(0, (first?.start ?? rel.start) - 0.1);
     base.out = Math.min(clipLen, (last?.end ?? rel.end) + 0.35);
-    const spans = speakers ? focusSpans(speakers, spec.format) : [];
+    // A game or a screen shows whole (cropping cuts its HUD and its text); people are framed on.
+    const whole = showsWhole({ width: clipInfo.width, height: clipInfo.height }, speakers, [c.category, c.type, c.brand, c.title, ws.niche].join(' '));
+    const spans = speakers && !whole ? focusSpans(speakers, spec.format) : [];
     // Where the frame sits most of the time, for anything outside the spans.
     const main = [...spans].sort((a, b) => b.end - b.start - (a.end - a.start))[0];
     if (main) {
       base.focusX = main.x;
       base.focusY = main.y;
     }
+    if (whole) base.fit = 'whole';
     let clips = tightenClips([base], { [media.id]: speechRangesFromTranscript(transcript, true) }, TIGHTEN_PRESETS.tight);
     if (!clips.length) clips = [base];
+    clips = snapCuts(clips, media.id, envelope, words);
     clips = applyFocusSpans(clips, media.id, spans);
     const look = pickLook(ws.id);
     const total = editDuration({ ...spec, clips });
     const next = applyLook({ ...spec, clips }, look, m.hookCard, total);
+    if (whole) {
+      // Nothing of a whole picture is cropped by a punch-in, and the words sit around it, never on it: the hook card
+      // above, the captions below.
+      next.clips = next.clips.map((x) => ({ ...x, zoom: 1 }));
+      next.captions = { ...next.captions, position: Math.max(next.captions.position, 0.77) };
+      next.overlays = next.overlays.map((o) => (o.type === 'text' && o.position === 'center' ? { ...o, position: 'top' } : o));
+    }
     // A lecture names its speaker on screen for the whole clip.
     const speaker = isLectureCampaign(c.id) ? speakerTag(next, s, m.hookCard ? 2.5 : 0, total) : null;
     if (speaker) next.overlays.push(speaker);
@@ -327,6 +342,21 @@ export async function makeClip({ momentId }: { momentId: string }) {
 }
 
 class Skipped extends Error {}
+
+const GAME = /\b(gam(e|es|ing|eplay)|roblox|minecraft|fortnite|clash|brawl|esports?|twitch|speedrun|lets ?play)\b/i;
+
+/**
+ * Whether a clip shows its whole picture rather than a crop: a wide video that's a game (by the campaign or the page),
+ * or one with a face on screen for under a third of it (a screen recording, gameplay, slides).
+ */
+export function showsWhole(size: { width?: number | null; height?: number | null }, speakers: SpeakerScan | null, about: string) {
+  if (!size.width || !size.height || size.width / size.height < 1.2) return false;
+  if (GAME.test(about)) return true;
+  if (!speakers?.shots.length) return false;
+  const total = speakers.shots.reduce((n, sh) => n + sh.end - sh.start, 0);
+  const withFace = speakers.shots.filter((sh) => sh.tracks.some((t) => t.n >= Math.max(2, sh.samples * 0.3))).reduce((n, sh) => n + sh.end - sh.start, 0);
+  return total > 0 && withFace / total < 0.33;
+}
 
 export function onMakeFailed({ momentId }: { momentId: string }, message: string) {
   if (!momentExists(momentId)) return;

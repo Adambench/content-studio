@@ -16,6 +16,7 @@ import { enqueue, hasPendingJob } from '../jobs/queue';
 import { mediaPath } from '../services/media';
 import { getPiece, getWorkspace, saveVersion } from '../services/pieces';
 import { emitIdeas, episodeOf, getIdea, type IdeaRow } from './ideas';
+import { inspirationText } from '../knowledge/references';
 
 const kidsOf = (id: string) =>
   db
@@ -33,6 +34,7 @@ function brand(workspaceId: string) {
     ws.description && `About it: ${ws.description}`,
     ws.brandGuide && `Brand guide:\n${ws.brandGuide}`,
     ws.voiceMemory && `What's known about the creator's voice:\n${ws.voiceMemory}`,
+    inspirationText(ws.id),
   ]
     .filter(Boolean)
     .join('\n');

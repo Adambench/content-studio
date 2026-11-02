@@ -5,6 +5,7 @@ import {
   clipLength,
   clipStarts,
   editDuration,
+  clipGeometry,
   fillGeometry,
   speechSpans,
   timelineWords,
@@ -38,7 +39,8 @@ export type ComposeMedia = { id: string; kind: MediaKind; assetType: AssetType |
  * when that isn't the media's own length (a segment cut for the render); `silent` when the file has no sound at all
  * (a screen recording). Null while it's being prepared.
  */
-export type ComposeSource = { src: string; mediaStart: number; duration?: number; silent?: boolean } | null;
+/** `framed`: the file is already the whole frame (a `whole` clip the render laid out over its blurred copy). */
+export type ComposeSource = { src: string; mediaStart: number; duration?: number; silent?: boolean; framed?: boolean } | null;
 
 export type ComposeInput = {
   spec: EditSpec;
@@ -110,7 +112,7 @@ export function composeEdit(input: ComposeInput) {
       return;
     }
     const { w, h } = sizeOf(clip.mediaId);
-    const g = fillGeometry(w, h, W, H, clip.focusX, clip.focusY, clip.zoom);
+    const g = source.framed ? { left: 0, top: 0, width: W, height: H } : clipGeometry(clip, w, h, W, H);
     const box = `left:${px(g.left)};top:${px(g.top)};width:${px(g.width)};height:${px(g.height)}`;
     // Camera moves turn about the middle of the frame.
     const origin = `transform-origin:${px(-g.left + W / 2)} ${px(-g.top + H / 2)}${lookStyle(clip.filter ?? spec.grade.filter)}`;
@@ -124,6 +126,11 @@ export function composeEdit(input: ComposeInput) {
     const audible = clip.volume > 0 && spec.audio.voiceVolume > 0 && !source.silent;
     anyClipAudio ||= audible;
     const sound = audible ? `data-has-audio="true" data-volume="${n(clip.volume)}" data-audio-group="voice"` : 'muted';
+    // A whole picture over a blurred, darkened copy of itself (the render bakes that into the file instead).
+    if (clip.fit === 'whole' && !source.framed) {
+      const f = fillGeometry(w, h, W, H, 0.5, 0.5, 1.1);
+      body.push(`<video id="cb${i}" class="pic" src="${esc(source.src)}"${app.video} ${timing} data-media-start="${n(source.mediaStart)}" muted playsinline preload="auto" style="left:${px(f.left)};top:${px(f.top)};width:${px(f.width)};height:${px(f.height)};filter:blur(32px) brightness(.45)"></video>`);
+    }
     body.push(`<video id="c${i}" class="pic" src="${esc(source.src)}"${app.video} ${timing} data-media-start="${n(source.mediaStart)}" ${sound} playsinline preload="auto" style="${box};${origin}"></video>`);
   });
   if (!spec.clips.length && input.preview) {
@@ -146,7 +153,7 @@ export function composeEdit(input: ComposeInput) {
       const source = m ? input.clipSource(i) : null;
       if (!m || !source) break;
       const { w: sw, h: sh } = sizeOf(clip.mediaId);
-      const g = fillGeometry(sw, sh, W, H, clip.focusX, clip.focusY, clip.zoom);
+      const g = source.framed ? { left: 0, top: 0, width: W, height: H } : clipGeometry(clip, sw, sh, W, H);
       frames[side] = { x: -g.left, y: -g.top };
       // Only the frame's part of the picture shows, so pushes and slides don't reveal what the crop leaves out.
       const inset = [-g.top, g.width + g.left - W, g.height + g.top - H, -g.left].map(px).join(' ');
@@ -256,7 +263,7 @@ export function composeEdit(input: ComposeInput) {
       tl.push(...animateIn(`#o${i} .oi`, o.animation, start, len));
       return;
     }
-    const y = o.position === 'top' ? 0.15 : o.position === 'center' ? 0.5 : 0.8;
+    const y = o.y ?? (o.position === 'top' ? 0.15 : o.position === 'center' ? 0.5 : 0.8);
     let text = accent(esc(o.text)).replace(/\n/g, '<br>');
     const chars = o.animation === 'typewriter' ? [...o.text.replace(/[*\s]/g, '')].length : 0;
     if (chars) text = splitChars(text);

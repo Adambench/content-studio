@@ -14,9 +14,10 @@ These hold for every piece, every page and every campaign, whatever another skil
 
 - **No music and no musical instruments, ever.** No tracks, beds, stingers, jingles, beat drops, trending sounds or
   TikTok's "auto add music". Non-musical sound effects are fine: whooshes, pops, clicks, impacts, booms, dings,
-  chimes, tonal risers and sweeps.
-- **Nasheeds** (voice only, no instruments) only with the user's OK for that one edit. You may suggest one; you
-  never add it.
+  chimes, tonal risers and sweeps. The line is instruments: sound made only by voices (a hum, voices without words,
+  a nasheed with no instruments) is not music.
+- **Nasheeds and voice-only beds** (voice only, no instruments) only with the user's OK for that one edit. You may
+  suggest one; you never add it.
 - **Music in source footage** is removed with voice isolation, or the clip is dropped.
 - **Nothing haram is promoted or shown**: gambling and betting, alcohol, drugs, smoking and vaping, dating,
   immodest imagery, interest-based finance, music promotion, or anything else haram.

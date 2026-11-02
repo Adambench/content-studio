@@ -14,7 +14,7 @@ import {
   clipLength,
   clipStarts,
   editDuration,
-  fillGeometry,
+  clipGeometry,
   newEditId,
   splitClipAt,
   type ClipTransition,
@@ -48,6 +48,7 @@ export const clipFromMedia = (m: Media): EditClip => ({
   focusX: 0.5,
   focusY: 0.5,
   zoom: 1,
+  fit: 'fill',
   volume: 1,
   transition: null,
   motion: 'none',
@@ -296,7 +297,16 @@ function ClipEditor({ clip, start }: { clip: EditClip; start: number }) {
         </div>
       )}
 
-      {m && (mismatch || clip.zoom > 1) && <FocusPicker media={m} clip={clip} onChange={(focusX, focusY) => set({ focusX, focusY })} />}
+      {m?.kind === 'video' && mismatch && (
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="clip-whole" className="flex-col items-start gap-0.5 text-xs">
+            Show the whole picture
+            <span className="font-normal text-muted-foreground">For a game or a screen: nothing cropped, a blurred copy behind</span>
+          </Label>
+          <Switch id="clip-whole" checked={clip.fit === 'whole'} onCheckedChange={(on) => set({ fit: on ? 'whole' : 'fill' })} />
+        </div>
+      )}
+      {m && ((mismatch && clip.fit === 'fill') || clip.zoom > 1) && <FocusPicker media={m} clip={clip} onChange={(focusX, focusY) => set({ focusX, focusY })} />}
 
       <SliderField label="Zoom" value={clip.zoom} min={1} max={2} step={0.01} format={(v) => `${v.toFixed(2)}×`} onChange={(zoom) => set({ zoom })} />
       <div className="grid grid-cols-2 gap-3">
@@ -392,8 +402,11 @@ function FocusPicker({ media, clip, onChange }: { media: Media; clip: EditClip; 
   const box = EDIT_FORMATS[spec.format];
   const w = media.width ?? box.width;
   const h = media.height ?? box.height;
-  const g = fillGeometry(w, h, box.width, box.height, clip.focusX, clip.focusY, clip.zoom);
-  const view = { left: -g.left / g.width, top: -g.top / g.height, width: box.width / g.width, height: box.height / g.height };
+  const g = clipGeometry(clip, w, h, box.width, box.height);
+  // The part of the picture inside the frame.
+  const vl = Math.max(0, -g.left) / g.width;
+  const vt = Math.max(0, -g.top) / g.height;
+  const view = { left: vl, top: vt, width: Math.min(1 - vl, box.width / g.width), height: Math.min(1 - vt, box.height / g.height) };
   return (
     <div className="space-y-1.5">
       <p className="text-xs font-medium">Reframe</p>
