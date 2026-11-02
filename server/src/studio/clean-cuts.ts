@@ -144,10 +144,14 @@ export function snapCuts(
   };
   // The voice stops soon after a word / starts soon before it: a pause near its edge (word times in a noisy track can
   // be a quarter of a second off), never past the next word or before the one before.
+  // A word stretched past what its letters need has the gap inside its times: look there too.
   const outPause = (l: TranscriptWord, to: number) =>
-    pauses(env, l.end - 0.05, to).find((g) => g[0] <= l.end + EDGE) ?? pauses(env, l.end - 0.05, to, MIN_GAP, true).find((g) => g[0] <= l.end + EDGE);
-  const inPause = (k: TranscriptWord, from: number) =>
-    pauses(env, from, k.start + 0.05).findLast((g) => g[1] >= k.start - EDGE) ?? pauses(env, from, k.start + 0.05, MIN_GAP, true).findLast((g) => g[1] >= k.start - EDGE);
+    pauses(env, l.end - 0.05 - stretch(l), to).find((g) => g[0] <= l.end + EDGE && g[0] >= l.start + 0.05) ??
+    pauses(env, l.end - 0.05 - stretch(l), to, MIN_GAP, true).find((g) => g[0] <= l.end + EDGE && g[0] >= l.start + 0.05);
+  const inPause = (k: TranscriptWord, from: number) => {
+    const to = k.start + Math.max(0.05, stretch(k));
+    return pauses(env, from, to).findLast((g) => g[1] >= k.start - EDGE && g[1] <= k.end - 0.05) ?? pauses(env, from, to, MIN_GAP, true).findLast((g) => g[1] >= k.start - EDGE && g[1] <= k.end - 0.05);
+  };
 
   // Short cuts with no clean pause either side: keep what's between.
   const merged: EditClip[] = [];
@@ -192,12 +196,12 @@ export function snapCuts(
     }
     let outAt = c.out;
     if (!joined(c, merged[i + 1])) {
-      const to = Math.min(env.seconds, after ? after.start : l.end + 1, l.end + 1.2);
+      const to = Math.min(env.seconds, after ? after.start + stretch(after) : l.end + 1, l.end + 1.2);
       const g = outPause(l, to);
       if (g) {
         // A little of the pause kept as air, never more than half of it.
         outAt = Math.min(g[1] - 0.03, g[0] + Math.min(0.16, (g[1] - g[0]) * 0.5));
-        if (after) outAt = Math.min(outAt, after.start);
+        if (after) outAt = Math.min(outAt, after.start + stretch(after));
       } else {
         const hi = Math.min(env.seconds, l.end + EDGE, after ? after.start + stretch(after) : Infinity);
         outAt = quietest(env, l.end - 0.02, Math.max(l.end, hi));
