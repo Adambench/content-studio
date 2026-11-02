@@ -116,12 +116,15 @@ Submitting on Content Rewards stays my click; the app tracks status, counted vie
 the site says). Whop has no Content Rewards API for clippers: rules, source files and submissions are read through
 the signed-in desktop window.
 
-2026-11-02: two marketplaces, Content Rewards (Whop) and Vyro (MrBeast's, app.vyro.com). Campaigns I join there come
-in by themselves: every 6 hours (and on *Check joined*) the desktop app reads each site's list of my campaigns
-(contentrewards.com/c/campaigns, app.vyro.com/campaigns/add-clips; one page read each, no Claude) and adds the new
-ones as To confirm. One key per campaign (the Content Rewards UUID, the last 8 characters of Vyro's slug), so nothing
-is added twice; a campaign I delete stays out until I paste its link again. Pasting a link still works for both.
-whop.com's own pages aren't campaign links (they don't say which campaign is open).
+2026-11-02: two marketplaces, Content Rewards (Whop) and Vyro (MrBeast's, app.vyro.com). Campaigns are a page's:
+each is added from the page it posts on (Campaigns in that page's menu; `/campaigns` links open it there) and
+confirming needs no page picking. I paste every link (campaigns and source videos), mostly through Claude Code in the
+terminal, where the skills are. One key per campaign (the Content Rewards UUID, the last 8 characters of Vyro's id),
+so pasting it again never makes a second one (from another page it's added to that page too). whop.com's own pages
+aren't campaign links (they don't say which campaign is open). Reading the sites' "joined" lists by themselves was
+built and dropped the same day: Content Rewards' cards on /c/campaigns carry no links. When a page can't be read as
+it should (Vyro's `?c=` link landed on its catalog once), the read says so and the campaign can be read from its
+page's text pasted in (*Read from pasted text*, or `POST /api/campaigns/:id/read {text}`).
 
 ### Video studio (2026-10-14)
 
@@ -244,10 +247,8 @@ versionCode from the tag (`v1.2.3` → 10203).
 - A format video and a UGC video for real.
 - Research: each page's *What it watches* (or *Find channels for me*), *Run now* once; sign in to TikTok.
 - Settings → Connected sites: sign in to Content Rewards (Whop) and Vyro, TikTok, Instagram; check each says “Signed in”.
-  Then Campaigns → *Check joined*: each site should say “N joined”. If one says none though I've joined some, its
-  list didn't hold plain campaign links: the server log has `[joined] no campaign links on …` with the page's text
-  (Vyro's My campaigns page and its earnings page, used for submissions, were only guessed from its app's code).
-  Vyro's sign-in cookie (`vyro_sid`) is from its app's config, untried.
+  Then add a Vyro campaign on its page: if the read still lands on Vyro's catalog (even with 5 s more wait), use
+  *Read from pasted text*. Vyro's earnings page (used for submissions) was only guessed from its app's code.
   Whop's session cookie is a guess (`SITES.whop.sessionCookie`): if it stays “Not signed in”, list the HttpOnly
   cookies on contentrewards.com and pin the right one. Then “Try a page” on a joined campaign (rules and files should
   be in the text).

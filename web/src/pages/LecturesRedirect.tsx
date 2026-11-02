@@ -11,7 +11,7 @@ export function LecturesRedirect() {
   useEffect(() => {
     if (!wid) return;
     api<{ campaignId: string }>(`/workspaces/${wid}/lectures`, { method: 'POST' }).then(
-      ({ campaignId }) => navigate(`/campaigns/${campaignId}`, { replace: true }),
+      ({ campaignId }) => navigate(`/w/${wid}/campaigns/${campaignId}`, { replace: true }),
       (err) => {
         toast.error(errorMessage(err));
         navigate(`/w/${wid}/board`, { replace: true });

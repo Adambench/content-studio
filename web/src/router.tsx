@@ -10,6 +10,7 @@ import { LecturesRedirect } from '@/pages/LecturesRedirect';
 import { BoardPage } from '@/pages/BoardPage';
 import { CalendarPage } from '@/pages/CalendarPage';
 import { CampaignPage } from '@/pages/CampaignPage';
+import { CampaignRedirect, CampaignsRedirect } from '@/pages/CampaignRedirect';
 import { CampaignsPage } from '@/pages/CampaignsPage';
 import { CapturePage } from '@/pages/CapturePage';
 import { HomeRedirect } from '@/pages/HomeRedirect';
@@ -41,8 +42,9 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <HomeRedirect /> },
           { path: 'today', element: <TodayPage /> },
-          { path: 'campaigns', element: <CampaignsPage /> },
-          { path: 'campaigns/:id', element: <CampaignPage /> },
+          // Campaigns are a page's: these open them there.
+          { path: 'campaigns', element: <CampaignsRedirect /> },
+          { path: 'campaigns/:id', element: <CampaignRedirect /> },
           { path: 'review', element: <ReviewRedirect /> },
           { path: 'settings', element: <SettingsPage /> },
           { path: 'knowledge', element: <KnowledgePage /> },
@@ -66,6 +68,8 @@ export const router = createBrowserRouter([
               { path: 'accounts', element: <AccountsPage /> },
               { path: 'analytics', element: <AnalyticsPage /> },
               { path: 'research', element: <ResearchPage /> },
+              { path: 'campaigns', element: <CampaignsPage /> },
+              { path: 'campaigns/:id', element: <CampaignPage /> },
               { path: 'lectures', element: <LecturesRedirect /> },
               { path: 'settings', element: <WorkspaceSettingsPage /> },
             ],

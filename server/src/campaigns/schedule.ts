@@ -1,7 +1,6 @@
 // Campaign upkeep, checked every half hour: each active Content Rewards campaign's budget once a day (a plain fetch of
 // its public page), my submissions on the marketplaces once a day while any are waiting on a campaign (one page read
-// in the signed-in window and one Haiku call each), and the campaigns I've joined there every 6 hours (a page read
-// each, no Claude).
+// in the signed-in window and one Haiku call each).
 import { and, eq, isNotNull } from 'drizzle-orm';
 import { db, now, schema } from '../db';
 import { desktopAvailable } from '../lib/desktop';
@@ -10,7 +9,6 @@ import { enqueue, hasPendingJob } from '../jobs/queue';
 import { SOURCE_RETENTION_DAYS } from '../../../shared/campaigns';
 import { freeSourceVideos } from './sources';
 import { awaitingCampaign, createDueSubmissions } from './submissions';
-import { joinedDue } from './joined';
 
 const TICK_MS = 30 * 60_000;
 const BUDGET_EVERY = 20 * 3600_000;
@@ -47,7 +45,6 @@ function tick() {
   void cleanSources().catch((err) => console.warn(`[campaigns] cleaning sources: ${(err as Error).message}`));
   const last = getSetting('submissionsSync');
   if (desktopAvailable() && awaitingCampaign() && !hasPendingJob('submissions.sync') && (!last || now() - last.at >= SUBMISSIONS_EVERY)) enqueue('submissions.sync', {}, { maxAttempts: 1 });
-  if (joinedDue()) enqueue('campaigns.joined', {}, { maxAttempts: 1 });
 }
 
 export function startCampaignUpkeep() {

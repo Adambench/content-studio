@@ -8,7 +8,7 @@ import { enqueue, hasPendingJob } from '../jobs/queue';
 import { deleteCampaign, emitCampaign, getCampaignDetail, getCampaignRow, getSource, listCampaigns, listSources, pagesOf, setPages, updateCampaign } from '../campaigns/campaigns';
 import { addSourceLink, deleteSource, freeSourceVideos, saveSourceUpload, startSource, stopSource } from '../campaigns/sources';
 import { getSubmission, listSubmissions, updateSubmission } from '../campaigns/submissions';
-import { addCampaignLink, dismissCampaign, isReading, joinedState, startRead } from '../campaigns/joined';
+import { addCampaignLink, isReading, startRead } from '../campaigns/add';
 import { desktopAvailable } from '../lib/desktop';
 import { getSetting } from '../lib/settings';
 
@@ -28,42 +28,44 @@ function checkPages(ids: string[]) {
 
 const withReading = <T extends { id: string }>(c: T) => ({ ...c, reading: isReading(c.id) });
 
-/** Campaigns (outside workspaces): add from a link or a brief, confirm and assign, sources. See campaigns/. */
+/** Campaigns, each on the page (workspace) it's added from: add from a link or a brief, confirm, sources. See campaigns/. */
 export async function campaignRoutes(app: FastifyInstance) {
   app.get('/api/campaigns', async () => listCampaigns().map(withReading));
 
   app.post('/api/campaigns', async (req) => {
     const body = z
       .union([
-        // A marketplace campaign's link (Content Rewards or Vyro; `origin` is read from the link).
-        z.object({ origin: z.enum(MARKETS).optional(), link: z.string().trim().url().max(500) }),
-        z.object({ origin: z.literal('business'), businessWorkspaceId: z.string().min(1), title: z.string().trim().min(1).max(120), brief: z.string().trim().min(1).max(20_000) }),
+        // A marketplace campaign's link (Content Rewards or Vyro; `origin` is read from the link), for the page `pageId`.
+        z.object({ origin: z.enum(MARKETS).optional(), link: z.string().trim().url().max(500), pageId: z.string().min(1).optional() }),
+        // A business's own: it posts on the business's page unless `pageId` says another.
+        z.object({
+          origin: z.literal('business'),
+          businessWorkspaceId: z.string().min(1),
+          pageId: z.string().min(1).optional(),
+          title: z.string().trim().min(1).max(120),
+          brief: z.string().trim().min(1).max(20_000),
+        }),
       ])
       .parse(req.body);
     if ('link' in body) {
+      if (!body.pageId) throw badRequest('Say which page it’s for: a campaign is added to the page it posts on.');
+      checkPages([body.pageId]);
       if (!parseCampaignLink(body.link))
         throw badRequest(
           /whop\.com/i.test(body.link)
             ? 'That’s Whop’s page, which doesn’t say which campaign is open. Use the campaign’s own link: the link button on its banner, or open it on contentrewards.com.'
             : `Give the campaign’s own link: ${MARKETS.map((m) => MARKET_INFO[m].linkExample).join(' or ')}.`,
         );
-      return withReading(getCampaignDetail(addCampaignLink(body.link).id));
+      return withReading(getCampaignDetail(addCampaignLink(body.link, body.pageId).id));
     }
-    checkPages([body.businessWorkspaceId]);
+    checkPages([body.businessWorkspaceId, ...(body.pageId ? [body.pageId] : [])]);
     const id = newId();
     db.insert(schema.campaigns)
       .values({ id, origin: 'business', businessWorkspaceId: body.businessWorkspaceId, title: body.title, description: body.brief, pageText: body.brief, status: 'reading' })
       .run();
+    setPages(id, [body.pageId ?? body.businessWorkspaceId]);
     startRead(id);
     return withReading(getCampaignDetail(id));
-  });
-
-  // The campaigns I've joined on the marketplaces: when they were last checked, and "Check joined" (a page read each).
-  app.get('/api/campaigns/joined', async () => joinedState());
-  app.post('/api/campaigns/joined', async () => {
-    if (!desktopAvailable()) throw badRequest('Checking joined campaigns needs the desktop app: open Content Studio on the computer.');
-    if (!hasPendingJob('campaigns.joined')) enqueue('campaigns.joined', {}, { maxAttempts: 1 });
-    return joinedState();
   });
 
   app.get('/api/campaigns/:id', async (req) => withReading(getCampaignDetail(idParam.parse(req.params).id)));
@@ -100,14 +102,16 @@ export async function campaignRoutes(app: FastifyInstance) {
     return withReading(getCampaignDetail(id));
   });
 
-  // My OK after reading the screen: it goes live on the pages I picked. A rejected campaign can't be confirmed.
+  // My OK after reading the screen: it goes live on its page (or the pages given). A rejected campaign can't be confirmed.
   app.post('/api/campaigns/:id/confirm', async (req) => {
     const { id } = idParam.parse(req.params);
-    const { pageIds } = z.object({ pageIds: z.array(z.string().min(1)).min(1, 'Pick at least one page.').max(50) }).parse(req.body);
+    const body = z.object({ pageIds: z.array(z.string().min(1)).min(1).max(50).optional() }).parse(req.body ?? {});
     const c = getCampaignRow(id);
     if (c.status !== 'to_confirm') throw badRequest('This campaign isn’t waiting for confirmation.');
     if (c.halalVerdict === 'reject') throw badRequest('The halal screen rejected this campaign, so it can’t be used.');
     if (!c.readAt) throw badRequest('Read the campaign successfully first.');
+    const pageIds = body.pageIds ?? pagesOf([id]).get(id) ?? [];
+    if (!pageIds.length) throw badRequest('Pick the page it posts on.');
     checkPages(pageIds);
     setPages(id, pageIds);
     updateCampaign(id, { status: 'active' });
@@ -125,11 +129,15 @@ export async function campaignRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // Read it again; `text` is the campaign page's text I copied, for when the page can't be read as it should.
   app.post('/api/campaigns/:id/read', async (req) => {
     const { id } = idParam.parse(req.params);
+    const { text } = z.object({ text: z.string().trim().min(40, 'Paste the whole campaign page.').max(100_000).optional() }).parse(req.body ?? {});
     const c = getCampaignRow(id);
+    if (text && !isMarket(c.origin)) throw badRequest('A business campaign reads its brief: edit the brief instead.');
     if (isMarket(c.origin) && !c.link) throw badRequest('This campaign has no link to read.');
-    startRead(id);
+    if (isReading(id)) throw badRequest('It’s being read right now: wait for that first.');
+    startRead(id, text);
     return withReading(getCampaignDetail(id));
   });
 
@@ -137,8 +145,6 @@ export async function campaignRoutes(app: FastifyInstance) {
     const { id } = idParam.parse(req.params);
     // Downloads still writing into its folder stop first.
     for (const s of listSources(id)) stopSource(s.id);
-    // A joined campaign I delete isn't added back by the joined check.
-    dismissCampaign(getCampaignRow(id));
     await deleteCampaign(id);
     return { ok: true };
   });

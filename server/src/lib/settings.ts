@@ -48,10 +48,6 @@ type SettingsShape = {
   claudeLimitedUntil: number;
   /** An account's usual views (by platform:account), so posts saved to Ideas from it don't each read its profile. */
   channelMedians: Record<string, { median: number | null; at: number }>;
-  /** The last check of the campaigns I've joined on each marketplace. */
-  joinedSync: import('../campaigns/joined').JoinedSync;
-  /** Marketplace campaigns I deleted (campaignKey), so the joined check doesn't add them back. */
-  dismissedCampaigns: string[];
   /** Campaigns found on Content Rewards that aren't added yet. */
   campaignLeads: import('../../../shared/finder').CampaignLeads;
   /** The skills' source repos as the scout last read them from GitHub (licence, stars, last push). */

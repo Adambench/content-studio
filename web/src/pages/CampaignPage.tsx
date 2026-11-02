@@ -1,4 +1,4 @@
-import { ArrowLeft, CircleAlert, ExternalLink, Loader2, MoreHorizontal, Pause, Play, RefreshCw, Square, Trash2 } from 'lucide-react';
+import { ArrowLeft, CircleAlert, ClipboardPaste, ExternalLink, Loader2, MoreHorizontal, Pause, Play, RefreshCw, Square, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
@@ -14,6 +14,7 @@ import { PlatformIcon } from '@/components/publish/common';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,17 +43,17 @@ async function patch(id: string, body: Record<string, unknown>) {
   return next;
 }
 
-/** The halal screen and the pages to post on: my OK turns a read campaign on. */
+/** The halal screen, then my OK turns a read campaign on for its page (one added before pages were picked asks which). */
 function ConfirmCard({ c, workspaces }: { c: CampaignDetail; workspaces: Workspace[] }) {
-  const suggested = workspaces.filter((w) => w.modules.includes('campaigns') && w.kind === 'clipping').map((w) => w.id);
-  const [pages, setPages] = useState<string[]>(c.pageIds.length ? c.pageIds : suggested.length === 1 ? suggested : []);
+  const hasPages = c.pageIds.length > 0;
+  const [pages, setPages] = useState<string[]>(c.pageIds);
   const [busy, setBusy] = useState(false);
   const rejected = c.halalVerdict === 'reject';
 
   async function confirm() {
     setBusy(true);
     try {
-      queryClient.setQueryData(keys.campaign(c.id), await api<CampaignDetail>(`/campaigns/${c.id}/confirm`, { body: { pageIds: pages } }));
+      queryClient.setQueryData(keys.campaign(c.id), await api<CampaignDetail>(`/campaigns/${c.id}/confirm`, { body: hasPages ? {} : { pageIds: pages } }));
       queryClient.invalidateQueries({ queryKey: keys.campaigns });
       toast.success('Campaign confirmed');
     } catch (err) {
@@ -71,7 +72,7 @@ function ConfirmCard({ c, workspaces }: { c: CampaignDetail; workspaces: Workspa
         <CardDescription>
           {rejected
             ? 'The halal screen rejected this campaign, so it can’t be used. Delete it, or read it again if the page changed.'
-            : 'Read the rules and the screen below. Confirming turns it on for the pages you pick; clips are still made only when you ask and go out only with your OK.'}
+            : 'Read the rules and the screen below. Confirming turns it on for this page; clips are still made only when you ask and go out only with your OK.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -84,10 +85,12 @@ function ConfirmCard({ c, workspaces }: { c: CampaignDetail; workspaces: Workspa
         )}
         {!rejected && (
           <>
-            <div className="space-y-2">
-              <Label>Post on</Label>
-              <PagePicker value={pages} onChange={setPages} workspaces={workspaces} />
-            </div>
+            {!hasPages && (
+              <div className="space-y-2">
+                <Label>Post on</Label>
+                <PagePicker value={pages} onChange={setPages} workspaces={workspaces} />
+              </div>
+            )}
             <Button onClick={confirm} disabled={busy || !pages.length || !c.readAt || c.reading}>
               {busy && <Spinner />} Confirm campaign
             </Button>
@@ -278,8 +281,50 @@ function BriefCard({ c }: { c: CampaignDetail }) {
   );
 }
 
+/** When the page can't be read as it should (Vyro's app, a changed layout): read the text I copied from it instead. */
+function PasteDialog({ c, open, onOpenChange }: { c: CampaignDetail; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function read(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      queryClient.setQueryData(keys.campaign(c.id), await api<CampaignDetail>(`/campaigns/${c.id}/read`, { body: { text: text.trim() } }));
+      onOpenChange(false);
+      setText('');
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <form onSubmit={read} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>Read from the page’s text</DialogTitle>
+            <DialogDescription>Open the campaign, select everything on it (Ctrl+A), copy and paste it here. It’s read and screened like the page itself.</DialogDescription>
+          </DialogHeader>
+          <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={10} aria-label="The campaign page’s text" placeholder="The campaign’s name, pay, rules, source links…" />
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={busy || text.trim().length < 40}>
+              {busy && <Spinner />} Read it
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function CampaignPage() {
-  const { id = '' } = useParams();
+  const { id = '', wid } = useParams();
+  const back = wid ? `/w/${wid}/campaigns` : '/campaigns';
+  const [pasting, setPasting] = useState(false);
   const navigate = useNavigate();
   const campaign = useCampaign(id);
   const { data: workspaces = [] } = useWorkspaces();
@@ -300,8 +345,8 @@ export function CampaignPage() {
         <PageHeader title="Campaign" />
         <div className="p-6 text-sm text-muted-foreground">
           This campaign doesn’t exist any more.{' '}
-          <Link to="/campaigns" className="text-foreground underline">
-            All campaigns
+          <Link to={back} className="text-foreground underline">
+            Back to campaigns
           </Link>
         </div>
       </div>
@@ -326,8 +371,8 @@ export function CampaignPage() {
       <PageHeader
         title={
           <span className="flex min-w-0 items-center gap-2">
-            <Button variant="ghost" size="icon-sm" asChild aria-label="All campaigns" className="-ml-1.5 shrink-0">
-              <Link to="/campaigns">
+            <Button variant="ghost" size="icon-sm" asChild aria-label="Back to campaigns" className="-ml-1.5 shrink-0">
+              <Link to={back}>
                 <ArrowLeft />
               </Link>
             </Button>
@@ -358,6 +403,11 @@ export function CampaignPage() {
                 <DropdownMenuItem disabled={reading} onSelect={() => run(() => api<CampaignDetail>(`/campaigns/${c.id}/read`, { body: {} }).then((d) => queryClient.setQueryData(keys.campaign(c.id), d)))}>
                   <RefreshCw /> Read again
                 </DropdownMenuItem>
+                {isMarket(c.origin) && (
+                  <DropdownMenuItem disabled={reading} onSelect={() => setPasting(true)}>
+                    <ClipboardPaste /> Read from pasted text
+                  </DropdownMenuItem>
+                )}
                 {c.status === 'active' && (
                   <DropdownMenuItem onSelect={() => run(() => patch(c.id, { status: 'paused' }))}>
                     <Pause /> Pause
@@ -401,6 +451,7 @@ export function CampaignPage() {
           )}
         </div>
       </div>
+      <PasteDialog c={c} open={pasting} onOpenChange={setPasting} />
       <AlertDialog open={deleting} onOpenChange={setDeleting}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -415,7 +466,7 @@ export function CampaignPage() {
                 run(async () => {
                   await api(`/campaigns/${c.id}`, { method: 'DELETE' });
                   queryClient.invalidateQueries({ queryKey: keys.campaigns });
-                  navigate('/campaigns');
+                  navigate(back);
                 })
               }
             >

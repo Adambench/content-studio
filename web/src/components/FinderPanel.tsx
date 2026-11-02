@@ -38,11 +38,11 @@ export function FinderPanel({ wid }: { wid: string }) {
 
   async function add(lead: CampaignLead) {
     try {
-      await api('/campaigns', { method: 'POST', body: { origin: 'content_rewards', link: lead.link } });
+      await api('/campaigns', { method: 'POST', body: { origin: 'content_rewards', link: lead.link, pageId: wid } });
       await api('/finder/leads/dismiss', { method: 'POST', body: { link: lead.link } });
       queryClient.invalidateQueries({ queryKey: keys.finder(wid) });
       queryClient.invalidateQueries({ queryKey: keys.campaigns });
-      toast.success('Added: it’s being read', { description: 'Assign it to this page under Campaigns once it has been read.' });
+      toast.success('Added: it’s being read', { description: 'Confirm it under Campaigns once it has been read.' });
     } catch (err) {
       toast.error(errorMessage(err));
     }

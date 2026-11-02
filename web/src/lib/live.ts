@@ -180,15 +180,6 @@ function apply(event: LiveEvent) {
     if (event.status === 'error' && event.jobType === 'research.analyse') toast.error('The video couldn’t be analysed', { description: event.message?.slice(0, 200) });
     if (event.status === 'done' && event.jobType === 'submissions.sync') toast.success(event.message ?? 'Submissions checked');
     if (event.status === 'error' && event.jobType === 'submissions.sync') toast.error('Couldn’t read your submissions', { description: event.message?.slice(0, 200) });
-    if (event.status === 'done' && event.jobType === 'campaigns.joined') {
-      inv(keys.joinedSync);
-      // The check runs by itself every few hours: only news is worth a toast.
-      if (event.message?.startsWith('Added')) toast.success(event.message, { description: 'Check each one and pick its pages.' });
-    }
-    if (event.status === 'error' && event.jobType === 'campaigns.joined') {
-      inv(keys.joinedSync);
-      toast.error('Couldn’t check your joined campaigns', { description: event.message?.slice(0, 200) });
-    }
     if (event.status === 'done' && event.jobType === 'ideas.flesh') toast.success(event.message ?? 'Claude fleshed out your idea', { description: 'Hooks, angle and outline are in the video’s draft.' });
     if (event.status === 'error' && event.jobType === 'ideas.flesh') toast.error('Claude couldn’t flesh out the idea', { description: event.message?.slice(0, 200) });
     if (event.status === 'error' && event.jobType === 'clip.make') toast.error('A clip couldn’t be made', { description: event.message?.slice(0, 200) });

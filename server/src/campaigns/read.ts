@@ -61,6 +61,7 @@ export async function fetchPage(url: string): Promise<PageRead> {
 }
 
 type CampaignRead = {
+  isCampaign: boolean;
   title: string;
   brand: string;
   type: string;
@@ -84,9 +85,10 @@ const money = { type: ['number', 'null'] };
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['title', 'brand', 'type', 'category', 'description', 'accepting', 'payouts', 'budgetUsed', 'budgetLeft', 'budgetTotal', 'deadline', 'rulesLocked', 'rules', 'requirements', 'sources', 'checklist', 'halal'],
+  required: ['isCampaign', 'title', 'brand', 'type', 'category', 'description', 'accepting', 'payouts', 'budgetUsed', 'budgetLeft', 'budgetTotal', 'deadline', 'rulesLocked', 'rules', 'requirements', 'sources', 'checklist', 'halal'],
   properties: {
-    title: { type: 'string' },
+    isCampaign: { type: 'boolean', description: 'False when this is not one campaign’s page or brief: a list or catalog of campaigns, a home page, a sign-in page or an error' },
+    title: { type: 'string', description: 'The campaign’s name as the page gives it, without quotes' },
     brand: { type: 'string', description: 'Who runs the campaign (the brand, creator or clipping agency)' },
     type: { type: 'string', description: 'The kind of campaign as the page says it, e.g. Podcasts, Streamer, UGC, Slideshow' },
     category: { type: 'string', description: 'Its topic category if the page gives one, e.g. Finance, Personal Brand' },
@@ -176,8 +178,14 @@ function cleanChecklist(items: RuleItem[]): RuleItem[] {
     .slice(0, 40);
 }
 
-/** The `campaign.read` job: read the page or brief, then fill in the campaign. A new campaign then waits for my OK. */
-export async function readCampaign({ campaignId }: { campaignId: string }) {
+/** The links written out in pasted text, as a page's links. */
+const linksIn = (text: string) => [...new Set(text.match(/https?:\/\/[^\s<>"'）)\]]+/g) ?? [])].map((href) => ({ href: href.replace(/[.,;:!?]+$/, ''), text: '' }));
+
+/**
+ * The `campaign.read` job: read the page or brief, then fill in the campaign. A new campaign then waits for my OK.
+ * `text`: the campaign page's text, copied by me, read instead of the page.
+ */
+export async function readCampaign({ campaignId, text }: { campaignId: string; text?: string }) {
   const c = getCampaignRow(campaignId);
   const market = isMarket(c.origin) ? MARKET_INFO[c.origin] : null;
   const signIn = market && `sign in to ${SITES[market.site].label} under Settings → Connected sites`;
@@ -185,8 +193,11 @@ export async function readCampaign({ campaignId }: { campaignId: string }) {
   let note: string | null = null;
   if (!market || !c.link) {
     page = { url: '', title: c.title, text: c.pageText, links: [], loginWall: null };
+  } else if (text) {
+    page = { url: c.link, title: '', text, links: linksIn(text), loginWall: null };
   } else if (desktopAvailable()) {
-    page = await readPage(c.link, { scrolls: 4 });
+    // Vyro opens a campaign over its catalog once the catalog has loaded: give it a few seconds more.
+    page = await readPage(c.link, { scrolls: 4, ...(c.origin === 'vyro' && { waitFor: 5000 }) });
   } else if (c.origin === 'vyro') {
     // Vyro's pages are drawn by its app: a plain fetch gets an empty shell.
     throw new JobError('Reading a Vyro campaign needs the desktop app (its signed-in window).', { retry: false });
@@ -204,6 +215,10 @@ export async function readCampaign({ campaignId }: { campaignId: string }) {
         : `This is a campaign page on ${market.label}. Fill in the campaign from it, make the checklist from its rules and screen it.`,
     schema: SCHEMA,
   });
+  if (!out.isCampaign && !page.loginWall) {
+    const where = market ? `${market.label} showed ${/^https?:/.test(page.url) && page.url !== c.link ? page.url : 'another page'} instead of the campaign` : 'The brief doesn’t read as a campaign';
+    throw new JobError(market ? `${where}. Open the link to check it’s the campaign’s own, or paste the campaign page’s text to read instead.` : `${where}.`, { retry: false });
+  }
 
   // Only links that are really on the page (or in the brief) become sources.
   const onPage = new Set(page.links.map((l) => l.href));
@@ -218,7 +233,11 @@ export async function readCampaign({ campaignId }: { campaignId: string }) {
   if (locked && !note) note = `The rules and source files are locked: join the campaign on ${market!.label}, ${signIn}, then read it again.`;
 
   updateCampaign(campaignId, {
-    title: out.title.replace(/\s*[|·–-]\s*(Content Rewards|Vyro)\s*$/i, '').trim() || c.title || 'Untitled campaign',
+    title:
+      out.title
+        .replace(/\s*[|·–-]\s*(Content Rewards|Vyro)\s*$/i, '')
+        .replace(/^["'“”‘’\s]+|["'“”‘’\s]+$/g, '')
+        .trim() || c.title.replace(/^["'“”]+$/, '') || 'Untitled campaign',
     brand: out.brand.trim(),
     type: out.type.trim(),
     category: out.category.trim(),
@@ -238,7 +257,7 @@ export async function readCampaign({ campaignId }: { campaignId: string }) {
     halalReasons: out.halal.reasons.map((r) => r.trim()).filter(Boolean).slice(0, 10),
     pageText: !market ? c.pageText : page.text.slice(0, 200_000),
     readAt: Date.now(),
-    readNote: note,
+    readNote: note ?? (text ? 'Read from the page’s text you pasted.' : null),
     status: c.status === 'reading' ? 'to_confirm' : c.status,
   });
 

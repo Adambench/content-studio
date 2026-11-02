@@ -19,8 +19,6 @@ export type MarketInfo = {
   label: string;
   /** The signed-in window it's read in (Settings → Connected sites). */
   site: SiteId;
-  /** The list of campaigns I've joined, read to add new ones by themselves. */
-  joinedUrl: string;
   /** Where my submitted posts are listed with their status, views and earnings. */
   submissionsUrl: string;
   /** What a campaign's link looks like, for the Add dialog. */
@@ -33,8 +31,6 @@ export const MARKET_INFO: Record<Market, MarketInfo> = {
   content_rewards: {
     label: 'Content Rewards',
     site: 'whop',
-    // "Your Campaigns" (Discover is /c/discover).
-    joinedUrl: 'https://contentrewards.com/c/campaigns',
     submissionsUrl: 'https://contentrewards.com/c/submissions',
     linkExample: 'https://contentrewards.com/c/campaigns/…',
     submitButton: 'Submit clip',
@@ -42,8 +38,6 @@ export const MARKET_INFO: Record<Market, MarketInfo> = {
   vyro: {
     label: 'Vyro',
     site: 'vyro',
-    // "My campaigns" (Add posts); the catalog is /campaigns.
-    joinedUrl: 'https://app.vyro.com/campaigns/add-clips',
     submissionsUrl: 'https://app.vyro.com/earnings',
     linkExample: 'https://app.vyro.com/campaigns?c=…',
     submitButton: 'Submit post',

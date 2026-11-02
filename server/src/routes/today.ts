@@ -21,7 +21,6 @@ const JOB_LABELS: Record<string, string> = {
   'analytics.review': 'Writing the weekly review',
   'campaign.read': 'Reading a campaign',
   'submissions.sync': 'Checking your submissions on the marketplaces',
-  'campaigns.joined': 'Checking the campaigns you’ve joined',
   'research.sweep': 'Looking at what’s working in the niche',
   'research.brief': 'Writing the research brief',
   'research.analyse': 'Analysing a video',

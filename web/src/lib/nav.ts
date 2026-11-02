@@ -2,7 +2,7 @@ import { BadgeDollarSign, CalendarDays, ChartColumn, Clapperboard, Inbox, Lightb
 import type { Workspace } from './types';
 
 export type NavItem = {
-  /** Relative to the workspace, or absolute (`/campaigns`, outside workspaces). */
+  /** Relative to the workspace, or absolute (outside workspaces). */
   to: string;
   label: string;
   icon: LucideIcon;
@@ -21,7 +21,7 @@ export function workspaceNav(ws: Pick<Workspace, 'kind' | 'modules' | 'inboxCoun
     ? [
         has('research') && { to: 'research', label: 'Find', icon: Telescope },
         { to: 'board', label: 'Clips', icon: Clapperboard },
-        has('campaigns') && { to: '/campaigns', label: 'Campaigns', icon: BadgeDollarSign },
+        has('campaigns') && { to: 'campaigns', label: 'Campaigns', icon: BadgeDollarSign },
         { to: 'calendar', label: 'Calendar', icon: CalendarDays, badge: 'attention' },
         { to: 'analytics', label: 'Analytics', icon: ChartColumn },
         !!ws.inboxCount && { to: 'inbox', label: 'Inbox', icon: Inbox, badge: 'inbox' },
@@ -34,7 +34,7 @@ export function workspaceNav(ws: Pick<Workspace, 'kind' | 'modules' | 'inboxCoun
         ws.kind === 'islamic' && has('clipping') && { to: 'lectures', label: 'Lectures', icon: Mic },
         { to: 'inbox', label: 'Inbox', icon: Inbox, badge: 'inbox' },
         has('research') && { to: 'research', label: 'Research', icon: Telescope },
-        has('campaigns') && { to: '/campaigns', label: 'Campaigns', icon: BadgeDollarSign },
+        has('campaigns') && { to: 'campaigns', label: 'Campaigns', icon: BadgeDollarSign },
         { to: 'calendar', label: 'Calendar', icon: CalendarDays, badge: 'attention' },
         { to: 'analytics', label: 'Analytics', icon: ChartColumn },
         { to: 'assets', label: 'Brand', icon: Palette },
