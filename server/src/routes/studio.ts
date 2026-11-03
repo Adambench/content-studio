@@ -23,7 +23,7 @@ import { lookupAyat } from '../islamic/quran';
 import { createEdit, editDetail, findEditForPiece, getEdit, listRenders, restoreEditVersion, saveEditVersion, specMedia, specTranscripts, updateEditWorking } from '../studio/edits';
 import { proxyPath } from '../studio/proxy';
 import { checkEdit } from '../studio/quality';
-import { addNote, deleteNote, listNotes, updateNote } from '../studio/notes';
+import { addNote, deleteNote, listNotes, markReviewed, updateNote } from '../studio/notes';
 import { NOTE_MAX, NOTE_STATUSES } from '../../../shared/notes';
 import { builtinSfxPath, cancelRender, getRender, GSAP_FILES, gsapFilePath, queueRender, runtimePath } from '../studio/render';
 import { tightenEdit } from '../studio/tighten';
@@ -69,6 +69,12 @@ export async function studioRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>('/api/notes/:id', async (req) => {
     deleteNote(req.params.id);
     return { ok: true };
+  });
+
+  /** "Looks good": I watched the newest render and it's fine (or, with good: false, not anymore). */
+  app.post<{ Params: { id: string } }>('/api/pieces/:id/reviewed', async (req) => {
+    const body = z.object({ good: z.boolean() }).parse(req.body);
+    return markReviewed(req.params.id, body.good);
   });
 
   // Autosave of the live edit; returns the server timestamp so the editor can spot newer remote edits.

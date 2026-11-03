@@ -25,6 +25,8 @@ import { piecePosts, upcomingPosts } from '../publish/posts';
 import { studioTools, studioToolLabel } from './studio-tools';
 import { createIdea, getIdea, hasIdeas, listIdeas } from '../ideas/ideas';
 import { notebookText } from '../ideas/notebook';
+import { reviewStates } from '../studio/notes';
+import { REVIEW_LABELS } from '../../../shared/review';
 import { ok, safe, ToolError } from './tool-helpers';
 import { KNOWLEDGE_TOPIC_INFO, KNOWLEDGE_TOPICS } from '../../../shared/knowledge';
 import { createRule, knowledgeText } from '../knowledge/knowledge';
@@ -162,7 +164,7 @@ export function buildTools(workspaceId: string) {
   });
 
   const tools = [
-    tool('get_board', 'List the pipeline stages and every piece on the board (id, title, stage, tags, hook preview).', {}, safe(async () => {
+    tool('get_board', 'List the pipeline stages and every piece on the board (id, title, stage, tags, hook preview, and whether the creator has watched its newest render: To watch, To improve, Check again, Looks good).', {}, safe(async () => {
       const ws = getWorkspace(workspaceId);
       const pieces = db.select().from(schema.pieces).where(eq(schema.pieces.workspaceId, workspaceId)).orderBy(schema.pieces.position).all();
       const activeIds = pieces.map((p) => p.activeBranchId).filter((id): id is string => !!id);
@@ -170,13 +172,25 @@ export function buildTools(workspaceId: string) {
         ? db.select({ id: schema.branches.id, working: schema.branches.working }).from(schema.branches).where(inArray(schema.branches.id, activeIds)).all()
         : [];
       const hookOf = new Map(branches.map((b) => [b.id, normalizeDraft(b.working).hook]));
+      const review = reviewStates(pieces);
       return ok({
         stages: ws.stages.map((s) => ({
           id: s.id,
           name: s.name,
           pieces: pieces
             .filter((p) => p.stage === s.id)
-            .map((p) => ({ id: p.id, title: p.title, tags: p.tags, hook: (hookOf.get(p.activeBranchId ?? '') ?? '').slice(0, 120) || undefined, updated: new Date(p.updatedAt).toISOString().slice(0, 10) })),
+            .map((p) => {
+              const r = review.get(p.id);
+              return {
+                id: p.id,
+                title: p.title,
+                tags: p.tags,
+                hook: (hookOf.get(p.activeBranchId ?? '') ?? '').slice(0, 120) || undefined,
+                updated: new Date(p.updatedAt).toISOString().slice(0, 10),
+                // Where the creator is with watching its newest render (open comments: get_notes).
+                watched: r?.state ? `${REVIEW_LABELS[r.state]}${r.open ? ` (${r.open} open comment${r.open === 1 ? '' : 's'})` : ''}` : undefined,
+              };
+            }),
         })),
       });
     })),

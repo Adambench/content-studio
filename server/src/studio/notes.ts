@@ -1,8 +1,9 @@
 // The creator's comments pinned to moments of a finished video (shared/notes.ts), and what Claude needs to fix each
 // one: what is said and shown there, and which clip of the edit it falls in.
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { clipAt, normalizeEdit, timelineWords, type EditSpec } from '../../../shared/edit';
 import { NOTE_MAX, type NoteStatus, type VideoNote } from '../../../shared/notes';
+import { reviewState, type ReviewState } from '../../../shared/review';
 import { db, newId, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, notFound } from '../lib/http';
@@ -86,6 +87,79 @@ export function deleteNote(id: string) {
   const row = getNote(id);
   db.delete(schema.videoNotes).where(eq(schema.videoNotes.id, id)).run();
   announce(row);
+}
+
+/** The newest finished video of a piece (what "looks good" is said about). */
+export function latestRenderId(pieceId: string) {
+  return (
+    db
+      .select({ id: schema.media.id })
+      .from(schema.media)
+      .where(and(eq(schema.media.pieceId, pieceId), eq(schema.media.source, 'render'), eq(schema.media.kind, 'video')))
+      .orderBy(desc(schema.media.createdAt))
+      .get()?.id ?? null
+  );
+}
+
+/** Each piece's review state (shared/review.ts) and open comments, for the board and Claude's get_board. */
+export function reviewStates(pieces: Pick<typeof schema.pieces.$inferSelect, 'id' | 'stage' | 'reviewedMediaId'>[]) {
+  const ids = pieces.map((p) => p.id);
+  const out = new Map<string, { state: ReviewState | null; open: number }>();
+  if (!ids.length) return out;
+  const counts = new Map(
+    db
+      .select({ pieceId: schema.videoNotes.pieceId, open: sql<number>`sum(${schema.videoNotes.status} = 'open')`, all: sql<number>`count(*)` })
+      .from(schema.videoNotes)
+      .where(inArray(schema.videoNotes.pieceId, ids))
+      .groupBy(schema.videoNotes.pieceId)
+      .all()
+      .map((r) => [r.pieceId, { open: Number(r.open), all: Number(r.all) }]),
+  );
+  const newest = new Map<string, string>();
+  for (const m of db
+    .select({ id: schema.media.id, pieceId: schema.media.pieceId })
+    .from(schema.media)
+    .where(and(inArray(schema.media.pieceId, ids), eq(schema.media.source, 'render'), eq(schema.media.kind, 'video')))
+    .orderBy(asc(schema.media.createdAt))
+    .all())
+    if (m.pieceId) newest.set(m.pieceId, m.id);
+  const gone = new Set(
+    db
+      .select({ pieceId: schema.posts.pieceId })
+      .from(schema.posts)
+      .where(and(inArray(schema.posts.pieceId, ids), inArray(schema.posts.status, ['scheduled', 'publishing', 'published'])))
+      .all()
+      .map((r) => r.pieceId),
+  );
+  for (const p of pieces) {
+    const c = counts.get(p.id) ?? { open: 0, all: 0 };
+    const state = reviewState({ renderId: newest.get(p.id) ?? null, reviewedMediaId: p.reviewedMediaId, open: c.open, comments: c.all, out: gone.has(p.id) || p.stage === 'posted' });
+    out.set(p.id, { state, open: c.open });
+  }
+  return out;
+}
+
+/**
+ * The creator watched the newest render and it's fine (shared/review.ts): Claude's fixes there are closed with it.
+ * Not while a comment is open. `good: false` takes it back.
+ */
+export function markReviewed(pieceId: string, good: boolean) {
+  const piece = getPiece(pieceId);
+  const renderId = good ? latestRenderId(pieceId) : null;
+  if (good) {
+    if (!renderId) throw badRequest('There’s no finished video to watch yet.');
+    if (listNotes(pieceId).some((n) => n.status === 'open')) throw badRequest('Close or delete the open comments first.');
+    const fixed = db
+      .update(schema.videoNotes)
+      .set({ status: 'done', resolvedAt: Date.now() })
+      .where(and(eq(schema.videoNotes.pieceId, pieceId), eq(schema.videoNotes.status, 'fixed')))
+      .returning({ id: schema.videoNotes.id })
+      .all();
+    if (fixed.length) announce({ workspaceId: piece.workspaceId, pieceId, id: fixed[0].id });
+  }
+  db.update(schema.pieces).set({ reviewedMediaId: renderId }).where(eq(schema.pieces.id, pieceId)).run();
+  emit({ type: 'changed', entity: 'pieces', workspaceId: piece.workspaceId, id: pieceId });
+  return { reviewedMediaId: renderId };
 }
 
 const span = (a: number, b: number | null) => (b == null ? formatTime(a) : `${formatTime(a)}–${formatTime(b)}`);

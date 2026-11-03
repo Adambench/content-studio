@@ -119,6 +119,8 @@ export function approveClip(pieceId: string, opts: { tiktokPrivacy?: TikTokPriva
   const ready = ws.stages.some((s) => s.id === 'ready') ? 'ready' : piece.stage;
   const usable = clip.accounts.filter((a) => !a.reconnect);
   if (usable.some((a) => a.platform === 'tiktok' && a.tiktokMode === 'direct') && !opts.tiktokPrivacy) throw badRequest('Choose who can see it on TikTok.');
+  // My yes means I watched it and it's fine (shared/review.ts).
+  db.update(schema.pieces).set({ reviewedMediaId: clip.render.mediaId }).where(eq(schema.pieces.id, piece.id)).run();
   moveTo(piece, ready);
   if (!usable.length) {
     const missing = clip.missingPlatforms.length ? ` on ${clip.missingPlatforms.join(', ')}` : '';

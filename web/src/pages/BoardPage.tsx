@@ -15,6 +15,7 @@ import {
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { AlertCircle, CalendarClock, CheckCircle2, Eye, Film, GitBranch, Play, Plus, Search, Sparkles } from 'lucide-react';
+import { REVIEW_LABELS, REVIEW_STATES, type ReviewState } from '@shared/review';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
@@ -27,6 +28,7 @@ import { api, errorMessage, mediaThumbUrl } from '@/lib/api';
 import { compact, shortAgo, shortWhen } from '@/lib/format';
 import { boardLabel } from '@/lib/nav';
 import { keys, queryClient, useBoard } from '@/lib/queries';
+import { REVIEW_LOOK } from '@/lib/review';
 import type { BoardCard } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -118,11 +120,25 @@ export function BoardPage() {
     }
   }
 
+  // Which videos I've watched: ?review=watch|improve|recheck|good shows only those.
+  const reviewing = REVIEW_STATES.find((s) => s === params.get('review')) ?? null;
+  const reviewCounts = REVIEW_STATES.map((s) => ({ state: s, count: cards.filter((c) => c.review === s).length })).filter((x) => x.count || x.state === reviewing);
+  const pickReview = (state: ReviewState) =>
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p);
+        if (reviewing === state) next.delete('review');
+        else next.set('review', state);
+        return next;
+      },
+      { replace: true },
+    );
+
   const q = filter.trim().toLowerCase();
   const visible = (id: string) => {
-    if (!q) return true;
     const c = byId.get(id);
-    return !!c && (c.title.toLowerCase().includes(q) || c.hook.toLowerCase().includes(q) || c.tags.some((t) => t.includes(q)));
+    if (!c || (reviewing && c.review !== reviewing)) return false;
+    return !q || c.title.toLowerCase().includes(q) || c.hook.toLowerCase().includes(q) || c.tags.some((t) => t.includes(q));
   };
 
   return (
@@ -137,6 +153,27 @@ export function BoardPage() {
           </div>
         }
       />
+      {reviewCounts.length > 0 && (
+        <div className="flex shrink-0 gap-1.5 overflow-x-auto px-4 pt-2.5 md:px-6" role="group" aria-label="Show videos by whether you watched them">
+          {reviewCounts.map(({ state, count }) => {
+            const { icon: Icon, tone, chip } = REVIEW_LOOK[state];
+            const on = reviewing === state;
+            return (
+              <button
+                key={state}
+                type="button"
+                aria-pressed={on}
+                onClick={() => pickReview(state)}
+                className={cn('flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors', on ? chip : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
+              >
+                <Icon className={cn('size-3', !on && tone)} />
+                {REVIEW_LABELS[state]}
+                <span className="tabular-nums opacity-80">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
         {board.isPending ? (
           <div className="flex gap-3 p-4 md:p-6">
@@ -147,9 +184,13 @@ export function BoardPage() {
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={() => setDragId(null)}>
             <div className="flex h-full snap-x snap-mandatory gap-3 p-4 md:snap-none md:p-6">
-              {workspace.stages.map((stage) => (
-                <Column key={stage.id} wid={workspace.id} stageId={stage.id} name={stage.name} ids={(columns[stage.id] ?? []).filter(visible)} byId={byId} isFirst={stage.id === stageIds[0]} />
-              ))}
+              {/* Showing one review state: only the stages that hold such a video, so they come first on a phone. */}
+              {workspace.stages
+                .filter((stage) => !reviewing || (columns[stage.id] ?? []).some(visible))
+                .map((stage) => (
+                  <Column key={stage.id} wid={workspace.id} stageId={stage.id} name={stage.name} ids={(columns[stage.id] ?? []).filter(visible)} byId={byId} isFirst={stage.id === stageIds[0]} />
+                ))}
+              {reviewing && !cards.some((c) => visible(c.id)) && <p className="p-2 text-sm text-muted-foreground">No video is “{REVIEW_LABELS[reviewing]}” now.</p>}
             </div>
             <DragOverlay>{dragId && byId.get(dragId) ? <CardView card={byId.get(dragId)!} overlay /> : null}</DragOverlay>
           </DndContext>
@@ -265,7 +306,8 @@ function CardView({ card, overlay }: { card: BoardCard; overlay?: boolean }) {
         )}
       </div>
       <div className="mt-2.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-        {card.tags.slice(0, 2).map((t) => (
+        {card.review && <ReviewPill card={card} />}
+        {card.tags.slice(0, card.review && card.review !== 'good' ? 1 : 2).map((t) => (
           <span key={t} className="rounded bg-muted px-1.5 py-0.5">
             #{t}
           </span>
@@ -312,3 +354,22 @@ function CardView({ card, overlay }: { card: BoardCard; overlay?: boolean }) {
   );
 }
 
+
+/** Whether I've watched the card's newest render: a label until I have, a thumb once it looks good. */
+function ReviewPill({ card }: { card: BoardCard }) {
+  if (!card.review) return null;
+  const { icon: Icon, chip, tone } = REVIEW_LOOK[card.review];
+  if (card.review === 'good')
+    return (
+      <span className={cn('flex shrink-0 items-center', tone)} title="Looks good: you watched the newest render">
+        <Icon className="size-3" aria-label="Looks good" />
+      </span>
+    );
+  return (
+    <span className={cn('flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-medium', chip)}>
+      <Icon className="size-3" />
+      {REVIEW_LABELS[card.review]}
+      {card.review === 'improve' && card.openComments > 0 && <span className="tabular-nums">· {card.openComments}</span>}
+    </span>
+  );
+}

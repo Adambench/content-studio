@@ -150,6 +150,8 @@ function apply(event: LiveEvent) {
         break;
       case 'notes':
         inv(event.pieceId ? keys.notes(event.pieceId) : ['notes']);
+        // A card shows whether its video has comments to fix.
+        if (wid) inv(keys.board(wid));
         break;
       case 'notebook':
         inv(wid ? keys.notebook(wid) : ['notebook']);

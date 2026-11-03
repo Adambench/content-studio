@@ -10,6 +10,7 @@ import { isLoose, queueInboxSort } from '../services/inbox';
 import { deleteMedia } from '../services/media';
 import { createBranch, createPiece, getBranch, getPiece, getPieceDetail, getWorkspace, restoreVersion, saveVersion, updateWorking } from '../services/pieces';
 import { chooseDirection, requestPitch } from '../studio/directions';
+import { reviewStates } from '../studio/notes';
 import { ideaForPiece, seriesForPieces } from '../ideas/ideas';
 
 const draftSchema = z.object({
@@ -62,6 +63,7 @@ export async function pieceRoutes(app: FastifyInstance) {
       .from(schema.posts)
       .where(inArray(schema.posts.pieceId, ids))
       .all();
+    const review = reviewStates(pieces);
     const authorOf = new Map(heads.map((h) => [h.id, h.author]));
     const views = pieceViews(ids);
     const series = seriesForPieces(ids);
@@ -84,6 +86,9 @@ export async function pieceRoutes(app: FastifyInstance) {
         rendered: ownMedia.some((m) => m.source === 'render'),
         lastAuthor: active?.head ? (authorOf.get(active.head) ?? null) : null,
         ...postSummary(posts.filter((x) => x.pieceId === p.id)),
+        // Whether I've watched the newest render: comments to fix, changed since, fine (shared/review.ts).
+        review: review.get(p.id)?.state ?? null,
+        openComments: review.get(p.id)?.open ?? 0,
         // Latest views across its posts, once any are in.
         views: views.get(p.id) ?? null,
         // The Ideas card it came from, and the series it's an episode of.

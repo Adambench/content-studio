@@ -1,13 +1,17 @@
-import { Check, MessageSquarePlus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react';
+import { Check, MessageSquarePlus, RotateCcw, Sparkles, ThumbsUp, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { clock } from '@shared/clipping';
 import type { NoteStatus, VideoNote } from '@shared/notes';
+import { reviewState } from '@shared/review';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { api, errorMessage } from '@/lib/api';
-import { keys, queryClient, useNotes } from '@/lib/queries';
+import { keys, queryClient, useBoard, useNotes } from '@/lib/queries';
+import { REVIEW_LOOK } from '@/lib/review';
+import type { PieceDetail } from '@/lib/types';
 import { sendToVideoChat } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
 
@@ -321,5 +325,63 @@ export function NoteList({
         ))}
       </ul>
     </section>
+  );
+}
+
+/**
+ * Under the player: whether I've watched the newest render (shared/review.ts), and the click that says it looks
+ * good, which closes Claude's fixes with it and offers the next video still to watch.
+ */
+export function ReviewBar({ piece, renderId }: { piece: Pick<PieceDetail, 'id' | 'workspaceId' | 'reviewedMediaId'>; renderId: string }) {
+  const notes = useNotes(piece.id);
+  const board = useBoard(piece.workspaceId);
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const list = notes.data;
+  if (!list) return null;
+  const open = list.filter((n) => n.status === 'open').length;
+  const state = reviewState({ renderId, reviewedMediaId: piece.reviewedMediaId, open, comments: list.length });
+  if (!state) return null;
+  const { icon: Icon, tone } = REVIEW_LOOK[state];
+  const text = {
+    watch: 'Not watched yet: comment on what to change, or',
+    improve: `To improve: ${open} open comment${open === 1 ? '' : 's'}`,
+    recheck: 'Changed since your comments: watch it again, then',
+    good: 'Watched: it looks good',
+  }[state];
+
+  async function mark(good: boolean) {
+    setBusy(true);
+    try {
+      await api(`/pieces/${piece.id}/reviewed`, { method: 'POST', body: { good } });
+      queryClient.invalidateQueries({ queryKey: keys.piece(piece.id) });
+      if (!good) return;
+      const next = board.data?.find((c) => c.id !== piece.id && (c.review === 'watch' || c.review === 'recheck'));
+      toast.success('Looks good', next ? { action: { label: 'Next to watch', onClick: () => navigate(`/w/${piece.workspaceId}/p/${next.id}`) } } : undefined);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-lg bg-muted/40 px-2.5 py-1 text-xs">
+      <span className={cn('flex items-center gap-1.5', tone)}>
+        <Icon className="size-3.5 shrink-0" />
+        {text}
+      </span>
+      {state === 'good' ? (
+        <Button size="sm" variant="ghost" className="h-6 px-1.5 text-xs text-muted-foreground" disabled={busy} onClick={() => mark(false)}>
+          Not yet
+        </Button>
+      ) : (
+        state !== 'improve' && (
+          <Button size="sm" variant="secondary" className="h-6 px-2 text-xs" disabled={busy} onClick={() => mark(true)}>
+            <ThumbsUp /> Looks good
+          </Button>
+        )
+      )}
+    </div>
   );
 }

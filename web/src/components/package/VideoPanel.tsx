@@ -12,7 +12,7 @@ import { keys, queryClient, useEdit } from '@/lib/queries';
 import type { PieceDetail } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ClipPlayer } from './ClipReview';
-import { NoteComposer } from './VideoNotes';
+import { NoteComposer, ReviewBar } from './VideoNotes';
 
 /** The video itself: its latest render (or how the render is going), and the way into the editor. */
 export function VideoPanel({ piece, summary, video, onVideo }: { piece: PieceDetail; summary: ReviewClip | undefined; video: HTMLVideoElement | null; onVideo: (v: HTMLVideoElement | null) => void }) {
@@ -82,6 +82,7 @@ export function VideoPanel({ piece, summary, video, onVideo }: { piece: PieceDet
           version={(before && previous ? previous.version : summary.renderVersion) ?? null}
         />
       )}
+      {summary?.render && !before && <ReviewBar piece={piece} renderId={summary.render.mediaId} />}
       <div className="flex flex-wrap items-center justify-center gap-2">
         <Button size="sm" variant={summary?.render ? 'outline' : 'default'} asChild>
           <Link to={editor}>

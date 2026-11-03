@@ -733,6 +733,11 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
   canvas is Ideas). A list of notes, first line the title, each saved as I type (`notebook`); deleted ones come back
   with Undo for a month, blank ones go. Ctrl K finds them. Claude only reads them (`get_notebook`, *Ask Claude*) and
   turns one into idea cards when I ask; it never changes a note.
+- **Watched or not (2026-11-03).** Every video with a finished render shows where I am with it (`shared/review.ts`):
+  *To watch* (never commented on), *To improve* (open comments), *Check again* (comments fixed or closed, or a new
+  render since), *Looks good* (my click under the player, on that exact render; it closes Claude's fixes; a newer
+  render asks again). A clip's yes in Review counts as watched. Cards carry the label, the board's chips show only
+  those videos, and Claude's `get_board` sees it. Videos already out with nothing said aren't asked about.
 
 Accounts (2026-10-27): each page gets its own mascot (not one shared). Once every buildable step is done, I go over
 each account with Claude (name, goal, niche, language, the mascot's look): steps 5 and 6 are built after that.

@@ -82,6 +82,8 @@ export const pieces = sqliteTable(
     campaignId: text('campaign_id').references((): AnySQLiteColumn => campaigns.id, { onDelete: 'set null' }),
     /** Creative directions Claude pitched for the video (personal and business pages) and the one picked. */
     directions: text('directions', { mode: 'json' }).$type<PieceDirections | null>(),
+    /** The render I said looks good (shared/review.ts): a newer render asks for another look. */
+    reviewedMediaId: text('reviewed_media_id'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
