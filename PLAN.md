@@ -724,6 +724,11 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
   mainly talks (`moments.speaker`: name, who they are, `known`), and the clip maker adds the arrow where a guest
   most viewers wouldn't know first shows (`whoTag`: the person talking in at least 65 % of the on-screen talk,
   matched across shots by where the camera has them; otherwise none, so a host is never named as the guest).
+- **Comments on a video (2026-11-03).** I go over a finished video on its page and pin comments to a moment or a
+  stretch (pause and type, or C; play on and "to 0:15" makes it a stretch). They stay (`video_notes`), show as marks
+  on a strip under the player and in a list beside it, with Claude's answer under each. Claude reads them with the
+  words, clip and overlays at each spot: in the app's chat (`get_notes`, `resolve_note`, *Fix with Claude*) or in
+  Claude Code (`npm run notes`, `npm run notes -- fix <id> "…"`). Claude marks one *fixed*; I close it or reopen it.
 
 Accounts (2026-10-27): each page gets its own mascot (not one shared). Once every buildable step is done, I go over
 each account with Claude (name, goal, niche, language, the mascot's look): steps 5 and 6 are built after that.

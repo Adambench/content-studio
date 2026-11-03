@@ -34,6 +34,7 @@ import { getWorkspace } from '../services/pieces';
 import { createEdit, findEditForPiece, listEditVersions, listRenders, saveEditVersion, specMedia, specTranscripts } from '../studio/edits';
 import { queueRender } from '../studio/render';
 import { checkEdit } from '../studio/quality';
+import { getNote, notesText, updateNote } from '../studio/notes';
 import { QUALITY_BAR, qualityText } from '../../../shared/quality';
 import { previewOverlay } from '../studio/preview';
 import { normalizeScene, SCENE_FONTS, SCENE_MAX_ELEMENTS, SCENE_MAX_SECONDS, SCENE_MAX_TWEENS, SCENE_SOUNDS } from '../../../shared/scene';
@@ -136,6 +137,10 @@ export function studioToolLabel(name: string, input: Record<string, any>): strin
       return 'Checked the video’s quality';
     case 'view_render':
       return 'Watched the rendered video';
+    case 'get_notes':
+      return 'Read your comments on the video';
+    case 'resolve_note':
+      return input.fixed === false ? 'Answered a comment' : 'Fixed a comment';
     case 'follow_speaker':
       return 'Started reframing on the speaker';
     case 'write_scene':
@@ -676,7 +681,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
     tool(
       'view_render',
       'See frames of a piece’s latest finished render, the video the creator is watching. Times are seconds into that video, which are also seconds on the edit’s timeline. ' +
-        'Use it for the creator’s notes pinned to a moment ("0:07 — cut this pause"): look at the frame before changing anything. Note which edit version the render shows (the reply says).',
+        'Use it for the creator’s comments pinned to a moment (get_notes): look at the frame before changing anything. Note which edit version the render shows (the reply says).',
       { pieceId: z.string(), atSeconds: z.array(z.number().min(0)).min(1).max(6).describe('Seconds into the video; for a note, a little before it, at it and a little after') },
       safe(async ({ pieceId, atSeconds }) => {
         ownPiece(pieceId);
@@ -704,6 +709,30 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         } finally {
           await Promise.all(files.map((f) => rm(f, { force: true })));
         }
+      }),
+    ),
+
+    tool(
+      'get_notes',
+      'The creator’s comments on a piece’s finished video, each pinned to a moment or a stretch ("0:07 cut this pause", "0:12–0:18 the arrow covers his face"), with what is said, which clip and what is on screen there, on the edit version that render showed. ' +
+        'To fix them: look with view_render at each, change the edit with update_edit (one version for all of them), then resolve_note each with what you changed, then render_edit (not for a clip waiting in Review: it renders again by itself). ' +
+        'A comment you can’t or shouldn’t do (it breaks a halal or campaign rule): leave it open and say why in resolve_note’s reply with fixed: false.',
+      { pieceId: z.string(), all: z.boolean().optional().describe('Include the ones already fixed or closed') },
+      safe(async ({ pieceId, all }) => {
+        ownPiece(pieceId);
+        return ok(await notesText(pieceId, { all }));
+      }),
+    ),
+
+    tool(
+      'resolve_note',
+      'Answer one of the creator’s comments (get_notes) after changing the edit for it: what you changed, in a short line. fixed: false leaves it open with your answer (you couldn’t, or need them to choose). The creator closes or reopens it.',
+      { noteId: z.string(), reply: z.string().min(2).max(400), fixed: z.boolean().optional().describe('Default true') },
+      safe(async ({ noteId, reply, fixed }) => {
+        const note = getNote(noteId);
+        ownPiece(note.pieceId);
+        updateNote(noteId, { reply, status: fixed === false ? 'open' : 'fixed' });
+        return ok(fixed === false ? 'Answered; it stays open.' : 'Marked fixed.');
       }),
     ),
 

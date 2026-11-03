@@ -74,6 +74,8 @@ measurements, open items and the current build plan (phase 8). Read only the sec
 
 - `npm run dev` (desktop + server + Vite), `npm run dev:web` (browser only), `npm run typecheck`
 - `npm run install-app` — build, package, install to `~/.local/lib/content-studio`, restart if running
+- `npm run notes` — my open comments on finished videos (pinned to a moment or stretch, with the words, clip and
+  overlays there); after fixing, `npm run notes -- fix <noteId> "<what changed>"` (or `answer` to leave it open).
 - `npm run db:generate -w server` after editing `server/src/db/schema.ts` (migrations run on startup). drizzle-kit
   drops `ON DELETE` from foreign keys it adds with `ALTER TABLE`: check the SQL.
 - `npm run android` — app UI build + `cap sync`. APKs: CI, or JDK 21 + SDK (`cd mobile/android && ./gradlew assembleDebug`)

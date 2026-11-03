@@ -23,6 +23,8 @@ import { lookupAyat } from '../islamic/quran';
 import { createEdit, editDetail, findEditForPiece, getEdit, listRenders, restoreEditVersion, saveEditVersion, specMedia, specTranscripts, updateEditWorking } from '../studio/edits';
 import { proxyPath } from '../studio/proxy';
 import { checkEdit } from '../studio/quality';
+import { addNote, deleteNote, listNotes, updateNote } from '../studio/notes';
+import { NOTE_MAX, NOTE_STATUSES } from '../../../shared/notes';
 import { builtinSfxPath, cancelRender, getRender, GSAP_FILES, gsapFilePath, queueRender, runtimePath } from '../studio/render';
 import { tightenEdit } from '../studio/tighten';
 import { bearerToken } from './auth';
@@ -44,6 +46,29 @@ export async function studioRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/api/pieces/:id/renders', async (req) => {
     const edit = findEditForPiece(req.params.id);
     return edit ? listRenders(edit.id) : [];
+  });
+
+  /** Comments pinned to moments of the finished video, for Claude to fix (studio/notes.ts). */
+  app.get<{ Params: { id: string } }>('/api/pieces/:id/notes', async (req) => {
+    getPiece(req.params.id);
+    return listNotes(req.params.id);
+  });
+
+  app.post<{ Params: { id: string } }>('/api/pieces/:id/notes', async (req) => {
+    const body = z
+      .object({ mediaId: z.string().nullish(), at: z.number().min(0), end: z.number().min(0).nullish(), text: z.string().min(1).max(NOTE_MAX) })
+      .parse(req.body);
+    return addNote(req.params.id, body);
+  });
+
+  app.patch<{ Params: { id: string } }>('/api/notes/:id', async (req) => {
+    const body = z.object({ text: z.string().max(NOTE_MAX).optional(), status: z.enum(NOTE_STATUSES).optional() }).parse(req.body);
+    return updateNote(req.params.id, body);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/notes/:id', async (req) => {
+    deleteNote(req.params.id);
+    return { ok: true };
   });
 
   // Autosave of the live edit; returns the server timestamp so the editor can spot newer remote edits.

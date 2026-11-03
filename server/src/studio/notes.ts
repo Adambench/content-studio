@@ -1,0 +1,170 @@
+// The creator's comments pinned to moments of a finished video (shared/notes.ts), and what Claude needs to fix each
+// one: what is said and shown there, and which clip of the edit it falls in.
+import { and, asc, desc, eq } from 'drizzle-orm';
+import { clipAt, normalizeEdit, timelineWords, type EditSpec } from '../../../shared/edit';
+import { NOTE_MAX, type NoteStatus, type VideoNote } from '../../../shared/notes';
+import { db, newId, schema } from '../db';
+import { emit } from '../lib/events';
+import { badRequest, notFound } from '../lib/http';
+import { formatTime } from '../services/media';
+import { getPiece } from '../services/pieces';
+import { findEditForPiece, specMedia, specTranscripts } from './edits';
+
+type Row = typeof schema.videoNotes.$inferSelect;
+const round = (v: number) => Math.round(v * 10) / 10;
+
+const toNote = (r: Row): VideoNote => ({
+  id: r.id,
+  pieceId: r.pieceId,
+  mediaId: r.mediaId,
+  version: r.version,
+  at: r.at,
+  end: r.end,
+  text: r.text,
+  status: r.status,
+  reply: r.reply,
+  createdAt: r.createdAt,
+  resolvedAt: r.resolvedAt,
+});
+
+const announce = (r: Pick<Row, 'workspaceId' | 'pieceId' | 'id'>) => emit({ type: 'changed', entity: 'notes', workspaceId: r.workspaceId, pieceId: r.pieceId, id: r.id });
+
+export function listNotes(pieceId: string) {
+  return db.select().from(schema.videoNotes).where(eq(schema.videoNotes.pieceId, pieceId)).orderBy(asc(schema.videoNotes.at), asc(schema.videoNotes.createdAt)).all().map(toNote);
+}
+
+export function getNote(id: string) {
+  const row = db.select().from(schema.videoNotes).where(eq(schema.videoNotes.id, id)).get();
+  if (!row) throw notFound('Comment not found');
+  return row;
+}
+
+/** A comment at `at` (to `end` for a stretch) on one of the piece's renders, the one being watched. */
+export function addNote(pieceId: string, body: { mediaId?: string | null; at: number; end?: number | null; text: string }) {
+  const piece = getPiece(pieceId);
+  const text = body.text.trim().slice(0, NOTE_MAX);
+  if (!text) throw badRequest('Write what to change.');
+  let version: number | null = null;
+  let length = Infinity;
+  if (body.mediaId) {
+    const m = db.select().from(schema.media).where(and(eq(schema.media.id, body.mediaId), eq(schema.media.pieceId, pieceId))).get();
+    if (!m || m.source !== 'render') throw badRequest('That isn’t one of this video’s renders.');
+    version = db.select({ n: schema.renders.versionNumber }).from(schema.renders).where(eq(schema.renders.mediaId, m.id)).get()?.n ?? null;
+    if (m.durationMs) length = m.durationMs / 1000;
+  }
+  const at = round(Math.max(0, Math.min(body.at, length)));
+  const end = body.end != null && body.end > at + 0.2 ? round(Math.min(body.end, length)) : null;
+  const row = db
+    .insert(schema.videoNotes)
+    .values({ id: newId(), workspaceId: piece.workspaceId, pieceId, mediaId: body.mediaId ?? null, version, at, end, text })
+    .returning()
+    .get();
+  announce(row);
+  return toNote(row);
+}
+
+/** The creator's changes (the words, closing or reopening it) or Claude's (`fixed` with what it changed). */
+export function updateNote(id: string, patch: { text?: string; status?: NoteStatus; reply?: string }) {
+  const row = getNote(id);
+  const text = patch.text?.trim().slice(0, NOTE_MAX);
+  if (patch.text !== undefined && !text) throw badRequest('Write what to change.');
+  const set: Partial<Row> = {};
+  if (text) set.text = text;
+  if (patch.reply !== undefined) set.reply = patch.reply.trim().slice(0, NOTE_MAX);
+  if (patch.status && patch.status !== row.status) {
+    set.status = patch.status;
+    set.resolvedAt = patch.status === 'open' ? null : Date.now();
+    // Reopened: Claude's last answer stays until it answers again.
+  }
+  if (!Object.keys(set).length) return toNote(row);
+  const next = db.update(schema.videoNotes).set(set).where(eq(schema.videoNotes.id, id)).returning().get();
+  announce(next);
+  return toNote(next);
+}
+
+export function deleteNote(id: string) {
+  const row = getNote(id);
+  db.delete(schema.videoNotes).where(eq(schema.videoNotes.id, id)).run();
+  announce(row);
+}
+
+const span = (a: number, b: number | null) => (b == null ? formatTime(a) : `${formatTime(a)}–${formatTime(b)}`);
+const secs = (a: number, b: number | null) => (b == null ? `${a.toFixed(1)} s` : `${a.toFixed(1)}–${b.toFixed(1)} s`);
+
+/** What sits under a comment on the edit version its render shows: the words, the clip and its source time, what's on screen. */
+async function context(spec: EditSpec, at: number, end: number | null) {
+  const from = at - (end == null ? 1.5 : 0.3);
+  const to = (end ?? at) + (end == null ? 1.5 : 0.3);
+  const words = timelineWords(spec, await specTranscripts(spec, specMedia(spec)))
+    .filter((w) => w.end > from && w.start < to)
+    .map((w) => w.text)
+    .join(' ');
+  const lines: string[] = [];
+  if (words) lines.push(`said around it: “${words}”`);
+  const clips = new Map<number, string>();
+  for (const t of end == null ? [at] : [at, (at + end) / 2, end - 0.05]) {
+    const c = clipAt(spec, t);
+    if (!c || clips.has(c.index)) continue;
+    const src = c.clip.in + (t - c.start);
+    clips.set(c.index, `clip ${c.index + 1} of ${spec.clips.length} (id ${c.clip.id}, media ${c.clip.mediaId}, source ${c.clip.in.toFixed(2)}–${c.clip.out.toFixed(2)} s, here ${src.toFixed(2)} s, ${c.clip.fit})`);
+  }
+  if (clips.size) lines.push(`in ${[...clips.values()].join('; ')}`);
+  const shown = spec.overlays
+    .filter((o) => o.start < (end ?? at + 0.3) && o.end > at - 0.3)
+    .map((o) => {
+      const what = o.type === 'graphic' ? `graphic ${o.template} “${o.text}${o.sub ? ` / ${o.sub}` : ''}”` : o.type === 'text' ? `text “${o.text}”` : o.type;
+      return `${what} (id ${o.id}, ${o.start.toFixed(1)}–${o.end.toFixed(1)} s)`;
+    });
+  if (shown.length) lines.push(`on screen: ${shown.join('; ')}`);
+  return lines;
+}
+
+/**
+ * The comments as Claude reads them (the chat's get_notes and Claude Code's `scripts/notes.ts`): each with the edit
+ * version its render showed, the words, clip and overlays there, and a warning when the edit has changed since (its
+ * times may have moved).
+ */
+export async function notesText(pieceId: string, opts: { all?: boolean } = {}) {
+  const piece = getPiece(pieceId);
+  const notes = listNotes(pieceId).filter((n) => opts.all || n.status === 'open');
+  if (!notes.length) return `No ${opts.all ? '' : 'open '}comments on “${piece.title}”.`;
+  const edit = findEditForPiece(pieceId);
+  const head = edit ? db.select({ n: schema.editVersions.number }).from(schema.editVersions).where(eq(schema.editVersions.editId, edit.id)).orderBy(desc(schema.editVersions.number)).get()?.n : undefined;
+  const specs = new Map<number, EditSpec | null>();
+  const specOf = (n: number | null) => {
+    if (!edit || n == null) return null;
+    if (!specs.has(n)) {
+      const v = db.select({ spec: schema.editVersions.spec }).from(schema.editVersions).where(and(eq(schema.editVersions.editId, edit.id), eq(schema.editVersions.number, n))).get();
+      specs.set(n, v ? normalizeEdit(v.spec) : null);
+    }
+    return specs.get(n) ?? null;
+  };
+  const out = [`Comments on “${piece.title}” (piece ${pieceId}${head ? `, edit at v${head}` : ''}):`];
+  for (const [i, n] of notes.entries()) {
+    out.push('');
+    out.push(`${i + 1}. [${n.id}] ${span(n.at, n.end)} (${secs(n.at, n.end)}) on the render of v${n.version ?? '?'}${n.status === 'open' ? '' : ` · ${n.status}`}: ${n.text}`);
+    const spec = specOf(n.version);
+    if (spec) for (const l of await context(spec, n.at, n.end)) out.push(`   ${l}`);
+    if (head && n.version && head > n.version) out.push(`   the edit changed since v${n.version}: find the spot by its words, not its time`);
+    if (n.reply) out.push(`   last answer: ${n.reply}`);
+  }
+  return out.join('\n');
+}
+
+/** Every piece with open comments, newest comment first (for Claude Code: "fix my comments"). */
+export function piecesWithOpenNotes() {
+  const rows = db
+    .select({ pieceId: schema.videoNotes.pieceId, title: schema.pieces.title, workspaceId: schema.videoNotes.workspaceId, createdAt: schema.videoNotes.createdAt })
+    .from(schema.videoNotes)
+    .innerJoin(schema.pieces, eq(schema.pieces.id, schema.videoNotes.pieceId))
+    .where(eq(schema.videoNotes.status, 'open'))
+    .orderBy(desc(schema.videoNotes.createdAt))
+    .all();
+  const seen = new Map<string, { pieceId: string; title: string; workspaceId: string; open: number }>();
+  for (const r of rows) {
+    const p = seen.get(r.pieceId) ?? { pieceId: r.pieceId, title: r.title, workspaceId: r.workspaceId, open: 0 };
+    p.open++;
+    seen.set(r.pieceId, p);
+  }
+  return [...seen.values()];
+}

@@ -10,6 +10,7 @@ import { DirectionPanel } from '@/components/package/DirectionPanel';
 import { ClipReview } from '@/components/package/ClipReview';
 import { StageStepper } from '@/components/package/StageStepper';
 import { VideoPanel } from '@/components/package/VideoPanel';
+import { NoteList } from '@/components/package/VideoNotes';
 import { PiecePosts } from '@/components/publish/PiecePosts';
 import { ScheduleDialog } from '@/components/publish/ScheduleDialog';
 import { TagInput } from '@/components/TagInput';
@@ -94,6 +95,8 @@ function Editor({ piece }: { piece: PieceDetail }) {
   const summary = usePackage(piece.id);
   const queue = useReview();
   const branch = piece.branches.find((b) => b.id === piece.activeBranchId) ?? piece.branches[0];
+  // The player, for the comments beside it to jump to their moment.
+  const [video, setVideo] = useState<HTMLVideoElement | null>(null);
 
   const [title, setTitle] = useState(piece.title);
   useEffect(() => setTitle(piece.title), [piece.title]);
@@ -197,9 +200,10 @@ function Editor({ piece }: { piece: PieceDetail }) {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto grid max-w-6xl gap-6 p-4 md:p-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-8">
           <div className="lg:sticky lg:top-0 lg:self-start">
-            <VideoPanel piece={piece} summary={summary.data} />
+            <VideoPanel piece={piece} summary={summary.data} video={video} onVideo={setVideo} />
           </div>
           <div className="min-w-0 space-y-8">
+            {summary.data?.render && <NoteList pieceId={piece.id} video={video} mediaId={summary.data.render.mediaId} version={summary.data.renderVersion} />}
             {reviewing && summary.data && (
               <section id="review" className="scroll-mt-4 rounded-xl border bg-card p-4" aria-label="Review">
                 <ClipReview clip={summary.data} onDone={() => (after ? openClip(after) : navigate(`/w/${workspace.id}/board`))} />

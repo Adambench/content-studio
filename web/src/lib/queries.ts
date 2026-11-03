@@ -13,6 +13,7 @@ import type { IdeaDetail, IdeaNode } from '@shared/ideas';
 import type { KnowledgeRule } from '@shared/knowledge';
 import type { OwnMeasures, PageStyle, ReferenceVideo } from '@shared/references';
 import type { Toolbox } from '@shared/toolbox';
+import type { VideoNote } from '@shared/notes';
 import type { SubmissionsSyncState } from './types';
 import type { ReviewClip } from '@shared/clipping';
 import type { SitesStatus } from '@shared/sites';
@@ -53,6 +54,7 @@ export const keys = {
   piece: (id: string) => ['piece', id] as const,
   edit: (pieceId: string) => ['edit', pieceId] as const,
   renders: (pieceId: string) => ['renders', pieceId] as const,
+  notes: (pieceId: string) => ['notes', pieceId] as const,
   media: (wid: string, params: Record<string, string | undefined> = {}) => ['media', wid, params] as const,
   mediaItem: (id: string) => ['media-item', id] as const,
   threads: (wid: string) => ['threads', wid] as const,
@@ -102,6 +104,14 @@ export const usePiece = (id: string) => useQuery({ queryKey: keys.piece(id), que
 
 /** The piece's video edit; null until one is started. */
 export const useEdit = (pieceId: string) => useQuery({ queryKey: keys.edit(pieceId), queryFn: () => api<EditDetail | null>(`/pieces/${pieceId}/edit`) });
+/** Comments pinned to moments of the finished video. While some are open it looks again every 20 s: Claude Code answers them straight in the database. */
+export const useNotes = (pieceId: string) =>
+  useQuery({
+    queryKey: keys.notes(pieceId),
+    queryFn: () => api<VideoNote[]>(`/pieces/${pieceId}/notes`),
+    enabled: !!pieceId,
+    refetchInterval: (q) => (q.state.data?.some((n) => n.status === 'open') ? 20_000 : false),
+  });
 export const useRenders = (pieceId: string) => useQuery({ queryKey: keys.renders(pieceId), queryFn: () => api<RenderRow[]>(`/pieces/${pieceId}/renders`) });
 
 export function useMedia(wid: string, params: { scope?: 'footage' | 'assets' | 'inbox'; kind?: string; q?: string; pieceId?: string } = {}) {

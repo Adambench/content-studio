@@ -6,6 +6,7 @@ import type { CampaignOrigin, CampaignPlatform, CampaignStatus, HalalVerdict, Pa
 import type { EditSpec, EditTemplate } from '../../../shared/edit';
 import type { ViralHint } from '../../../shared/finder';
 import type { MascotId } from '../../../shared/mascots';
+import type { NoteStatus } from '../../../shared/notes';
 import type { PieceDirections } from '../../../shared/direction';
 import type { IdeaAssist, IdeaKind } from '../../../shared/ideas';
 import type { KnowledgeSource, KnowledgeStatus, KnowledgeTopic } from '../../../shared/knowledge';
@@ -201,6 +202,26 @@ export const renders = sqliteTable(
     finishedAt: integer('finished_at'),
   },
   (t) => [index('renders_edit_idx').on(t.editId)],
+);
+
+/** A comment pinned to a moment (or a stretch) of a piece's finished video, for Claude to fix (shared/notes.ts). */
+export const videoNotes = sqliteTable(
+  'video_notes',
+  {
+    id: id(),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    pieceId: text('piece_id').notNull().references(() => pieces.id, { onDelete: 'cascade' }),
+    mediaId: text('media_id').references(() => media.id, { onDelete: 'set null' }),
+    version: integer('version'),
+    at: real('at').notNull(),
+    end: real('end'),
+    text: text('text').notNull(),
+    status: text('status').$type<NoteStatus>().notNull().default('open'),
+    reply: text('reply').notNull().default(''),
+    createdAt: createdAt(),
+    resolvedAt: integer('resolved_at'),
+  },
+  (t) => [index('video_notes_piece_idx').on(t.pieceId)],
 );
 
 export const jobs = sqliteTable(
