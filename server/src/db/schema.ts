@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { PostStats, ReviewBody, ReviewStatus } from '../../../shared/analytics';
-import type { FramesCheck, MomentCaptions, MomentKind, MomentStatus, MusicCheck, StandaloneScores } from '../../../shared/clipping';
+import type { FramesCheck, MomentCaptions, MomentKind, MomentSpeaker, MomentStatus, MusicCheck, StandaloneScores } from '../../../shared/clipping';
 import type { CampaignOrigin, CampaignPlatform, CampaignStatus, HalalVerdict, Payout, RuleItem, SourceKind, SourceStatus, SubmissionStatus } from '../../../shared/campaigns';
 import type { EditSpec, EditTemplate } from '../../../shared/edit';
 import type { ViralHint } from '../../../shared/finder';
@@ -553,6 +553,7 @@ export const moments = sqliteTable(
     captions: text('captions', { mode: 'json' }).$type<MomentCaptions>(),
     halalFlags: text('halal_flags', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
     checkByEye: text('check_by_eye', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+    speaker: text('speaker', { mode: 'json' }).$type<MomentSpeaker>(),
     music: text('music', { mode: 'json' }).$type<MusicCheck>(),
     frames: text('frames', { mode: 'json' }).$type<FramesCheck>(),
     status: text('status').$type<MomentStatus>().notNull().default('candidate'),

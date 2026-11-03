@@ -70,6 +70,12 @@ export type MusicCheck = {
   pauseSeconds: number;
 };
 
+/**
+ * Who mainly talks in a moment, from the source's title and description: their name and a few words on who they are.
+ * `known` when most viewers would know them on sight; anyone else is named on screen as the clip starts.
+ */
+export type MomentSpeaker = { name: string; about: string; known: boolean };
+
 /** The halal look at three frames of the clip. */
 export type FramesCheck = { verdict: HalalVerdict; reasons: string[] };
 
@@ -94,6 +100,7 @@ export type Moment = {
   halalFlags: string[];
   /** Campaign rules to check by eye for this clip. */
   checkByEye: string[];
+  speaker: MomentSpeaker | null;
   music: MusicCheck | null;
   frames: FramesCheck | null;
   status: MomentStatus;

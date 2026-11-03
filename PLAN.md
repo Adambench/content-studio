@@ -716,6 +716,14 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
   height (`y`), e.g. a hook under a watermark.
   Not done: in fast talk over game sound Whisper's word times are up to 0.3 s off, so a few cuts still need picking
   by hand on the loudness (the Clash Royale clip did); a forced aligner (WhisperX-style) would fix it for good.
+- **Hooks, order, who's talking (2026-11-03, my second review).** The whole-picture Roblox clips lost their hook
+  (the picture was a small strip) and jumped around the video. Now a whole-picture clip opens full screen until its
+  first scene cut 1.2–4.5 s in (`clipping/framing.ts` `fillHook`), then shows whole. A creator's edited video is
+  clipped in its own order with its intro kept whole, cutting only blanks, setup, plugs and filler (playbook
+  `clipping.md`). **Who's this** (graphic `who`): a drawn arrow from a name card to the speaker. The pick names who
+  mainly talks (`moments.speaker`: name, who they are, `known`), and the clip maker adds the arrow where a guest
+  most viewers wouldn't know first shows (`whoTag`: the person talking in at least 65 % of the on-screen talk,
+  matched across shots by where the camera has them; otherwise none, so a host is never named as the guest).
 
 Accounts (2026-10-27): each page gets its own mascot (not one shared). Once every buildable step is done, I go over
 each account with Claude (name, goal, niche, language, the mascot's look): steps 5 and 6 are built after that.

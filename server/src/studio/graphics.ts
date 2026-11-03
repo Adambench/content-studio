@@ -102,6 +102,54 @@ export function composeGraphic(o: GraphicOverlay, i: number, ctx: GraphicContext
       break;
     }
 
+    case 'who': {
+      // The arrow's tip is the point (beside the speaker's head); the name card sits below it, clear of the captions
+      // (above it when the tip is low), toward the nearer edge of the frame, and a drawn arrow curves up to the tip.
+      const tx = o.x * W;
+      const ty = o.y * H;
+      const side = o.x < 0.5 ? -1 : 1;
+      const name = o.text || ' ';
+      const nameSize = fit(name, 58, W * 0.7, 0.62, true);
+      const subSize = o.sub ? fit(o.sub, 34, W * 0.7, 0.55, true) : 0;
+      const chars = (s: string) => Array.from(s.replace(/\*/g, '')).length;
+      const cw = Math.min(W * 0.8, Math.max(chars(name) * nameSize * 0.62, chars(o.sub) * subSize * 0.55) + 60);
+      const ch = nameSize * 1.1 + (o.sub ? subSize * 1.25 + 8 : 0) + 34;
+      const cx = Math.min(W * 0.96 - cw / 2, Math.max(W * 0.04 + cw / 2, tx + side * W * 0.2));
+      const under = Math.min(ty + H * 0.15, H * 0.6 - ch);
+      const below = under >= ty + H * 0.05;
+      const top = below ? under : Math.max(H * 0.04, ty - H * 0.12 - ch);
+      const x0 = cx + Math.max(-cw * 0.3, Math.min(cw * 0.3, tx - cx));
+      const y0 = below ? top - 16 : top + ch + 16;
+      const dx = tx - x0;
+      const dy = ty - y0;
+      const dist = Math.max(1, Math.hypot(dx, dy));
+      // Bowed out toward the card's side, like an arrow drawn by hand.
+      let px_ = -dy / dist;
+      let py_ = dx / dist;
+      if (px_ * side < 0) [px_, py_] = [-px_, -py_];
+      const cX = (x0 + tx) / 2 + px_ * dist * 0.28;
+      const cY = (y0 + ty) / 2 + py_ * dist * 0.28;
+      const ex = tx - cX;
+      const ey = ty - cY;
+      const el = Math.max(1, Math.hypot(ex, ey));
+      const [ux, uy] = [ex / el, ey / el];
+      const wing = (a: number) => `${n(tx - (ux * Math.cos(a) - uy * Math.sin(a)) * 42)} ${n(ty - (ux * Math.sin(a) + uy * Math.cos(a)) * 42)}`;
+      html =
+        `<svg class="wh-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><g class="wh-g"><path class="wh-line" d="M ${n(x0)} ${n(y0)} Q ${n(cX)} ${n(cY)} ${n(tx)} ${n(ty)}" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>` +
+        `<path class="wh-head" d="M ${wing(0.55)} L ${n(tx)} ${n(ty)} L ${wing(-0.55)}" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></g></svg>` +
+        `<div class="wh-at" style="left:${px(cx)};top:${px(top)}"><div class="wh-card"><div class="wh-name" style="font-size:${nameSize}px">${accent(esc(name))}</div>${o.sub ? `<div class="wh-sub" style="font-size:${subSize}px">${accent(esc(o.sub))}</div>` : ''}</div></div>`;
+      tweens.push(
+        `tl.fromTo(${sel('.wh-card')}, { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: 'power3.out' }, ${t(0)});`,
+        `tl.fromTo(${sel('.wh-line')}, { attr: { 'stroke-dashoffset': 1 } }, { attr: { 'stroke-dashoffset': 0 }, duration: 0.38, ease: 'power2.inOut' }, ${t(0.18)});`,
+        `tl.fromTo(${sel('.wh-head')}, { attr: { 'stroke-dashoffset': 1 } }, { attr: { 'stroke-dashoffset': 0 }, duration: 0.14, ease: 'power2.out' }, ${t(0.54)});`,
+      );
+      // The tip nudges toward the speaker a few times while it's up.
+      if (len > 1.6) tweens.push(`tl.fromTo(${sel('.wh-g')}, { x: 0, y: 0 }, { x: ${n(ux * 14)}, y: ${n(uy * 14)}, duration: 0.26, ease: 'sine.inOut', yoyo: true, repeat: ${len > 2.6 ? 3 : 1} }, ${t(0.75)});`);
+      exit('.wh-svg');
+      exit('.wh-at');
+      break;
+    }
+
     case 'stat': {
       const stat = parseStat(o.text);
       html = `<div class="st" style="top:${px(y)}"><div class="st-num"><span class="st-v">${esc(o.text || '0')}</span></div>${o.sub ? `<div class="st-sub">${accent(esc(o.sub))}</div>` : ''}</div>`;
@@ -711,6 +759,13 @@ export function graphicsCss(ctx: GraphicContext) {
 .co-ring { position: absolute; width: 124px; height: 124px; box-sizing: border-box; border: 9px solid ${color}; border-radius: 50%; box-shadow: 0 0 0 4px rgba(0,0,0,.35); }
 .co-label { position: absolute; width: 0; height: 0; display: flex; align-items: center; justify-content: center; }
 .co-label span { flex: none; white-space: nowrap; font: 800 50px/1 ${font('Montserrat')}; color: #111; background: ${color}; padding: 20px 34px; border-radius: 999px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.wh-svg { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; overflow: visible; filter: drop-shadow(0 4px 6px rgba(0,0,0,.55)); }
+.wh-line, .wh-head { stroke: ${color}; stroke-width: 13; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.wh-at { position: absolute; width: 0; height: 0; display: flex; justify-content: center; align-items: flex-start; }
+.wh-card { flex: none; white-space: nowrap; background: ${color}; color: #111; border-radius: 16px; padding: 16px 30px 18px; box-shadow: 0 12px 30px rgba(0,0,0,.4); text-align: center; }
+.wh-name { font-weight: 900; line-height: 1.1; font-family: ${font('Montserrat')}; }
+.wh-sub { font-weight: 700; line-height: 1.25; margin-top: 8px; font-family: ${font('Inter')}; color: rgba(17,17,17,.78); }
+.wh-card .acc { color: #fff; }
 .ch-bg { position: absolute; inset: 0; background: #0d0d0f; display: flex; align-items: center; justify-content: center; }
 .ch { width: 84%; text-align: center; }
 .ch-k { font: 700 44px/1.2 ${font('Inter')}; color: ${color}; text-transform: uppercase; letter-spacing: .2em; }

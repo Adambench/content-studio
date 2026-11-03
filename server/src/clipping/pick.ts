@@ -4,7 +4,7 @@
 // each is made into a clip (`clip.make`).
 import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import type { CampaignPlatform } from '../../../shared/campaigns';
-import { MIN_SCORE, MOMENT_KINDS, clock, type MomentCaptions, type MomentKind, type StandaloneScores } from '../../../shared/clipping';
+import { MIN_SCORE, MOMENT_KINDS, clock, type MomentCaptions, type MomentKind, type MomentSpeaker, type StandaloneScores } from '../../../shared/clipping';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
 import { briefForPrompt } from '../research/brief';
@@ -29,6 +29,7 @@ type Picked = {
   captions: MomentCaptions;
   halalFlags: string[];
   checkByEye: string[];
+  speaker: MomentSpeaker;
 };
 
 const point = { type: 'integer', enum: [0, 1, 2] };
@@ -45,7 +46,7 @@ function schemaFor(pageIds: string[]) {
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['start', 'end', 'firstLine', 'hookCard', 'title', 'kind', 'why', 'scores', 'pageId', 'captions', 'halalFlags', 'checkByEye'],
+          required: ['start', 'end', 'firstLine', 'hookCard', 'title', 'kind', 'why', 'scores', 'pageId', 'captions', 'halalFlags', 'checkByEye', 'speaker'],
           properties: {
             start: { type: 'number', description: 'In point, seconds in the source: the start of the first word' },
             end: { type: 'number', description: 'Out point, seconds in the source: the end of the payoff’s last word' },
@@ -69,6 +70,17 @@ function schemaFor(pageIds: string[]) {
             },
             halalFlags: { type: 'array', items: { type: 'string' }, description: 'Gray areas to check, one short line each; empty when none' },
             checkByEye: { type: 'array', items: { type: 'string' }, description: 'Campaign rules the creator must check by eye for this clip' },
+            speaker: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['name', 'about', 'known'],
+              description: 'Who mainly talks in the clip, only as the title, description or campaign name them (never a guess: empty name when unsure)',
+              properties: {
+                name: { type: 'string', description: 'Their full name, or empty' },
+                about: { type: 'string', description: 'Who they are in 4 words or fewer, e.g. "Founder, Higgsfield AI"' },
+                known: { type: 'boolean', description: 'True only when most viewers would know them on sight (a household name); a guest people wouldn’t know gets named on screen' },
+              },
+            },
           },
         },
       },
@@ -185,7 +197,7 @@ export async function pickMoments({ sourceId }: { sourceId: string }) {
     s.viral.length > 0 &&
       `# Stretches other clippers already got big on (their clips of this video, matched to the source by their words)\nLook at these first: if a stretch makes a clip that stands alone and fits the rules, pick it (trim to the best in and out points, make the hook your own), and say in \`why\` that it already worked. Never copy their edit, title or caption.\n${s.viral.map((h) => `- ${h.start.toFixed(1)}–${h.end.toFixed(1)} (${h.views.toLocaleString('en-US')} views): “${h.title.slice(0, 100)}”`).join('\n')}`,
     research.length && `# What's working in the page's niche now (its research brief)\n${research.join('\n\n')}`,
-    `# The source: ${s.title || 'untitled'}\nLength ${clock(scan.duration)}${s.link ? ` · ${s.link}` : ''}${scan.whole ? ' · the whole transcript follows' : ` · ${scan.stretches.length} stretches the scan found liveliest follow (loudness, pace${scan.chat ? ', chat' : ''}, the brief’s words); the rest isn’t shown`}`,
+    `# The source: ${s.title || 'untitled'}${s.creator ? ` (by ${s.creator})` : ''}\nLength ${clock(scan.duration)}${s.link ? ` · ${s.link}` : ''}${scan.whole ? ' · the whole transcript follows' : ` · ${scan.stretches.length} stretches the scan found liveliest follow (loudness, pace${scan.chat ? ', chat' : ''}, the brief’s words); the rest isn’t shown`}`,
     transcriptBlock(lines, scan.stretches),
   ]
     .filter(Boolean)
@@ -237,6 +249,7 @@ export async function pickMoments({ sourceId }: { sourceId: string }) {
       captions,
       halalFlags: (m.halalFlags ?? []).map((f) => f.trim()).filter(Boolean).slice(0, 6),
       checkByEye: (m.checkByEye ?? []).map((f) => f.trim()).filter(Boolean).slice(0, 8),
+      speaker: m.speaker?.name?.trim() ? { name: m.speaker.name.trim().slice(0, 60), about: (m.speaker.about ?? '').trim().slice(0, 60), known: !!m.speaker.known } : null,
       music: null,
       frames: null,
       status: 'making',

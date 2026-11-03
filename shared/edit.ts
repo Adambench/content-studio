@@ -249,6 +249,7 @@ export type BrollOverlay = OverlayBase & {
 
 export const GRAPHICS = [
   'lowerThird',
+  'who',
   'stat',
   'list',
   'quote',
@@ -290,6 +291,7 @@ export const GRAPHIC_INFO: Record<
   { label: string; hint: string; seconds: number; position: GraphicPosition | null; fields: { text?: string; sub?: string; items?: string; point?: boolean }; example: Partial<Pick<GraphicOverlay, 'text' | 'sub' | 'items'>> }
 > = {
   lowerThird: { label: 'Name tag', hint: 'Who’s speaking: a name and a line about them', seconds: 4, position: 'bottom', fields: { text: 'Name', sub: 'Who they are' }, example: { text: 'Mark Manson', sub: 'Author, Subtle Art' } },
+  who: { label: 'Who’s this', hint: 'A drawn arrow that points at the speaker from their name and who they are, in the first seconds: for a guest most viewers wouldn’t know', seconds: 3, position: null, fields: { text: 'Name', sub: 'Who they are', point: true }, example: { text: 'Alex Mashrabov', sub: 'Founder, Higgsfield AI' } },
   stat: { label: 'Big number', hint: 'A number that counts up, with what it means', seconds: 3, position: 'center', fields: { text: 'The number (e.g. $1.2M, 87%, 10,000)', sub: 'What it is' }, example: { text: '87%', sub: 'of bombers never came back' } },
   list: { label: 'List', hint: 'Points that tick in one by one', seconds: 6, position: 'center', fields: { text: 'Heading (optional)', items: 'Points, one per line (up to 6)' }, example: { text: '3 rules', items: ['Start before you’re ready', 'Ship every day', 'Ask for feedback'] } },
   quote: { label: 'Quote', hint: 'A line worth keeping, with who said it', seconds: 4, position: 'center', fields: { text: 'The quote', sub: 'Who said it' }, example: { text: 'Look at *what survived*, not what failed.', sub: 'Abraham Wald' } },
@@ -428,6 +430,10 @@ export function graphicSounds(spec: Pick<EditSpec, 'overlays'>): SfxCue[] {
     switch (o.template) {
       case 'lowerThird':
         cue(o, 0, 'swish', o.start + 0.05);
+        break;
+      case 'who':
+        cue(o, 0, 'pop', o.start, 0.5);
+        cue(o, 1, 'swish', o.start + 0.2, 0.45);
         break;
       case 'stat':
         cue(o, 0, 'pop', o.start);

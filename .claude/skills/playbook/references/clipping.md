@@ -70,6 +70,12 @@ Score each point 0 to 2 and keep 7 or more out of 10:
 - **End early.** Stop as soon as the idea lands. The recap, the "anyway", the change of subject all go.
 - Keep it one continuous stretch where you can. Cutting out a tangent inside is fine only when the meaning stays
   exactly the same.
+- **A creator's own edited video (a game build, a challenge, a vlog) is already in the right order.** Keep its intro
+  whole: it's their hook, with their best shots. Then follow their story a step at a time, in their order, never
+  jumping ahead to a later part and back. Cut only what adds nothing: blanks, setup steps, the subscribe ask, plugs,
+  filler that doesn't build to the payoff. Each step a viewer sees should lead to the next one.
+- **Name a guest most viewers wouldn't know** the moment they first show: the "Who's this" arrow with their name and
+  who they are (from the source's title or description, never a guess). Skip it for a household name.
 - Transcript times are approximate: the app cuts with margins and trims to the word afterwards. Give times as
   precisely as the transcript allows.
 - Moments from one source don't overlap, and spread across it: the best clips aren't always in the loud part.

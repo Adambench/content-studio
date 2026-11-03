@@ -28,6 +28,7 @@ import { adoptFile, deleteMedia, whisperInstalled } from '../services/media';
 import { createPiece, getWorkspace } from '../services/pieces';
 import { applyLook, lookTag, pickLook } from '../studio/clip-looks';
 import { isLectureCampaign, speakerTag } from '../islamic/lectures';
+import { fillHook, whoTag } from './framing';
 import { createEdit, saveEditVersion } from '../studio/edits';
 import { refineWords, snapCuts, voiceEnvelope } from '../studio/clean-cuts';
 import { applyFocusSpans, focusSpans, scanSpeakers, type SpeakerScan } from '../studio/reframe';
@@ -316,6 +317,7 @@ export async function makeClip({ momentId }: { momentId: string }) {
     if (!clips.length) clips = [base];
     clips = snapCuts(clips, media.id, envelope, words);
     clips = applyFocusSpans(clips, media.id, spans);
+    if (whole) clips = fillHook(clips, speakers);
     const look = pickLook(ws.id);
     const total = editDuration({ ...spec, clips });
     const next = applyLook({ ...spec, clips }, look, m.hookCard, total);
@@ -329,7 +331,10 @@ export async function makeClip({ momentId }: { momentId: string }) {
     // A lecture names its speaker on screen for the whole clip.
     const speaker = isLectureCampaign(c.id) ? speakerTag(next, s, m.hookCard ? 2.5 : 0, total) : null;
     if (speaker) next.overlays.push(speaker);
-    saveEditVersion(edit.id, { author: 'claude', message: `Clip of ${at}: tightened, hook card, captions${lookTag(look)}`, spec: next });
+    // A guest most viewers wouldn't know: an arrow names them as they first show.
+    const who = !whole && !speaker && speakers && m.speaker ? whoTag(next, media.id, speakers, m.speaker, clipInfo) : null;
+    if (who) next.overlays.push(who);
+    saveEditVersion(edit.id, { author: 'claude', message: `Clip of ${at}: tightened, hook card, captions${who ? `, ${m.speaker?.name} named` : ''}${lookTag(look)}`, spec: next });
 
     // 8. Render; finishing moves it to Review.
     queueRender(edit.id, 'claude');
