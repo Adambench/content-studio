@@ -220,7 +220,7 @@ export type ClaudeUsage = {
 export type LiveEvent =
   | {
       type: 'changed';
-      entity: 'workspaces' | 'pieces' | 'media' | 'threads' | 'settings' | 'edits' | 'renders' | 'accounts' | 'posts' | 'stats' | 'reviews' | 'devices' | 'sites' | 'campaigns' | 'submissions' | 'research' | 'finder' | 'compute' | 'ideas' | 'knowledge' | 'references' | 'toolbox' | 'notes';
+      entity: 'workspaces' | 'pieces' | 'media' | 'threads' | 'settings' | 'edits' | 'renders' | 'accounts' | 'posts' | 'stats' | 'reviews' | 'devices' | 'sites' | 'campaigns' | 'submissions' | 'research' | 'finder' | 'compute' | 'ideas' | 'knowledge' | 'references' | 'toolbox' | 'notes' | 'notebook';
       workspaceId?: string;
       id?: string;
       pieceId?: string;

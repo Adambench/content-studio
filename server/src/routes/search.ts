@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNull, like, or } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { noteSnippet, noteTitle } from '../../../shared/notebook';
 import { normalizeDraft } from '../../../shared/types';
 import { db, schema } from '../db';
 
@@ -14,7 +15,7 @@ function snippet(text: string | null | undefined, term: string) {
   return `${from ? '…' : ''}${flat.slice(from, at + term.length + 60).trim()}${at + term.length + 60 < flat.length ? '…' : ''}`;
 }
 
-/** One search over every workspace's videos (title, tags, hook, script, notes) and footage (name, notes, what's said). */
+/** One search over every workspace's videos (title, tags, hook, script, notes), footage (name, notes, what's said) and Notes. */
 export async function searchRoutes(app: FastifyInstance) {
   app.get('/api/search', async (req) => {
     const { q } = z.object({ q: z.string().trim().min(2).max(100) }).parse(req.query);
@@ -50,7 +51,19 @@ export async function searchRoutes(app: FastifyInstance) {
       .limit(15)
       .all();
 
+    const notes = db
+      .select({ id: schema.notebook.id, workspaceId: schema.notebook.workspaceId, body: schema.notebook.body })
+      .from(schema.notebook)
+      .where(and(isNull(schema.notebook.deletedAt), like(schema.notebook.body, term)))
+      .orderBy(desc(schema.notebook.updatedAt))
+      .limit(10)
+      .all();
+
     return {
+      notes: notes.map((n) => {
+        const title = noteTitle(n.body);
+        return { id: n.id, workspaceId: n.workspaceId, title, snippet: title.toLowerCase().includes(q.toLowerCase()) ? noteSnippet(n.body, 100) : snippet(n.body, q) };
+      }),
       pieces: pieces.map((p) => {
         const own = thumbs.filter((t) => t.pieceId === p.id);
         const hit = branchHits.find((b) => b.pieceId === p.id);

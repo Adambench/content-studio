@@ -116,6 +116,7 @@ export type Version = VersionMeta & { branchId: string; pieceId: string; parentI
 export type Thread = { id: string; title: string; model: string | null; updatedAt: number; running: boolean; pieceId?: string | null };
 
 export type SearchResults = {
+  notes: { id: string; workspaceId: string; title: string; snippet: string }[];
   pieces: { id: string; workspaceId: string; title: string; stage: string; thumbMediaId: string | null; snippet: string }[];
   media: { id: string; workspaceId: string; pieceId: string | null; originalName: string; kind: MediaKind; hasThumb: boolean; durationMs: number | null; snippet: string }[];
 };

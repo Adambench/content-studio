@@ -702,6 +702,20 @@ export const ideas = sqliteTable(
   (t) => [index('ideas_workspace_idx').on(t.workspaceId), index('ideas_parent_idx').on(t.parentId), index('ideas_piece_idx').on(t.pieceId)],
 );
 
+/** A note on a page's Notes: free writing, first line its title (shared/notebook.ts). Deleting marks it so it can be undone. */
+export const notebook = sqliteTable(
+  'notebook',
+  {
+    id: id(),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    body: text('body').notNull().default(''),
+    deletedAt: integer('deleted_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('notebook_workspace_idx').on(t.workspaceId)],
+);
+
 /** What hosted generation (kie.ai) has cost: one row per request, so the daily cap can be enforced and shown. */
 export const aiSpend = sqliteTable(
   'ai_spend',

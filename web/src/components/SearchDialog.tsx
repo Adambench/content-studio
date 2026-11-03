@@ -1,4 +1,4 @@
-import { Clapperboard, Search } from 'lucide-react';
+import { Clapperboard, NotebookPen, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { WorkspaceColor } from '@shared/types';
@@ -17,7 +17,7 @@ export const searchOpen = createStore(false);
 
 type Hit = { key: string; href: string; title: string; detail: string; thumb: string | null; icon: React.ReactNode; color?: WorkspaceColor };
 
-/** Ctrl K: one search over every page's videos and footage (titles, scripts, what's said). */
+/** Ctrl K: one search over every page's videos, footage (titles, scripts, what's said) and Notes. */
 export function SearchDialog() {
   const open = useStore(searchOpen);
   const [query, setQuery] = useState('');
@@ -61,6 +61,15 @@ export function SearchDialog() {
         icon: <Clapperboard className="size-4" />,
         color: ws.get(p.workspaceId)?.color,
       })),
+      ...(search.data.notes ?? []).map((n) => ({
+        key: `n${n.id}`,
+        href: `/w/${n.workspaceId}/notes?n=${n.id}`,
+        title: n.title || 'Untitled note',
+        detail: [ws.get(n.workspaceId)?.name, 'Notes', n.snippet].filter(Boolean).join(' · '),
+        thumb: null,
+        icon: <NotebookPen className="size-4" />,
+        color: ws.get(n.workspaceId)?.color,
+      })),
       ...search.data.media.map((m) => ({
         key: `m${m.id}`,
         href: m.pieceId ? `/w/${m.workspaceId}/p/${m.pieceId}` : `/w/${m.workspaceId}/inbox`,
@@ -97,7 +106,7 @@ export function SearchDialog() {
               if (e.key === 'ArrowUp') (e.preventDefault(), setActive((a) => Math.max(0, a - 1)));
               if (e.key === 'Enter') go(hits[active]);
             }}
-            placeholder="Search videos, scripts, footage, what's said…"
+            placeholder="Search videos, scripts, notes, footage, what's said…"
             className="h-12 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             aria-label="Search"
           />
@@ -106,7 +115,7 @@ export function SearchDialog() {
         <div className="max-h-[60dvh] overflow-y-auto p-1.5" role="listbox" aria-label="Results">
           {debounced.length < 2 ? (
             <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-              Find any video or file on every page. <Kbd>Ctrl</Kbd> <Kbd>K</Kbd> opens this anywhere.
+              Find any video, note or file on every page. <Kbd>Ctrl</Kbd> <Kbd>K</Kbd> opens this anywhere.
             </p>
           ) : !hits.length && !search.isFetching ? (
             <p className="px-3 py-6 text-center text-sm text-muted-foreground">Nothing matches “{debounced}”.</p>

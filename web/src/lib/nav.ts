@@ -1,4 +1,4 @@
-import { BadgeDollarSign, CalendarDays, ChartColumn, Clapperboard, Inbox, Lightbulb, Mic, Palette, Telescope, type LucideIcon } from 'lucide-react';
+import { BadgeDollarSign, CalendarDays, ChartColumn, Clapperboard, Inbox, Lightbulb, Mic, NotebookPen, Palette, Telescope, type LucideIcon } from 'lucide-react';
 import type { Workspace } from './types';
 
 export type NavItem = {
@@ -11,8 +11,9 @@ export type NavItem = {
 
 /**
  * A workspace's pages in working order, so the first one is where to start. Clipping: find → clips → campaigns;
- * personal and business: ideas (the brainstorm canvas) → videos → loose footage, with research further down. Every
- * page has Brand (mascot, logo, fonts); a clipping page's Inbox only shows when something's in it.
+ * personal and business: ideas (the brainstorm canvas) and notes (free writing) → videos → loose footage, with
+ * research further down. Every page has Brand (mascot, logo, fonts); a clipping page's Inbox only shows when
+ * something's in it.
  */
 export function workspaceNav(ws: Pick<Workspace, 'kind' | 'modules' | 'inboxCount'>): NavItem[] {
   const has = (m: Workspace['modules'][number]) => ws.modules.includes(m);
@@ -29,6 +30,7 @@ export function workspaceNav(ws: Pick<Workspace, 'kind' | 'modules' | 'inboxCoun
       ]
     : [
         has('ideas') && { to: 'ideas', label: 'Ideas', icon: Lightbulb },
+        { to: 'notes', label: 'Notes', icon: NotebookPen },
         { to: 'board', label: 'Videos', icon: Clapperboard },
         // An Islamic page clips lectures (its own campaign).
         ws.kind === 'islamic' && has('clipping') && { to: 'lectures', label: 'Lectures', icon: Mic },

@@ -14,6 +14,7 @@ import type { KnowledgeRule } from '@shared/knowledge';
 import type { OwnMeasures, PageStyle, ReferenceVideo } from '@shared/references';
 import type { Toolbox } from '@shared/toolbox';
 import type { VideoNote } from '@shared/notes';
+import type { NotebookNote } from '@shared/notebook';
 import type { SubmissionsSyncState } from './types';
 import type { ReviewClip } from '@shared/clipping';
 import type { SitesStatus } from '@shared/sites';
@@ -83,6 +84,7 @@ export const keys = {
   submissionsSync: ['submissions-sync'] as const,
   research: (wid: string) => ['research', wid] as const,
   ideas: (wid: string) => ['ideas', wid] as const,
+  notebook: (wid: string) => ['notebook', wid] as const,
   idea: (id: string) => ['idea', id] as const,
   finder: (wid: string) => ['finder', wid] as const,
   compute: ['compute'] as const,
@@ -163,6 +165,7 @@ export const useToolbox = () =>
     refetchInterval: (q) => (q.state.data?.installs.some((r) => r.status === 'running') ? 1000 : q.state.data?.scout?.status === 'running' ? 5000 : false),
   });
 export const useIdeas = (wid: string) => useQuery({ queryKey: keys.ideas(wid), queryFn: () => api<IdeaNode[]>(`/workspaces/${wid}/ideas`), enabled: !!wid });
+export const useNotebook = (wid: string) => useQuery({ queryKey: keys.notebook(wid), queryFn: () => api<NotebookNote[]>(`/workspaces/${wid}/notebook`), enabled: !!wid });
 export const useIdea = (id: string | null) => useQuery({ queryKey: keys.idea(id ?? ''), queryFn: () => api<IdeaDetail>(`/ideas/${id}`), enabled: !!id });
 export const useResearch = (wid: string) =>
   useQuery({

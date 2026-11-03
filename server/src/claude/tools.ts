@@ -24,6 +24,7 @@ import { accountLabel, listAccounts } from '../publish/accounts';
 import { piecePosts, upcomingPosts } from '../publish/posts';
 import { studioTools, studioToolLabel } from './studio-tools';
 import { createIdea, getIdea, hasIdeas, listIdeas } from '../ideas/ideas';
+import { notebookText } from '../ideas/notebook';
 import { ok, safe, ToolError } from './tool-helpers';
 import { KNOWLEDGE_TOPIC_INFO, KNOWLEDGE_TOPICS } from '../../../shared/knowledge';
 import { createRule, knowledgeText } from '../knowledge/knowledge';
@@ -107,6 +108,8 @@ export function toolLabel(fullName: string, input: Record<string, any>): string 
       return 'Read the research brief';
     case 'get_ideas':
       return 'Read the Ideas canvas';
+    case 'get_notebook':
+      return input.noteId ? 'Read one of your notes' : 'Read your notes';
     case 'get_knowledge':
       return `Read the Knowledge rules${input.topics?.length ? `: ${input.topics.join(', ')}` : ''}`;
     case 'get_references':
@@ -656,6 +659,14 @@ export function buildTools(workspaceId: string) {
         const made = items.map((i) => createIdea(workspaceId, { parentId: parentId ?? null, title: i.title, body: i.notes ?? '', by: 'claude' }));
         return ok(`Added ${made.length} card${made.length === 1 ? '' : 's'} to Ideas.`);
       }),
+    ),
+
+    tool(
+      'get_notebook',
+      'Read this page’s Notes: the creator’s free writing, with no structure (brain dumps, half-formed thoughts, plans, lists, things to say), last written first; each note’s first line is its title. ' +
+        'Read-only: never change or rewrite their notes. When they ask to turn a note into ideas, add_ideas adds them as cards.',
+      { noteId: z.string().optional().describe('One note in full (long notes are cut short in the list)') },
+      safe(async ({ noteId }) => ok(notebookText(workspaceId, noteId))),
     ),
 
     tool(

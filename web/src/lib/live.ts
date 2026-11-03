@@ -151,6 +151,9 @@ function apply(event: LiveEvent) {
       case 'notes':
         inv(event.pieceId ? keys.notes(event.pieceId) : ['notes']);
         break;
+      case 'notebook':
+        inv(wid ? keys.notebook(wid) : ['notebook']);
+        break;
       case 'ideas':
         refreshIdeas(wid ?? null);
         if (event.id) inv(keys.idea(event.id));

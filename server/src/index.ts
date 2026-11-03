@@ -11,12 +11,14 @@ import { startFinderSchedule, stopFinderSchedule } from './finder/schedule';
 import { startScoutSchedule, stopScoutSchedule } from './toolbox/scout';
 import { finderRoutes } from './routes/finder';
 import { ideaRoutes } from './routes/ideas';
+import { notebookRoutes } from './routes/notebook';
 import { knowledgeRoutes } from './routes/knowledge';
 import { referenceRoutes } from './routes/references';
 import { toolboxRoutes } from './routes/toolbox';
 import { syncKnowledge } from './knowledge/knowledge';
 import { sweepReferenceFolders } from './knowledge/references';
 import { purgeDeletedIdeas } from './ideas/ideas';
+import { purgeDeletedNotes } from './ideas/notebook';
 import { stopAllSources } from './campaigns/sources';
 import { preparePlugin } from './claude/plugin';
 import { config } from './config';
@@ -150,6 +152,7 @@ await app.register(computeRoutes);
 await app.register(aiRoutes);
 await app.register(voiceRoutes);
 await app.register(ideaRoutes);
+await app.register(notebookRoutes);
 await app.register(knowledgeRoutes);
 await app.register(referenceRoutes);
 await app.register(toolboxRoutes);
@@ -162,9 +165,17 @@ startCampaignUpkeep();
 startResearch();
 startFinderSchedule();
 startScoutSchedule();
-// Cards deleted over a month ago go for good, checked at start and daily.
-void purgeDeletedIdeas().catch(() => {});
-const purging = setInterval(() => void purgeDeletedIdeas().catch(() => {}), 86400_000);
+// Cards and notes deleted over a month ago go for good, checked at start and daily.
+const purge = () => {
+  void purgeDeletedIdeas().catch(() => {});
+  try {
+    purgeDeletedNotes();
+  } catch {
+    // Next day.
+  }
+};
+purge();
+const purging = setInterval(purge, 86400_000);
 purging.unref();
 
 await app.listen({ port: config.port, host: config.host });

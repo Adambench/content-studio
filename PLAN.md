@@ -729,6 +729,10 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
   on a strip under the player and in a list beside it, with Claude's answer under each. Claude reads them with the
   words, clip and overlays at each spot: in the app's chat (`get_notes`, `resolve_note`, *Fix with Claude*) or in
   Claude Code (`npm run notes`, `npm run notes -- fix <id> "…"`). Claude marks one *fixed*; I close it or reopen it.
+- **Notes (2026-11-03).** Personal and business pages get a Notes page beside Ideas: free writing, no cards (the
+  canvas is Ideas). A list of notes, first line the title, each saved as I type (`notebook`); deleted ones come back
+  with Undo for a month, blank ones go. Ctrl K finds them. Claude only reads them (`get_notebook`, *Ask Claude*) and
+  turns one into idea cards when I ask; it never changes a note.
 
 Accounts (2026-10-27): each page gets its own mascot (not one shared). Once every buildable step is done, I go over
 each account with Claude (name, goal, niche, language, the mascot's look): steps 5 and 6 are built after that.
