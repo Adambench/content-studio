@@ -1,3 +1,4 @@
+import { workersWith } from '../compute/workers';
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { and, asc, eq, isNull } from 'drizzle-orm';
@@ -216,7 +217,8 @@ export function registerHandlers() {
   // Video studio: preview copies of footage, and renders (each render runs its own Chrome workers).
   registerJob('media.proxy', makeProxy, 1);
   onJobFailed('media.proxy', onProxyFailed);
-  registerJob('video.render', renderJob, 1);
+  // One at a time here; with home PCs that render, one on each.
+  registerJob('video.render', renderJob, () => Math.max(1, workersWith('render')));
   // The quality check before a render (one call, and Claude's fix in the video's chat when it's below the bar).
   registerJob('edit.check', checkJob, 1);
   // "Follow the speaker": OpenCV over the footage (a minute or so per few minutes of video), then a new edit version.

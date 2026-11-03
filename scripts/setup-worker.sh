@@ -6,14 +6,16 @@
 #   image  pictures (stable-diffusion.cpp + FLUX.1-schnell)                                  ~12 GB
 #   video  ~5 s clips (stable-diffusion.cpp + Wan 2.1 T2V 1.3B), made overnight             ~10 GB
 #   voice  the creator's cloned voice (Chatterbox, its own Python environment)              ~6 GB
+#   render drawing the frames of renders (HyperFrames + Chrome's headless shell)            ~0.5 GB
 # All of them are licensed for commercial use (Apache 2.0 / MIT).
 #
 # Usage, from a checkout of this repository on the home PC (Node 22+, Python 3, FFmpeg, the NVIDIA driver; for image
 # and video also git, cmake and a C++ compiler, and the CUDA toolkit for the GPU build):
 #   scripts/setup-worker.sh --server https://laptop.tailnet.ts.net --code XXXX-XXXX-XXXX [--name "Desktop 1070"]
-#                           [--with llm,image,video,voice] [--llm-model qwen3-vl:30b-a3b-instruct]
+#                           [--with render,llm,image,video,voice] [--llm-model qwen3-vl:30b-a3b-instruct]
 # The address and the code come from Settings → Compute on the laptop. Run it again to update or to add more --with.
-# Suggested split: the GTX 1070 PC --with llm,video,voice; the GTX 1050 Ti PC --with image.
+# Suggested split: the GTX 1070 PC --with render,llm,video,voice; the GTX 1050 Ti PC --with render,image (both render:
+# two videos at once). A later run without --with render keeps the renderer and updates it.
 set -euo pipefail
 
 SERVER="" CODE="" NAME="$(hostname)" WITH="" LLM_MODEL="qwen3-vl:30b-a3b-instruct"
@@ -169,6 +171,35 @@ if has voice; then
   echo "Downloading the voice model (one time)…"
   HF_HOME="$TOOLS/hf" "$VOICE/bin/python" -c "from chatterbox.tts import REPO_ID; from huggingface_hub import hf_hub_download as d; [d(REPO_ID, f) for f in ['ve.safetensors', 't3_cfg.safetensors', 's3gen.safetensors', 'tokenizer.json', 'conds.pt']]"
   touch "$VOICE/.ready"
+fi
+
+# ---------- renders (HyperFrames, the laptop's exact versions) ----------
+RENDER="$TOOLS/render"
+if has render || [ -f "$RENDER/.ready" ]; then
+  echo "Installing the renderer (HyperFrames and Chrome's headless shell, about 500 MB)…"
+  mkdir -p "$RENDER"
+  # The versions the laptop renders with, from this checkout's lock file, so a frame here looks like one there.
+  lockv() { node -p "require('$REPO/package-lock.json').packages['node_modules/$1'].version"; }
+  cat > "$RENDER/package.json" <<JSON
+{
+  "name": "content-studio-worker-render",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@hyperframes/producer": "$(lockv @hyperframes/producer)",
+    "@hyperframes/core": "$(lockv @hyperframes/core)",
+    "puppeteer": "$(lockv puppeteer)",
+    "puppeteer-core": "$(lockv puppeteer-core)",
+    "@puppeteer/browsers": "$(lockv @puppeteer/browsers)"
+  }
+}
+JSON
+  # No install scripts: Puppeteer's would download a Chrome of its own; render.mjs fetches the headless shell instead.
+  (cd "$RENDER" && npm install --no-audit --no-fund --ignore-scripts --omit=dev --loglevel=error)
+  (cd "$REPO" && npx --yes esbuild@0.25.12 worker/src/render.ts --bundle --platform=node --format=esm --target=node22 \
+    --external:@hyperframes/* --external:@puppeteer/* --external:puppeteer-core --external:puppeteer \
+    --outfile="$RENDER/render.mjs" --log-level=warning)
+  node "$RENDER/render.mjs" --install
 fi
 
 echo "Building the worker…"

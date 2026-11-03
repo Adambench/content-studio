@@ -183,6 +183,13 @@
       "when": 1793725262166,
       "tag": "0025_shallow_scarecrow",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1793727921672,
+      "tag": "0026_foamy_preak",
+      "breakpoints": true
     }
   ]
 }

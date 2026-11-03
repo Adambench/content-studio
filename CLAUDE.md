@@ -44,6 +44,13 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   drafts/edits freely (versions authored `claude`) and may render, but never schedules, publishes, approves, rejects or
   submits: those need the user's click. Never give Claude a publish tool. On Ideas it only adds cards (`by: 'claude'`),
   never edits or deletes the user's; locking an idea in is the user's click.
+- **Every comment I leave on a video is a lesson** (`knowledge/lessons.ts`): fixing it also records the general rule
+  (a Knowledge rule, source `comments`, or the lesson it repeats) via `resolve_note` or `npm run notes -- fix`.
+  Lessons go into every prompt that picks, makes or judges a video (`lessonsText`), and the check before a render
+  tests each one (a broken one sends it back to Claude, clips too). When the mistake came from the pipeline (clip
+  picker/maker, framing, a template), change that code as well, so the next video can't make it.
+- Renders draw their frames on a home PC that has `render` (`setup-worker.sh --with render`): the laptop cuts and
+  grades the footage, sends the project as a tar (`renderRemote`), and renders itself when no worker has it or fails.
 - Chat skills: `.claude/skills` loads as the `studio-skills` plugin (`claude/plugin.ts`, allow-list `CHAT_SKILLS`);
   skills I install from the Toolbox go to `<data>/skills-added` (plugin `studio-added`, all in the chat) or
   `~/.claude/skills` (Claude Code only), never with sound or video files; the chat's Read is held to the plugin
@@ -75,7 +82,9 @@ measurements, open items and the current build plan (phase 8). Read only the sec
 - `npm run dev` (desktop + server + Vite), `npm run dev:web` (browser only), `npm run typecheck`
 - `npm run install-app` — build, package, install to `~/.local/lib/content-studio`, restart if running
 - `npm run notes` — my open comments on finished videos (pinned to a moment or stretch, with the words, clip and
-  overlays there); after fixing, `npm run notes -- fix <noteId> "<what changed>"` (or `answer` to leave it open).
+  overlays there) and the lessons so far; after fixing, `npm run notes -- fix <noteId> "<what changed>"` plus the
+  lesson: `--lesson <id> ["sharper rule"]`, `--new <topic> "<title>" "<rule>"` or `--one-off "<why>"` (`answer`
+  leaves it open; `lessons` lists them).
 - `npm run db:generate -w server` after editing `server/src/db/schema.ts` (migrations run on startup). drizzle-kit
   drops `ON DELETE` from foreign keys it adds with `ALTER TABLE`: check the SQL.
 - `npm run android` — app UI build + `cap sync`. APKs: CI, or JDK 21 + SDK (`cd mobile/android && ./gradlew assembleDebug`)

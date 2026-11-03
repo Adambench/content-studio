@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { db, newId, now, schema } from '../db';
 
 type Handler = (payload: any) => Promise<void>;
-type Registration = { handler: Handler; concurrency: number; running: number };
+type Registration = { handler: Handler; concurrency: number | (() => number); running: number };
 
 const handlers = new Map<string, Registration>();
 
@@ -20,7 +20,8 @@ export class JobError extends Error {
 }
 let timer: NodeJS.Timeout | undefined;
 
-export function registerJob(type: string, handler: Handler, concurrency = 1) {
+/** `concurrency` may be a function: how many may run now (renders: one per home PC that renders). */
+export function registerJob(type: string, handler: Handler, concurrency: number | (() => number) = 1) {
   handlers.set(type, { handler, concurrency, running: 0 });
 }
 
@@ -117,7 +118,7 @@ export function onJobFailed(type: string, hook: (payload: any, message: string) 
 
 function tick() {
   for (const [type, reg] of handlers) {
-    while (reg.running < reg.concurrency) {
+    while (reg.running < (typeof reg.concurrency === 'function' ? reg.concurrency() : reg.concurrency)) {
       const job = claim(type);
       if (!job) break;
       void run(reg, job);

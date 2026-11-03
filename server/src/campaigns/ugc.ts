@@ -6,6 +6,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { CampaignPlatform } from '../../../shared/campaigns';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
+import { lessonsText } from '../knowledge/lessons';
 import { waitForUsage } from '../claude/usage';
 import { db, schema } from '../db';
 import { emit } from '../lib/events';
@@ -94,7 +95,7 @@ export async function writeUgcScript({ campaignId, workspaceId, angle }: { campa
   ]
     .filter(Boolean)
     .join('\n\n');
-  const out = await askStructured<Written>({ task: 'ugc', system: [playbook('content-model', 'hooks', 'retention', 'packaging', 'halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'), prompt, schema: SCHEMA, model: 'sonnet' });
+  const out = await askStructured<Written>({ task: 'ugc', system: [playbook('content-model', 'hooks', 'retention', 'packaging', 'halal'), lessonsText(workspaceId), INSTRUCTIONS].filter(Boolean).join('\n\n'), prompt, schema: SCHEMA, model: 'sonnet' });
 
   const notes = [
     `UGC for “${c.title}”${c.link ? ` (${c.link})` : ''}.`,

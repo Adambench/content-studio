@@ -33,8 +33,9 @@ import { formatTime, mediaPath } from '../services/media';
 import { getWorkspace } from '../services/pieces';
 import { createEdit, findEditForPiece, listEditVersions, listRenders, saveEditVersion, specMedia, specTranscripts } from '../studio/edits';
 import { queueRender } from '../studio/render';
-import { checkEdit } from '../studio/quality';
+import { checkEdit, needsFix } from '../studio/quality';
 import { getNote, notesText, updateNote } from '../studio/notes';
+import { learnFromNote } from '../knowledge/lessons';
 import { QUALITY_BAR, qualityText } from '../../../shared/quality';
 import { previewOverlay } from '../studio/preview';
 import { normalizeScene, SCENE_FONTS, SCENE_MAX_ELEMENTS, SCENE_MAX_SECONDS, SCENE_MAX_TWEENS, SCENE_SOUNDS } from '../../../shared/scene';
@@ -56,7 +57,8 @@ import { BUNDLED_FONTS } from '../../../shared/fonts';
 import { GEN_ASPECTS, GEN_PURPOSE_INFO, GEN_PURPOSES, NO_LIVING_BEINGS } from '../../../shared/generate';
 import { workerFor } from '../compute/workers';
 import { generationSettings, queueGeneration } from '../studio/generate';
-import { ok, safe, ToolError } from './tool-helpers';
+import { fail, ok, safe, ToolError } from './tool-helpers';
+import { KNOWLEDGE_TOPICS, RULE_TITLE_MAX } from '../../../shared/knowledge';
 
 const OWN_VOICE = 'This page uses only the creator’s own recorded voice, never a computer voice: write the script for them to record (the editor’s Sound → Your voice), then set their recording as the voiceover.';
 
@@ -622,14 +624,15 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
     tool(
       'render_edit',
       'Render a piece’s video edit to an MP4 on this computer (takes a few minutes). The finished video appears in the piece’s footage. Never posts anything. ' +
-        `It runs the quality check first: below ${QUALITY_BAR}/100 nothing renders and you get the fixes; make them with update_edit and call render_edit again. anyway: true renders it as it is.`,
+        `It runs the quality check first: below ${QUALITY_BAR}/100, or breaking a lesson from the creator’s comments, nothing renders and you get the fixes; make them with update_edit and call render_edit again. anyway: true renders it as it is.`,
       { pieceId: z.string(), anyway: z.boolean().optional().describe('Render even below the bar (after one round of fixes, or when the creator says so)') },
       safe(async ({ pieceId, anyway }) => {
         const edit = editFor(pieceId);
         if (!edit) throw new ToolError('This piece has no video edit yet.');
         if (!anyway) {
           const report = await checkEdit(edit.id, 'claude');
-          if (report.score < report.bar) return ok(`Not rendered yet.\n\n${qualityText(report)}\n\nFix it with update_edit, then call render_edit again (anyway: true renders it as it is).`);
+          const clip = !!db.select({ id: schema.moments.id }).from(schema.moments).where(eq(schema.moments.pieceId, pieceId)).get();
+          if (needsFix(report, { clip })) return ok(`Not rendered yet.\n\n${qualityText(report)}\n\nFix it with update_edit, then call render_edit again (anyway: true renders it as it is).`);
           const r = queueRender(edit.id, 'claude');
           return ok(`Quality ${report.score}/100. Render of v${r.versionNumber} queued. The creator can watch its progress in the video editor.`);
         }
@@ -726,13 +729,32 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
 
     tool(
       'resolve_note',
-      'Answer one of the creator’s comments (get_notes) after changing the edit for it: what you changed, in a short line. fixed: false leaves it open with your answer (you couldn’t, or need them to choose). The creator closes or reopens it.',
-      { noteId: z.string(), reply: z.string().min(2).max(400), fixed: z.boolean().optional().describe('Default true') },
-      safe(async ({ noteId, reply, fixed }) => {
+      'Answer one of the creator’s comments (get_notes) after changing the edit for it: what you changed, in a short line, and the lesson it teaches so the mistake never comes back in any video (lessonId of a lesson it repeats, or a new one: topic, title, rule). fixed: false leaves it open with your answer (you couldn’t, or need them to choose); a lesson can still be recorded. oneOff only for a comment that truly holds for this video alone (a campaign’s own rule, a fact in it), saying why.',
+      {
+        noteId: z.string(),
+        reply: z.string().min(2).max(400),
+        fixed: z.boolean().optional().describe('Default true'),
+        lessonId: z.string().optional().describe('The lesson (from get_notes’ list) this comment repeats'),
+        lesson: z
+          .object({
+            topic: z.enum(KNOWLEDGE_TOPICS),
+            title: z.string().min(4).max(RULE_TITLE_MAX).describe('What to always or never do, e.g. "Never end a clip on an unfinished sentence"'),
+            rule: z.string().min(10).max(1500).describe('The rule for every video: what, why the viewer minds, how to do it right'),
+            pageOnly: z.boolean().optional().describe('Only for this page’s videos'),
+          })
+          .optional()
+          .describe('A new lesson; with lessonId: sharper words for that lesson'),
+        oneOff: z.string().max(300).optional().describe('Why this comment teaches nothing beyond this video'),
+      },
+      safe(async ({ noteId, reply, fixed, lessonId, lesson, oneOff }) => {
         const note = getNote(noteId);
         ownPiece(note.pieceId);
+        if (!lessonId && !lesson && !oneOff?.trim() && fixed !== false)
+          return fail('Name the lesson too: lessonId of the one it repeats, or a new lesson (topic, title, rule); oneOff only when it holds for this video alone.');
+        const learned = lessonId || lesson ? learnFromNote(noteId, { id: lessonId, ...(lesson ?? {}) }) : null;
         updateNote(noteId, { reply, status: fixed === false ? 'open' : 'fixed' });
-        return ok(fixed === false ? 'Answered; it stays open.' : 'Marked fixed.');
+        const what = learned ? ` Lesson “${learned.title}” (${learned.taught?.count ?? 1}×).` : '';
+        return ok(fixed === false ? `Answered; it stays open.${what}` : `Marked fixed.${what}`);
       }),
     ),
 

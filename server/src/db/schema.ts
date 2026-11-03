@@ -220,10 +220,12 @@ export const videoNotes = sqliteTable(
     text: text('text').notNull(),
     status: text('status').$type<NoteStatus>().notNull().default('open'),
     reply: text('reply').notNull().default(''),
+    /** The lesson it taught (a Knowledge rule from my comments). */
+    lessonId: text('lesson_id').references((): AnySQLiteColumn => knowledge.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     resolvedAt: integer('resolved_at'),
   },
-  (t) => [index('video_notes_piece_idx').on(t.pieceId)],
+  (t) => [index('video_notes_piece_idx').on(t.pieceId), index('video_notes_lesson_idx').on(t.lessonId)],
 );
 
 export const jobs = sqliteTable(

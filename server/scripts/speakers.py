@@ -14,6 +14,12 @@ import statistics
 import cv2
 import numpy as np
 
+
+def spread(values, q):
+    """The q-th quantile of a few values (nearest rank)."""
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, max(0, int(round(q * (len(ordered) - 1)))))]
+
 parser = argparse.ArgumentParser()
 parser.add_argument("video")
 parser.add_argument("--model", required=True)
@@ -131,7 +137,9 @@ for k, (a, b) in enumerate(merged):
         "end": round(samples[b]["t"], 3) if b < len(samples) else round(end_time, 3),
         "samples": b - a,
         "tracks": [
-            {"x": round(statistics.median(tr["xs"]), 4), "y": round(statistics.median(tr["ys"]), 4), "h": round(statistics.median(tr["hs"]), 4), "n": len(tr["xs"]), "activity": tr["activity"]}
+            {"x": round(statistics.median(tr["xs"]), 4), "y": round(statistics.median(tr["ys"]), 4), "h": round(statistics.median(tr["hs"]), 4), "n": len(tr["xs"]), "activity": tr["activity"],
+             # How far the face moves sideways in the shot (a leaning speaker), a stray sample or two left out.
+             "x0": round(spread(tr["xs"], 0.1), 4), "x1": round(spread(tr["xs"], 0.9), 4)}
             for tr in tracks
         ],
     })

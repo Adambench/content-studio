@@ -67,10 +67,11 @@ export function applyLook(spec: EditSpec, look: ClipLook, hookCard: string, tota
   if (hookCard) {
     const end = Math.min(look.hook.kind === 'slam' ? 2.2 : 2.5, total);
     if (look.hook.kind === 'slam') {
-      const o: EditOverlay = { id: rid(), type: 'graphic', template: 'kinetic', text: hookCard, sub: '', items: [], x: 0.5, y: 0.5, position: 'center', sound: true, start: 0, end };
+      // The hook card is the one thing to read while it's on (with captions and a name tag too, the eyes go three ways).
+      const o: EditOverlay = { id: rid(), type: 'graphic', template: 'kinetic', text: hookCard, sub: '', items: [], x: 0.5, y: 0.5, position: 'center', sound: true, start: 0, end, hidesCaptions: true };
       next.overlays.push(o);
     } else {
-      next.overlays.push({ id: rid(), type: 'text', text: hookCard, style: 'title', position: look.hook.position, animation: look.hook.animation, start: 0, end });
+      next.overlays.push({ id: rid(), type: 'text', text: hookCard, style: 'title', position: look.hook.position, animation: look.hook.animation, start: 0, end, hidesCaptions: true });
       next.audio.sfx.push({ id: rid(), mediaId: builtinSfxId(look.hook.sound), at: 0.05, volume: 0.6 });
     }
   }

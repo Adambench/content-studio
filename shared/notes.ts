@@ -18,6 +18,8 @@ export type VideoNote = {
   status: NoteStatus;
   /** What Claude changed for it. */
   reply: string;
+  /** The lesson it taught (a Knowledge rule from my comments), so the mistake never comes back in another video. */
+  lessonId: string | null;
   createdAt: number;
   resolvedAt: number | null;
 };

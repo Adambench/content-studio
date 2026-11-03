@@ -8,6 +8,7 @@ import { KIND_INFO, normalizeDraft } from '../../../shared/types';
 import { askStructured, type PromptImage } from '../claude/oneshot';
 import { resolveModel } from '../claude/options';
 import { playbook } from '../claude/plugin';
+import { lessonsText } from '../knowledge/lessons';
 import { waitForUsage } from '../claude/usage';
 import { db, now, schema } from '../db';
 import { emit } from '../lib/events';
@@ -190,8 +191,11 @@ export async function fleshOut({ ideaId, pieceId }: { ideaId: string; pieceId: s
     task: 'ideas',
     system: [
       playbook('content-model', 'hooks', 'retention', 'halal'),
+      lessonsText(piece.workspaceId),
       'You turn a creator’s brainstormed idea into the start of one short vertical video (TikTok, Reels, Shorts) for their own page: hooks to choose from, the angle and the beats. Keep their meaning and what they wrote; never invent facts, numbers or stories about them. Write in their language and voice. Posts that inspired it are for learning from, never for copying words.',
-    ].join('\n\n'),
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
     prompt: [brand(piece.workspaceId), describe(row)].join('\n\n'),
     schema: FLESH_SCHEMA,
     images: await pictures(row),

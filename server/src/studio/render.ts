@@ -1,4 +1,5 @@
-import { fork } from 'node:child_process';
+import { execFile, fork } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createWriteStream, existsSync } from 'node:fs';
 import { copyFile, link, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -24,8 +25,11 @@ import { BUNDLED_FONTS, composeEdit, type ComposeMedia, type ComposeSource } fro
 import { getEdit, saveEditVersion, specMedia, specTranscripts } from './edits';
 import { makeProxy, proxyPath } from './proxy';
 import type { WorkerMessage, WorkerRequest } from './worker';
+import { RENDER_PROGRESS } from '../../../shared/compute';
+import { runRemote, workerFor } from '../compute/workers';
 
 const require = createRequire(import.meta.url);
+const execFileP = promisify(execFile);
 /** GSAP and the plugins compositions may use (scenes: eases, typing, motion paths, morphing, drawing, physics). */
 export const GSAP_FILES = [
   'gsap.min.js',
@@ -167,7 +171,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
     const version = r.versionId ? db.select().from(schema.editVersions).where(eq(schema.editVersions.id, r.versionId)).get() : undefined;
     const spec: EditSpec = normalizeEdit(version?.spec ?? getEdit(r.editId).working);
     const piece = getPiece(r.pieceId);
-    const chrome = await ensureRenderer((f) => progress(0.05 * f, 'Downloading the video renderer (first time only)'));
+    const chrome = workerFor('render') ? null : await ensureRenderer((f) => progress(0.05 * f, 'Downloading the video renderer (first time only)'));
 
     await rm(dir, { recursive: true, force: true });
     await mkdir(join(dir, 'media'), { recursive: true });
@@ -272,13 +276,25 @@ export async function renderJob({ renderId }: { renderId: string }) {
     await writeFile(join(dir, 'index.html'), html);
 
     const output = join(dir, 'render.mp4');
-    await runWorker(
-      { projectDir: dir, output },
-      chrome,
-      (value, stage) => progress(0.3 + 0.62 * value, stageLabel(stage)),
-      (tail) => (logTail = tail),
-      abort.signal,
-    );
+    // A home PC draws the frames when one has the renderer, which keeps this laptop free; otherwise, or when its run
+    // fails, this computer does.
+    const remote = await renderRemote(dir, output, editDuration(spec), progress, abort.signal);
+    if (abort.signal.aborted) throw new Error('cancelled');
+    if (!remote) {
+      const browser = chrome ?? (await ensureRenderer((f) => progress(0.3 * f, 'Downloading the video renderer (first time only)')));
+      drawingHere.add(r.id);
+      try {
+        await runWorker(
+          { projectDir: dir, output },
+          browser,
+          (value, stage) => progress(0.3 + 0.62 * value, stageLabel(stage)),
+          (tail) => (logTail = tail),
+          abort.signal,
+        );
+      } finally {
+        drawingHere.delete(r.id);
+      }
+    }
 
     let final = output;
     // A video with every clip muted and no nasheed or sound effects has no sound to level.
@@ -343,6 +359,45 @@ export async function renderJob({ renderId }: { renderId: string }) {
       rerenderLatest(r.editId, by);
     }
   }
+}
+
+/** Renders drawing their frames on this computer now (a clip waits for those before Demucs fills the CPU too). */
+const drawingHere = new Set<string>();
+export const renderingHere = () => drawingHere.size > 0;
+
+/**
+ * Draw the frames on a home PC: the project folder goes over as one tar, the finished video comes back to `output`.
+ * False when no worker has the renderer, or its run failed (the caller renders here instead).
+ */
+async function renderRemote(dir: string, output: string, seconds: number, progress: (value: number, stage: string) => void, signal: AbortSignal) {
+  if (!workerFor('render')) return false;
+  const tar = join(dir, 'project.tar');
+  progress(0.3, 'Packing it for the home PC');
+  await execFileP('tar', ['-cf', tar, '-C', dir, '--exclude=./project.tar', '--exclude=./render.log', '.'], { signal });
+  let on = 'a home PC';
+  progress(0.3, 'Waiting for a home PC');
+  const res = await runRemote(
+    'render',
+    { project: tar, video: output },
+    { fps: 30 },
+    {
+      // Generous: a home PC draws ~1 s of video in a few seconds; this only catches one that hangs.
+      timeoutMs: Math.max(20 * 60_000, seconds * 60_000),
+      signal,
+      onStart: (name) => {
+        on = name;
+        progress(0.3, `Sending it to ${name}`);
+      },
+      onProgress: (text) => {
+        const m = RENDER_PROGRESS.exec(text);
+        if (m) progress(0.3 + 0.62 * Number(m[1]), `${stageLabel(m[2])} on ${on}`);
+      },
+    },
+  );
+  await rm(tar, { force: true });
+  if (res.ok) return true;
+  if (!signal.aborted && res.reason !== 'no-worker') console.warn(`[render] on ${on}: ${res.message}; rendering here`);
+  return false;
 }
 
 const STAGES: Record<string, string> = {

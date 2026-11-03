@@ -103,12 +103,29 @@ export function QualityPanel() {
               </div>
             </div>
             {report.summary && <p className="text-sm">{report.summary}</p>}
+            {!!report.lessons?.length && (
+              <div className="space-y-2 rounded-md border border-destructive/40 p-3">
+                <p className="text-sm font-medium">
+                  Breaks {report.lessons.length === 1 ? 'one of your lessons' : `${report.lessons.length} of your lessons`}
+                </p>
+                <ul className="space-y-2">
+                  {report.lessons.map((l) => (
+                    <li key={l.id} className="text-sm">
+                      <span className="font-medium">{l.title}</span>
+                      <span className="text-muted-foreground">
+                        {l.where ? ` · ${l.where}` : ''} · Fix: {l.fix}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <ul className="space-y-3">
               {report.items.map((i) => (
                 <Criterion key={i.criterion} item={i} />
               ))}
             </ul>
-            {piece && report.items.some((i) => i.fix) && (
+            {piece && (report.items.some((i) => i.fix) || !!report.lessons?.length) && (
               <Button
                 size="sm"
                 variant="secondary"

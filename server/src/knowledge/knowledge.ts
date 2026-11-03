@@ -1,11 +1,12 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { and, asc, eq, isNull, max, or } from 'drizzle-orm';
+import { and, asc, eq, isNull, max, ne, or } from 'drizzle-orm';
 import { KNOWLEDGE_TOPIC_INFO, KNOWLEDGE_TOPICS, type KnowledgeRule, type KnowledgeSource, type KnowledgeStatus, type KnowledgeTopic } from '../../../shared/knowledge';
 import { config } from '../config';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, notFound } from '../lib/http';
+import { taughtBy } from './lessons';
 
 type Row = typeof schema.knowledge.$inferSelect;
 
@@ -99,7 +100,9 @@ export function syncKnowledge() {
 }
 
 export function listKnowledge(): KnowledgeRule[] {
-  return db.select().from(schema.knowledge).orderBy(asc(schema.knowledge.topic), asc(schema.knowledge.position), asc(schema.knowledge.createdAt)).all().map(toRule);
+  const rows = db.select().from(schema.knowledge).orderBy(asc(schema.knowledge.topic), asc(schema.knowledge.position), asc(schema.knowledge.createdAt)).all();
+  const taught = taughtBy(rows.filter((r) => r.source === 'comments').map((r) => r.id));
+  return rows.map((r) => (r.source === 'comments' ? { ...toRule(r), taught: taught.get(r.id) ?? { count: 0, last: null } } : toRule(r)));
 }
 
 function getRow(id: string) {
@@ -184,7 +187,14 @@ export function knowledgeText(topics: readonly KnowledgeTopic[], workspaceId?: s
   const rows = db
     .select()
     .from(schema.knowledge)
-    .where(and(eq(schema.knowledge.status, 'active'), workspaceId ? or(isNull(schema.knowledge.workspaceId), eq(schema.knowledge.workspaceId, workspaceId)) : isNull(schema.knowledge.workspaceId)))
+    .where(
+      and(
+        eq(schema.knowledge.status, 'active'),
+        // Lessons from my comments have their own section (knowledge/lessons.ts `lessonsText`).
+        ne(schema.knowledge.source, 'comments'),
+        workspaceId ? or(isNull(schema.knowledge.workspaceId), eq(schema.knowledge.workspaceId, workspaceId)) : isNull(schema.knowledge.workspaceId),
+      ),
+    )
     .orderBy(asc(schema.knowledge.position), asc(schema.knowledge.createdAt))
     .all();
   return topics

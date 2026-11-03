@@ -1,11 +1,11 @@
 // Compute workers: the home PCs that take the heavy jobs (Whisper, Demucs, the person matte, the speaker scan, picture
-// and video generation, the cloned voice). A worker
+// and video generation, the cloned voice, drawing a render's frames). A worker
 // pairs with the laptop like the phone, polls it for tasks over Tailscale, runs the tool's command from its own scripts,
 // and sends the output files back. The command line of each tool is defined here once, so the laptop's own run (the
 // fallback when no worker is free) and a worker's run are the same command. A worker never runs anything else: the
 // laptop sends a tool name and file names, never a command.
 
-export const COMPUTE_TOOLS = ['transcribe', 'separate', 'matte', 'speakers', 'probe', 'image', 'video', 'speak'] as const;
+export const COMPUTE_TOOLS = ['transcribe', 'separate', 'matte', 'speakers', 'probe', 'image', 'video', 'speak', 'render'] as const;
 export type ComputeTool = (typeof COMPUTE_TOOLS)[number];
 /** Tools only a worker runs (the laptop has no GPU for them): a job waits for one instead of running here. */
 export const WORKER_ONLY: ComputeTool[] = ['image', 'video', 'speak'];
@@ -27,6 +27,9 @@ export type MachinePaths = {
   /** Python with Chatterbox and Kokoro (its own environment: Chatterbox pins its own PyTorch). */
   voicePython: string;
   kokoroModels: string;
+  /** Node, and the folder with render.mjs and its HyperFrames install (worker/src/render.ts). */
+  node: string;
+  renderDir: string;
 };
 
 export type ToolInfo = {
@@ -47,7 +50,16 @@ export const TOOL_INFO: Record<ComputeTool, ToolInfo> = {
   image: { label: 'Pictures (FLUX)', inputs: [], outputs: ['image'], stdout: true },
   video: { label: 'Video clips (Wan)', inputs: [], outputs: ['video'], stdout: true },
   speak: { label: 'My voice (Chatterbox)', inputs: ['job', 'reference'], outputs: ['wav'], stdout: true },
+  // The laptop cuts and grades the footage and writes the composition; the worker draws its frames (headless Chrome),
+  // encodes and mixes, from the project folder sent as one tar.
+  render: { label: 'Video renders (HyperFrames)', inputs: ['project'], outputs: ['video'], stdout: false },
 };
+
+/** HyperFrames' settings for a finished video: the same on the laptop (studio/worker.ts) and a worker (render.ts). */
+export const RENDER_JOB = { quality: 'standard', crf: 17, format: 'mp4', hdrMode: 'force-sdr', strictness: 'best-effort', useGpu: true } as const;
+
+/** A render's progress line on a worker's output: "@progress 0.412 rendering". */
+export const RENDER_PROGRESS = /^@progress (\d(?:\.\d+)?) ?(.*)$/;
 
 export type ToolParams = {
   model?: string;
@@ -86,6 +98,8 @@ export function commandFor(tool: ComputeTool, files: Record<string, string>, par
     }
     case 'speak':
       return { bin: m.voicePython, args: [script('tts.py'), files.job, '--models', m.kokoroModels, '--clone', files.reference, '--out', files.wav] };
+    case 'render':
+      return { bin: m.node, args: [`${m.renderDir}/render.mjs`, files.project, '--out', files.video, '--fps', String(params.fps ?? 30)] };
   }
 }
 

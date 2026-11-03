@@ -285,7 +285,8 @@ export function composeEdit(input: ComposeInput) {
   if (spec.captions.enabled && words.length) {
     const c = spec.captions;
     // A scene that shows the words itself (an ayah and its meaning) keeps the captions off while it's on.
-    const quiet = spec.overlays.filter((o) => o.type === 'scene' && isScenePreset(o.preset) && SCENE_LIBRARY[o.preset].hidesCaptions);
+    // So does a hook card that asks for it: one thing to read at a time.
+    const quiet = spec.overlays.filter((o) => (o.type === 'scene' && isScenePreset(o.preset) && SCENE_LIBRARY[o.preset].hidesCaptions) || ((o.type === 'text' || o.type === 'graphic') && o.hidesCaptions));
     const pages = captionPages(words, c, duration).filter((p) => !quiet.some((o) => (p.start + p.end) / 2 >= o.start && (p.start + p.end) / 2 < o.end));
     pages.forEach((p, i) => {
       body.push(`<div id="p${i}" class="clip layer cap" data-start="${n(p.start)}" data-duration="${n(p.end - p.start)}" data-track-index="3"><div class="line"><div class="ci">${captionHtml(c.preset, p, i)}</div></div></div>`);
@@ -376,7 +377,9 @@ html, body { margin: 0; background: #000; }
 .t-label { z-index: 30; }
 .t-label .oi { font-family: ${fontStack('Montserrat')}; font-weight: 800; font-size: 54px; line-height: 1.15; color: #111; background: ${spec.captions.highlight}; padding: .28em .6em; border-radius: .45em; max-width: 84%; }
 .t-note { z-index: 30; }
-.t-title .acc, .t-note .acc { color: ${spec.captions.highlight}; }
+.t-title .oi:has(.acc) { font-weight: 640; }
+.t-title .acc { font-weight: 900; }
+.t-note .acc { font-weight: 800; }
 .t-label .acc { color: #fff; }
 .t-note .oi { font-family: ${fontStack('Inter')}; font-weight: 600; font-size: 44px; line-height: 1.3; color: #fff; max-width: 84%; text-shadow: 0 2px 6px rgba(0,0,0,.85); }
 hf-audio-group { display: none !important; }

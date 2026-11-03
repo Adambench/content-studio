@@ -2,7 +2,7 @@ import { BookOpen, Check, Heart, Lock, MoreHorizontal, Pencil, Plus, RotateCcw, 
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { KNOWLEDGE_SOURCE_LABELS, KNOWLEDGE_TOPIC_INFO, KNOWLEDGE_TOPICS, RULE_BODY_MAX, RULE_TITLE_MAX, type KnowledgeRule, type KnowledgeTopic } from '@shared/knowledge';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { Inspiration } from '@/components/knowledge/Inspiration';
 import { Markdown } from '@/components/Markdown';
 import { PageHeader } from '@/components/PageHeader';
@@ -77,25 +77,35 @@ export function KnowledgePage() {
   );
 }
 
+const LESSONS_INFO = { label: 'From my comments', hint: 'What my comments on finished videos taught: every video is checked against these before it renders' };
+
 /** The playbook as rules: read them, change them, add to them. Every prompt uses what's on here. */
 function Playbook() {
   const knowledge = useKnowledge();
-  const [topic, setTopic] = useState<KnowledgeTopic>('content-model');
+  // 'lessons': every rule my comments on finished videos taught, whatever its topic.
+  const [topic, setTopic] = useState<KnowledgeTopic | 'lessons'>('content-model');
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
   const rules = knowledge.data ?? [];
   const suggested = rules.filter((r) => r.status === 'proposed');
   const q = query.trim().toLowerCase();
   const shown = useMemo(
-    () => (q ? rules.filter((r) => r.status !== 'proposed' && `${r.title}\n${r.body}`.toLowerCase().includes(q)) : rules.filter((r) => r.topic === topic && r.status !== 'proposed')),
+    () =>
+      q
+        ? rules.filter((r) => r.status !== 'proposed' && `${r.title}\n${r.body}`.toLowerCase().includes(q))
+        : topic === 'lessons'
+          ? rules.filter((r) => r.source === 'comments').sort((a, b) => (b.taught?.count ?? 0) - (a.taught?.count ?? 0))
+          : rules.filter((r) => r.topic === topic && r.status !== 'proposed'),
     [rules, q, topic],
   );
   const count = (t: KnowledgeTopic) => rules.filter((r) => r.topic === t && r.status === 'active').length;
+  const lessons = rules.filter((r) => r.source === 'comments' && r.status === 'active').length;
+  const info = topic === 'lessons' ? LESSONS_INFO : KNOWLEDGE_TOPIC_INFO[topic];
 
   return (
     <div className="flex flex-col gap-4 md:flex-row md:gap-6">
       <nav className="flex gap-1 overflow-x-auto [scrollbar-width:none] md:w-52 md:shrink-0 md:flex-col md:overflow-visible" aria-label="Topics">
-        {KNOWLEDGE_TOPICS.map((t) => (
+        {(['lessons', ...KNOWLEDGE_TOPICS] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -108,8 +118,8 @@ function Playbook() {
               t === topic && !q ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground',
             )}
           >
-            {KNOWLEDGE_TOPIC_INFO[t].label}
-            <span className="ml-auto text-xs tabular-nums text-muted-foreground">{count(t) || ''}</span>
+            {t === 'lessons' ? LESSONS_INFO.label : KNOWLEDGE_TOPIC_INFO[t].label}
+            <span className="ml-auto text-xs tabular-nums text-muted-foreground">{(t === 'lessons' ? lessons : count(t)) || ''}</span>
           </button>
         ))}
       </nav>
@@ -120,7 +130,7 @@ function Playbook() {
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search every rule" className="pl-8" aria-label="Search every rule" />
           </div>
-          <Button onClick={() => setAdding(true)} disabled={!!q}>
+          <Button onClick={() => setAdding(true)} disabled={!!q || topic === 'lessons'}>
             <Plus /> Add a rule
           </Button>
         </div>
@@ -138,12 +148,12 @@ function Playbook() {
 
         {!q && (
           <div>
-            <h2 className="text-sm font-medium">{KNOWLEDGE_TOPIC_INFO[topic].label}</h2>
-            <p className="text-xs text-muted-foreground">{KNOWLEDGE_TOPIC_INFO[topic].hint}</p>
+            <h2 className="text-sm font-medium">{info.label}</h2>
+            <p className="text-xs text-muted-foreground">{info.hint}</p>
           </div>
         )}
 
-        {adding && !q && <NewRule topic={topic} onDone={() => setAdding(false)} />}
+        {adding && !q && topic !== 'lessons' && <NewRule topic={topic} onDone={() => setAdding(false)} />}
 
         {!knowledge.data ? (
           <div className="space-y-3">
@@ -153,7 +163,7 @@ function Playbook() {
         ) : shown.length ? (
           <ul className="space-y-3">
             {shown.map((r) => (
-              <RuleCard key={r.id} rule={r} showTopic={!!q} />
+              <RuleCard key={r.id} rule={r} showTopic={!!q || topic === 'lessons'} />
             ))}
           </ul>
         ) : (
@@ -162,10 +172,16 @@ function Playbook() {
               <EmptyMedia variant="icon">
                 <BookOpen />
               </EmptyMedia>
-              <EmptyTitle>{q ? 'Nothing matches' : 'No rules here yet'}</EmptyTitle>
-              <EmptyDescription>{q ? 'Try another word.' : 'Add what you know works: every prompt about this topic will use it.'}</EmptyDescription>
+              <EmptyTitle>{q ? 'Nothing matches' : topic === 'lessons' ? 'No lessons yet' : 'No rules here yet'}</EmptyTitle>
+              <EmptyDescription>
+                {q
+                  ? 'Try another word.'
+                  : topic === 'lessons'
+                    ? 'Comment on a finished video: when Claude fixes it, the rule behind it lands here and every later video is checked against it.'
+                    : 'Add what you know works: every prompt about this topic will use it.'}
+              </EmptyDescription>
             </EmptyHeader>
-            {!q && (
+            {!q && topic !== 'lessons' && (
               <Button size="sm" onClick={() => setAdding(true)}>
                 <Plus /> Add a rule
               </Button>
@@ -254,7 +270,9 @@ function RuleCard({ rule, showTopic }: { rule: KnowledgeRule; showTopic: boolean
           <div className="flex items-start gap-2">
             <h3 className="min-w-0 flex-1 text-sm font-medium">{rule.title}</h3>
             {showTopic && <Badge variant="outline">{KNOWLEDGE_TOPIC_INFO[rule.topic].label}</Badge>}
-            <Badge variant="secondary">{rule.edited ? 'Changed by you' : KNOWLEDGE_SOURCE_LABELS[rule.source]}</Badge>
+            <Badge variant="secondary" className={cn(rule.taught && 'max-sm:hidden')}>
+              {rule.edited ? 'Changed by you' : KNOWLEDGE_SOURCE_LABELS[rule.source]}
+            </Badge>
             {rule.locked ? (
               <Lock className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-label="The halal rules can’t be changed" />
             ) : (
@@ -291,9 +309,29 @@ function RuleCard({ rule, showTopic }: { rule: KnowledgeRule; showTopic: boolean
           <div className="mt-2" onDoubleClick={() => !rule.locked && setEditing(true)}>
             {rule.body ? <Markdown className="text-muted-foreground [&_strong]:text-foreground">{rule.body}</Markdown> : <p className="text-sm text-muted-foreground italic">No details.</p>}
           </div>
+          {rule.taught && <Taught taught={rule.taught} />}
         </>
       )}
     </li>
+  );
+}
+
+/** A lesson from my comments: how often I had to say it, and the newest comment that did. */
+function Taught({ taught }: { taught: NonNullable<KnowledgeRule['taught']> }) {
+  const { count, last } = taught;
+  return (
+    <p className="mt-2 text-xs text-muted-foreground">
+      {count > 1 ? `You said it ${count} times` : 'You said it once'}
+      {last && (
+        <>
+          {' · latest on '}
+          <Link to={`/w/${last.workspaceId}/p/${last.pieceId}`} className="underline underline-offset-2 hover:text-foreground">
+            {last.title}
+          </Link>
+          {`: “${last.text.length > 140 ? `${last.text.slice(0, 140)}…` : last.text}”`}
+        </>
+      )}
+    </p>
   );
 }
 

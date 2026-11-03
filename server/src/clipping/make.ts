@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { and, eq, inArray } from 'drizzle-orm';
 import { MOMENT_KIND_LABELS, clock, type FramesCheck, type MusicCheck } from '../../../shared/clipping';
-import { TIGHTEN_PRESETS, editDuration, normalizeEdit, speechRangesFromTranscript, tightenClips } from '../../../shared/edit';
+import { TIGHTEN_PRESETS, clipStarts, editDuration, normalizeEdit, speechRangesFromTranscript, tightenClips } from '../../../shared/edit';
 import { emptyDraft, type Transcript } from '../../../shared/types';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
@@ -28,16 +28,19 @@ import { adoptFile, deleteMedia, whisperInstalled } from '../services/media';
 import { createPiece, getWorkspace } from '../services/pieces';
 import { applyLook, lookTag, pickLook } from '../studio/clip-looks';
 import { isLectureCampaign, speakerTag } from '../islamic/lectures';
+import { sentenceBounds } from './bounds';
 import { fillHook, whoTag } from './framing';
 import { createEdit, saveEditVersion } from '../studio/edits';
 import { refineWords, snapCuts, voiceEnvelope } from '../studio/clean-cuts';
 import { applyFocusSpans, focusSpans, scanSpeakers, type SpeakerScan } from '../studio/reframe';
-import { cancelRender, queueRender } from '../studio/render';
+import { cancelRender, queueRender, renderingHere } from '../studio/render';
 import { getMoment, momentExists, updateMoment } from './moments';
 import { runTool } from '../compute/run';
 
 const execFile = promisify(execFileCb);
-const MARGIN = 0.5;
+/** Room cut either side of the picked moment, so its first and last sentences can be finished (clipping/bounds.ts). */
+const HEAD = 6;
+const TAIL = 16;
 
 const ffmpeg = (args: string[], timeoutMs = 10 * 60_000) =>
   execFile(requireBinary('ffmpeg'), ['-hide_banner', '-nostdin', '-y', '-v', 'error', ...args], { maxBuffer: 20 * 1024 * 1024, timeout: timeoutMs });
@@ -101,20 +104,26 @@ const FRAMES_SCHEMA = {
   properties: { verdict: { type: 'string', enum: ['ok', 'flag', 'reject'] }, reasons: { type: 'array', items: { type: 'string' } } },
 };
 
-/** Three frames to Haiku, against the halal rules: what the clip shows. */
-async function framesCheck(video: string, seconds: number, dir: string): Promise<FramesCheck> {
-  const files = await extractFrames(video, [0.15, 0.5, 0.85].map((f) => f * seconds), (i) => join(dir, `frame${i}.jpg`), 768);
+/**
+ * Frames to Haiku, against the halal rules: one from every shot of the clip (a shot of a drink for a few frames counts
+ * as much as a long one), or three across it without a shot scan. Up to 12.
+ */
+async function framesCheck(video: string, range: { start: number; end: number }, shots: { start: number; end: number }[] | null, dir: string): Promise<FramesCheck> {
+  const inside = (shots ?? []).map((sh) => ({ a: Math.max(range.start, sh.start), b: Math.min(range.end, sh.end) })).filter((sh) => sh.b - sh.a >= 0.08);
+  let times = inside.length ? inside.map((sh) => (sh.a + sh.b) / 2) : [0.15, 0.5, 0.85].map((f) => range.start + f * (range.end - range.start));
+  if (times.length > 12) times = Array.from({ length: 12 }, (_, i) => times[Math.round((i * (times.length - 1)) / 11)]);
+  const files = await extractFrames(video, times, (i) => join(dir, `frame${i}.jpg`), times.length > 6 ? 512 : 768);
   const images = await Promise.all(files.map(async (f) => ({ data: (await readFile(f)).toString('base64'), mediaType: 'image/jpeg' as const })));
   const out = await askStructured<FramesCheck>({
     task: 'clips',
     system: [
       playbook('halal'),
-      'You look at three frames of a short clip cut from a podcast, stream or interview, for a creator who keeps every post halal by the rules above. Judge only what is visible in the frames: `reject` when one clearly shows something never promoted or shown (a drink of alcohol, gambling on screen, smoking or vaping, immodest dress or imagery, a haram product as the point); `flag` when something visible is a gray area, or a frame is too dark or blurred to judge; `ok` when nothing visible applies, with no reasons.',
+      'You look at frames of a short clip cut from a podcast, stream or interview (one from each of its shots, in order), for a creator who keeps every post halal by the rules above. Judge only what is visible in the frames, every one of them, the background too (a drink on the table, a bottle on a shelf, a brand on a shirt): `reject` when one clearly shows something never promoted or shown (a drink of alcohol, gambling on screen, smoking or vaping, immodest dress or imagery, a haram product as the point); `flag` when something visible is a gray area, or a frame is too dark or blurred to judge; `ok` when nothing visible applies, with no reasons.',
       'Sound and music are checked separately: never mention them. Don’t flag what you can’t see (“can’t rule out” is not a reason). One short line per reason, naming the frame and what is in it.',
     ]
       .filter(Boolean)
       .join('\n\n'),
-    prompt: 'The three frames, from the start, middle and end of the clip.',
+    prompt: `${files.length} frames, in order, at ${times.map((t) => `${(t - range.start).toFixed(1)} s`).join(', ')} of the clip.`,
     images,
     schema: FRAMES_SCHEMA,
     model: 'haiku',
@@ -155,10 +164,9 @@ export async function makeClip({ momentId }: { momentId: string }) {
   if (m.status !== 'making') return;
   if (!clipToolsInstalled()) throw new JobError('Install the clip tools first (Settings → Clip tools): they remove background music.', { retry: false });
   try {
-    // A render and Demucs each fill the CPU and a few GB of memory: the render goes first, so the clips already made
-    // reach Review sooner (and the laptop doesn't run out of memory).
-    if (db.select({ id: schema.jobs.id }).from(schema.jobs).where(and(eq(schema.jobs.type, 'video.render'), eq(schema.jobs.status, 'running'))).get())
-      throw new JobError('Waiting for a render to finish', { wait: true, delayMs: 15_000 });
+    // A render and Demucs each fill the CPU and a few GB of memory: a render drawing its frames on this laptop goes
+    // first, so the clips already made reach Review sooner (one on a home PC doesn't hold anything up).
+    if (renderingHere()) throw new JobError('Waiting for a render to finish', { wait: true, delayMs: 15_000 });
     await waitForUsage('clips');
   } catch (err) {
     if (m.detail !== (err as Error).message) updateMoment(momentId, { detail: (err as Error).message });
@@ -194,8 +202,8 @@ export async function makeClip({ momentId }: { momentId: string }) {
   try {
     // 1. The cut, with margins: the picture at full quality, the sound as WAV for Demucs.
     step('Cutting it from the source');
-    const cutStart = Math.max(0, m.start - MARGIN);
-    const cutEnd = Math.min(sourceSeconds || m.end + MARGIN, m.end + MARGIN);
+    const cutStart = Math.max(0, m.start - HEAD);
+    const cutEnd = Math.min(sourceSeconds || m.end + TAIL, m.end + TAIL);
     const length = cutEnd - cutStart;
     const video = join(dir, 'video.mp4');
     const original = join(dir, 'original.wav');
@@ -234,17 +242,25 @@ export async function makeClip({ momentId }: { momentId: string }) {
       return;
     }
 
-    // 4. What the clip shows.
+    // Whole sentences: the start goes back to where its sentence begins, the end on to where it ends.
+    const maxSeconds = Number(c.checklist.find((r) => r.check?.type === 'maxSeconds')?.check?.value) || 90;
+    const rel = sentenceBounds(words, m.start - cutStart, m.end - cutStart, { maxLength: maxSeconds - 0.5 });
+    if (rel.moved.length) {
+      console.log(`[clip] ${momentId}: ${rel.moved.join('; ')}`);
+      m = updateMoment(momentId, { start: Math.round((cutStart + rel.start) * 100) / 100, end: Math.round((cutStart + rel.end) * 100) / 100 });
+    }
+
+    // 4. The shots and who's talking in each, to frame on (the frame follows the speaker in wide shots).
+    step('Finding the speaker');
+    const speakers = await scanSpeakers(video, { track: `clip:${momentId}` }).catch((err: Error) => (console.warn(`[clip] faces for ${momentId}: ${err.message}`), null));
+
+    // 5. What the clip shows, shot by shot.
     step('Checking what’s on screen');
-    const frames = await framesCheck(video, length, dir);
+    const frames = await framesCheck(video, rel, speakers?.shots ?? null, dir);
     if (frames.verdict === 'reject') {
       updateMoment(momentId, { status: 'dropped', frames, music, detail: `Dropped by the halal check: ${frames.reasons[0] ?? 'something on screen'}`.slice(0, 300) });
       return;
     }
-
-    // 5. The shots and who's talking in each, to frame on (the frame follows the speaker in wide shots).
-    step('Finding the speaker');
-    const speakers = await scanSpeakers(video, { track: `clip:${momentId}` }).catch((err: Error) => (console.warn(`[clip] faces for ${momentId}: ${err.message}`), null));
 
     // The finished cut: the picture with only the voice.
     const clip = join(dir, 'clip.mp4');
@@ -259,7 +275,7 @@ export async function makeClip({ momentId }: { momentId: string }) {
     const link = s.kind === 'youtube' && s.link ? `${s.link}&t=${Math.floor(m.start)}s` : s.link;
     const draft = emptyDraft();
     if (m.captions) draft.platforms = { ...draft.platforms, ...m.captions };
-    const spoken = words.filter((w) => w.start >= m.start - cutStart - 0.3 && w.end <= m.end - cutStart + 0.3).map((w) => w.word).join('').trim();
+    const spoken = words.filter((w) => w.start >= rel.start - 0.3 && w.end <= rel.end + 0.3).map((w) => w.word).join('').trim();
     const notes = [
       `Clipped from “${s.title || 'a source video'}” at ${at}${link ? `\n${link}` : ''}`,
       `Campaign: ${c.title}`,
@@ -269,6 +285,7 @@ export async function makeClip({ momentId }: { momentId: string }) {
       music.verdict === 'removed' && 'Background music was removed: only the voice is kept.',
       music.verdict === 'unverified' && 'There was sound behind the voice and it’s been removed, but the speech never pauses long enough to check: listen for any music left.',
       m.checkByEye.length && `Check by eye:\n${m.checkByEye.map((f) => `- ${f}`).join('\n')}`,
+      rel.moved.length && `Cut on whole sentences: ${rel.moved.join('; ')}.`,
     ]
       .filter(Boolean)
       .join('\n\n');
@@ -294,7 +311,6 @@ export async function makeClip({ momentId }: { momentId: string }) {
     // 7. The edit, in the page's look.
     const edit = createEdit(pieceId, 'claude');
     const spec = normalizeEdit(edit.working);
-    const rel = { start: m.start - cutStart, end: m.end - cutStart };
     const first = words.find((w) => w.end > rel.start + 0.05);
     const last = [...words].reverse().find((w) => w.start < rel.end - 0.05);
     const clipLen = (clipInfo.durationMs ?? length * 1000) / 1000;
@@ -321,6 +337,12 @@ export async function makeClip({ momentId }: { momentId: string }) {
     const look = pickLook(ws.id);
     const total = editDuration({ ...spec, clips });
     const next = applyLook({ ...spec, clips }, look, m.hookCard, total);
+    // A speaker who moves about in a shot is framed on all of it: no punch-in there, or he'd drift out of the frame.
+    for (const x of next.clips) {
+      const mid = (x.in + x.out) / 2;
+      const span = spans.find((sp) => sp.steady && mid >= sp.start && mid < sp.end);
+      if (span && x.mediaId === media.id) x.zoom = span.zoom;
+    }
     if (whole) {
       // Nothing of a whole picture is cropped by a punch-in, and the words sit around it, never on it: the hook card
       // above, the captions below.
@@ -332,12 +354,17 @@ export async function makeClip({ momentId }: { momentId: string }) {
     const speaker = isLectureCampaign(c.id) ? speakerTag(next, s, m.hookCard ? 2.5 : 0, total) : null;
     if (speaker) next.overlays.push(speaker);
     // A guest most viewers wouldn't know: an arrow names them as they first show.
-    const who = !whole && !speaker && speakers && m.speaker ? whoTag(next, media.id, speakers, m.speaker, clipInfo) : null;
+    // From the second shot on, once the hook card is gone: the first seconds have one thing to read.
+    const hookEnd = m.hookCard ? (look.hook.kind === 'slam' ? 2.2 : 2.5) : 0;
+    const after = Math.max(2.5, hookEnd);
+    const second = clipStarts(next).find((t) => t >= after - 0.01 && t <= 6) ?? after;
+    const who = !whole && !speaker && speakers && m.speaker ? whoTag(next, media.id, speakers, m.speaker, clipInfo, 0.65, second) : null;
     if (who) next.overlays.push(who);
     saveEditVersion(edit.id, { author: 'claude', message: `Clip of ${at}: tightened, hook card, captions${who ? `, ${m.speaker?.name} named` : ''}${lookTag(look)}`, spec: next });
 
-    // 8. Render; finishing moves it to Review.
-    queueRender(edit.id, 'claude');
+    // 8. Checked against the lessons from my comments (a broken one: Claude fixes it first), then rendered; finishing
+    // moves it to Review.
+    queueRender(edit.id, 'claude', { check: true });
     updateMoment(momentId, { status: 'made', detail: '' });
   } catch (err) {
     if (!(err instanceof Skipped)) throw err;

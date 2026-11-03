@@ -36,11 +36,12 @@ export function fillHook(clips: EditClip[], scan: SpeakerScan | null, min = 1.2,
 type Person = { x: number; y: number; h: number };
 
 /**
- * The "Who's this" arrow for the moment's main speaker, at the first moment they're on screen, or null when it can't
+ * The "Who's this" arrow for the moment's main speaker, at the first moment they're on screen from `after` on (never
+ * in the first seconds with the hook card and the captions: one thing to look at a time), or null when it can't
  * tell who they are: the person seen talking in shots that make up at least `share` of the talking on screen (people
  * matched across shots by where the camera has them), so a host is never named as the guest.
  */
-export function whoTag(spec: EditSpec, mediaId: string, scan: SpeakerScan, speaker: MomentSpeaker, src: { width?: number | null; height?: number | null }, share = 0.65): GraphicOverlay | null {
+export function whoTag(spec: EditSpec, mediaId: string, scan: SpeakerScan, speaker: MomentSpeaker, src: { width?: number | null; height?: number | null }, share = 0.65, after = 0): GraphicOverlay | null {
   if (!speaker.name || speaker.known || !src.width || !src.height) return null;
   const { width: W, height: H } = EDIT_FORMATS[spec.format];
   const starts = clipStarts(spec);
@@ -81,9 +82,10 @@ export function whoTag(spec: EditSpec, mediaId: string, scan: SpeakerScan, speak
     if (last && s.t0 - last.t1 < 0.05) last.t1 = s.t1;
     else runs.push({ t0: s.t0, t1: s.t1, first: s });
   }
-  const run = runs.find((r) => r.t1 - Math.max(r.t0, 0.2) >= 1.6);
+  const from = Math.max(after, 0.2);
+  const run = runs.find((r) => r.t1 - Math.max(r.t0, from) >= 1.6);
   if (!run) return null;
-  const start = round(Math.max(run.t0, 0.2));
+  const start = round(Math.max(run.t0, from));
   const end = round(Math.min(run.t1, start + 3));
   // Their face on the finished frame, from the first clip of the run (the frame holds through a run of one shot).
   const { clip, who } = run.first;

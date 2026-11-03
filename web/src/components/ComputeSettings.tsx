@@ -54,7 +54,7 @@ export function ComputeCard() {
     queryClient.invalidateQueries({ queryKey: keys.compute });
   }
 
-  const command = code ? `scripts/setup-worker.sh --server ${code.server} --code ${code.code} --name "Desktop" --with llm,image,video,voice` : '';
+  const command = code ? `scripts/setup-worker.sh --server ${code.server} --code ${code.code} --name "Desktop" --with render,llm,image,video,voice` : '';
 
   return (
     <Card id="compute">
@@ -105,7 +105,7 @@ export function ComputeCard() {
         {code ? (
           <div className="space-y-2 rounded-lg border p-3 text-sm">
             <p>
-              On the home PC (Linux, with this repository checked out, Node 22+, Python 3 and the NVIDIA driver), run this once. The code works once, for 10 minutes. Keep in <code className="font-mono">--with</code> what that PC should run: on the GTX 1070 <code className="font-mono">llm,video,voice</code>, on the GTX 1050 Ti <code className="font-mono">image</code> (generation needs the CUDA toolkit, git and cmake too).
+              On the home PC (Linux, with this repository checked out, Node 22+, Python 3 and the NVIDIA driver), run this once. The code works once, for 10 minutes. Keep in <code className="font-mono">--with</code> what that PC should run: on the GTX 1070 <code className="font-mono">render,llm,video,voice</code>, on the GTX 1050 Ti <code className="font-mono">render,image</code> (generation needs the CUDA toolkit, git and cmake too). With <code className="font-mono">render</code> on both, renders draw their frames there, two at once.
             </p>
             <code className="block overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs whitespace-pre">{command}</code>
             <div className="flex gap-2">

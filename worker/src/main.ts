@@ -1,5 +1,6 @@
 // A compute worker for Content Studio: runs on a home PC, takes the heavy jobs (Whisper, Demucs, the person matte, the
-// speaker scan, picture and video generation, the cloned voice) from the laptop's queue and sends the results back.
+// speaker scan, picture and video generation, the cloned voice, drawing renders) from the laptop's queue and sends the
+// results back.
 // It also tells the laptop where the text model it hosts (Ollama) is, when it has one (CS_LLM_URL). It pairs once with a code from Settings → Compute,
 // then polls the laptop over Tailscale. It only ever runs the tools in shared/compute.ts, with file names the laptop
 // chose; it never runs a command the laptop sends.
@@ -37,13 +38,15 @@ const machine = (): MachinePaths => ({
   genModels: join(toolsDir, 'models/gen'),
   voicePython: join(toolsDir, 'voice/bin/python'),
   kokoroModels: join(toolsDir, 'models/kokoro'),
+  node: process.execPath,
+  renderDir: join(toolsDir, 'render'),
 });
 
 const log = (message: string) => console.log(`${new Date().toISOString().slice(11, 19)} ${message}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** File extensions the tools need on their outputs (FFmpeg picks the container from it). */
-const EXT: Record<string, string> = { json: '.json', vocals: '.wav', rest: '.wav', mask: '.mp4', audio: '.wav', video: '.mp4', image: '.png', job: '.json', reference: '.wav', wav: '.wav' };
+const EXT: Record<string, string> = { project: '.tar', json: '.json', vocals: '.wav', rest: '.wav', mask: '.mp4', audio: '.wav', video: '.mp4', image: '.png', job: '.json', reference: '.wav', wav: '.wav' };
 
 async function loadConfig(): Promise<Config> {
   try {
@@ -89,6 +92,7 @@ async function capabilities(): Promise<{ tools: ComputeTool[]; gpu: string; spee
   if (existsSync(m.sdBin) && existsSync(join(m.genModels, '.image-ready'))) tools.push('image');
   if (existsSync(m.sdBin) && existsSync(join(m.genModels, '.video-ready'))) tools.push('video');
   if (existsSync(m.voicePython) && existsSync(join(toolsDir, 'voice/.ready'))) tools.push('speak');
+  if (existsSync(join(m.renderDir, 'render.mjs')) && existsSync(join(m.renderDir, '.ready'))) tools.push('render');
   return { tools, gpu: p.gpu || '', speed: { matteMsPerFrame: p.matteMsPerFrame, cuda: p.cuda } };
 }
 
@@ -127,12 +131,29 @@ function runCommand(task: WorkerTask, files: Record<string, string>, c: Config) 
     let err = '';
     let last = '';
     const timer = setTimeout(() => child.kill('SIGKILL'), task.timeoutMs);
-    const beat = setInterval(() => void api(c, `/api/worker/tasks/${task.id}/progress`, { text: last || 'Working…' }).catch(() => {}), 8000);
+    // The laptop answers ok: false once it no longer wants the task (cancelled): stop the tool then.
+    const beat = setInterval(
+      () =>
+        void api<{ ok: boolean }>(c, `/api/worker/tasks/${task.id}/progress`, { text: last || 'Working…' })
+          .then((r) => {
+            if (r.ok === false && child.exitCode === null) {
+              log(`${tool(task.tool)}: cancelled by the laptop`);
+              child.kill('SIGTERM');
+            }
+          })
+          .catch(() => {}),
+      task.tool === 'render' ? 3000 : 8000,
+    );
+    let progressLines = false;
     const onLine = (chunk: Buffer, keep: boolean) => {
       const text = chunk.toString();
       if (keep) out += text;
       else err = (err + text).slice(-4000);
-      const line = text.trim().split('\n').pop();
+      const lines = text.trim().split('\n');
+      // A tool that reports "@progress …" lines (a render) is followed by those alone, not its other logging.
+      const marked = lines.filter((l) => l.startsWith('@progress ')).pop();
+      if (marked) progressLines = true;
+      const line = marked ?? (progressLines ? undefined : lines.pop());
       if (line && !/^\s*\{/.test(line)) last = line.slice(0, 200);
     };
     child.stdout.on('data', (d: Buffer) => onLine(d, true));

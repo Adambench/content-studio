@@ -25,6 +25,9 @@ export const localMachine = (): MachinePaths => ({
   genModels: join(config.toolsDir, 'models/gen'),
   voicePython: join(config.toolsDir, 'voice/bin/python'),
   kokoroModels: kokoroDir(),
+  // Never used here: a render on this computer runs in the server's own render worker (studio/render.ts).
+  node: process.execPath,
+  renderDir: join(config.toolsDir, 'render'),
 });
 
 export type RunToolOptions = { timeoutMs: number; track?: string; onProgress?: (text: string) => void };

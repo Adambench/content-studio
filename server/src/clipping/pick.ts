@@ -7,6 +7,7 @@ import type { CampaignPlatform } from '../../../shared/campaigns';
 import { MIN_SCORE, MOMENT_KINDS, clock, type MomentCaptions, type MomentKind, type MomentSpeaker, type StandaloneScores } from '../../../shared/clipping';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
+import { lessonsText } from '../knowledge/lessons';
 import { briefForPrompt } from '../research/brief';
 import { waitForUsage } from '../claude/usage';
 import { emitCampaign, getCampaignRow, getSource, updateSource, type MomentRow } from '../campaigns/campaigns';
@@ -48,10 +49,10 @@ function schemaFor(pageIds: string[]) {
           additionalProperties: false,
           required: ['start', 'end', 'firstLine', 'hookCard', 'title', 'kind', 'why', 'scores', 'pageId', 'captions', 'halalFlags', 'checkByEye', 'speaker'],
           properties: {
-            start: { type: 'number', description: 'In point, seconds in the source: the start of the first word' },
-            end: { type: 'number', description: 'Out point, seconds in the source: the end of the payoff’s last word' },
+            start: { type: 'number', description: 'In point, seconds in the source: the start of the first word of a sentence, with the context a stranger needs to follow (never mid-sentence, never mid-story)' },
+            end: { type: 'number', description: 'Out point, seconds in the source: the end of the last word of the payoff, where the story or the point is finished (never on a sentence that goes on, a dangling "and…", or a new thought that starts and stops; a longer clip is fine)' },
             firstLine: { type: 'string', description: 'The spoken first line, word for word' },
-            hookCard: { type: 'string', description: '6 words or fewer for the screen in the first ~2.5 s, or empty when the first line carries the hook' },
+            hookCard: { type: 'string', description: '6 words or fewer for the screen in the first ~2.5 s, or empty when the first line carries the hook. Mark at most 2 words *like this* for emphasis, only ones that alone still carry the message (they show bolder, never in another colour)' },
             title: { type: 'string' },
             kind: { type: 'string', enum: MOMENT_KINDS },
             why: { type: 'string', description: 'One line: the kind, the turn or payoff, who it’s for' },
@@ -95,7 +96,7 @@ const INSTRUCTIONS = [
   'Give 3 to 8 moments, only ones that score 7 or more of 10 on the standalone score, never overlapping each other or the moments already taken. Fewer good ones beat more weak ones; none is a valid answer when nothing stands alone.',
   'The campaign’s rules come first after the halal rules: its length limits replace the 20–60 s default, and every caption carries its required mentions, hashtags and text for each platform. Write captions only for the platforms the campaign pays on (leave the others empty), in the page’s voice, never claiming more than the clip shows.',
   'Skip outright anything haram (halal.md) and any moment where music or singing is the point. Flag gray areas in `halalFlags` with the reason, including swearing (bleeped or not) and religious claims to check.',
-  'Past rejection reasons are rules too: don’t pick that kind of moment again.',
+  'Past rejection reasons are rules too: don’t pick that kind of moment again. So are the lessons from the creator’s comments above: check every moment against each before you give it.',
 ].join('\n\n');
 
 const overlapRatio = (a: { start: number; end: number }, b: { start: number; end: number }) =>
@@ -205,7 +206,7 @@ export async function pickMoments({ sourceId }: { sourceId: string }) {
 
   const out = await askStructured<{ moments: Picked[]; notes: string }>({
     task: 'clips',
-    system: [playbook('clipping', 'hooks', 'halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'),
+    system: [playbook('clipping', 'hooks', 'retention', 'editing', 'halal'), lessonsText(pages.length === 1 ? pages[0].id : null), INSTRUCTIONS].filter(Boolean).join('\n\n'),
     prompt,
     schema: schemaFor(pages.map((p) => p.id)),
     model: 'sonnet',

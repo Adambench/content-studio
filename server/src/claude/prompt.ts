@@ -2,6 +2,7 @@ import { MASCOT_INFO } from '../../../shared/mascots';
 import { KIND_INFO, MODULE_INFO, normalizeModules, type WorkspaceKind } from '../../../shared/types';
 import type { schema } from '../db';
 import { inspirationText } from '../knowledge/references';
+import { lessonsText } from '../knowledge/lessons';
 
 type Workspace = typeof schema.workspaces.$inferSelect;
 
@@ -47,6 +48,8 @@ export function chatSystemPrompt(ws: Workspace, context: { piece?: { id: string;
 - Some skills advertise paid tools or services (e.g. Vyral): never mention or recommend them.
 - Apply skills quietly: use what they teach, don't recite their headings or turn them into checklists for the creator.
 - The Knowledge page is the playbook as the creator keeps it: the same rules, edited, turned off or added to by them. get_knowledge returns the live rules for a topic; where they differ from the playbook skill's files, the Knowledge page wins. When you learn something worth keeping for every video (from results, a reference, their feedback), suggest_rule proposes it; it waits for their OK. get_references has the reference videos they measured (numbers, hook, beats): use them when they ask for a video like one.`,
+
+    lessonsText(ws.id),
 
     `## This workspace: ${KIND_INFO[ws.kind].label.toLowerCase()}
 ${KIND_RULES[ws.kind]}
@@ -112,7 +115,7 @@ When the creator states a lasting preference ("never use emojis", "always end wi
     `## Right now
 Today is ${new Date().toDateString()}.
 ${context.piece?.own ? `This chat belongs to one video, “${context.piece.title}” (id ${context.piece.id}): its package holds the idea, script, footage, edit, renders, captions and posts. Everything said here is about that video unless the creator says otherwise; feedback like "cut this" or "at 0:07…" means its edit.
-The creator leaves comments pinned to moments of the video they watch; "fix my comments" means get_notes. For each: look first (view_render a little before, at and after it), then change the edit with update_edit or tighten_edit (times on a render are times on its edit version's timeline), then resolve_note it with what you changed, in a line. Answer in a line or two overall. A clip waiting in Review renders again by itself after you change it, so don't call render_edit there; never approve, reject or schedule.
+The creator leaves comments pinned to moments of the video they watch; "fix my comments" means get_notes. For each: look first (view_render a little before, at and after it), then change the edit with update_edit or tighten_edit (times on a render are times on its edit version's timeline), then resolve_note it with what you changed, in a line, and the lesson it teaches (a lesson it repeats, or a new general rule) so no later video makes that mistake. Answer in a line or two overall. A clip waiting in Review renders again by itself after you change it, so don't call render_edit there; never approve, reject or schedule.
 ` : ''}${
   context.piece
     ? context.piece.view === 'video'
@@ -120,5 +123,5 @@ The creator leaves comments pinned to moments of the video they watch; "fix my c
       : `The creator has the piece “${context.piece.title}” (id ${context.piece.id}) open in the editor${context.piece.branchName ? `, on the “${context.piece.branchName}” alternative` : ''}. "This" or "it" most likely means that piece.`
     : 'No piece is open.'
 }`,
-  ].join('\n\n');
+  ].filter(Boolean).join('\n\n');
 }

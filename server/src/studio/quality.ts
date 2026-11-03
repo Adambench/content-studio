@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm';
 import { editDuration, normalizeEdit, timelineWords, type EditSpec, type TimelineWord } from '../../../shared/edit';
-import { measureEdit, QUALITY_BAR, QUALITY_INFO, qualityScore, qualityText, screenEvents, type QualityItem, type QualityReport } from '../../../shared/quality';
+import { measureEdit, QUALITY_BAR, QUALITY_INFO, qualityScore, qualityText, screenEvents, type BrokenLesson, type QualityItem, type QualityReport } from '../../../shared/quality';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
+import { lessonsText, listLessons } from '../knowledge/lessons';
 import { waitForUsage } from '../claude/usage';
 import { db, now, schema } from '../db';
 import { emit } from '../lib/events';
@@ -63,20 +64,35 @@ const JUDGED = {
     fix: { type: 'string', description: 'Concrete changes to the edit (seconds, the words to say or show); empty when nothing needs fixing' },
   },
 };
+const BROKEN = {
+  type: 'array',
+  description: 'Every lesson from the creator’s comments this edit breaks (empty when it keeps them all)',
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'where', 'fix'],
+    properties: {
+      id: { type: 'string', description: 'The lesson’s id, as listed' },
+      where: { type: 'string', description: 'Where it breaks it: the seconds and the words or what is on screen' },
+      fix: { type: 'string', description: 'The concrete change to this edit' },
+    },
+  },
+};
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['hook', 'payoff', 'summary'],
-  properties: { hook: JUDGED, payoff: JUDGED, summary: { type: 'string', description: 'The verdict in one line' } },
+  required: ['hook', 'payoff', 'lessons', 'summary'],
+  properties: { hook: JUDGED, payoff: JUDGED, lessons: BROKEN, summary: { type: 'string', description: 'The verdict in one line' } },
 };
 
 const INSTRUCTIONS = `You judge ONE short vertical video (TikTok, Reels, Shorts) before it renders, against the playbook above. You get its storyboard: the story the edit names, what's said with times, what appears on screen and what was measured.
 Judge two things, 0–10 each:
 - hook: do the first 3 seconds (the spoken line, the text on screen, the first frame) make one concrete promise, at once, with no warm-up? Would a stranger stop scrolling?
 - payoff: does the content build toward that promise and keep it, clearly and visibly, late in the video (around the payoff time named, if any)? Is anything in the middle not earning its place?
+Then go through the lessons from the creator's comments, one by one, and list every one this edit breaks, with where and the fix. A lesson is broken only when the storyboard shows it (the words at the end, what is on screen in the first seconds, a cut mid-sentence…), never on a guess; a lesson about something the storyboard can't show (what a frame looks like) isn't listed.
 Be strict: most first cuts are a 5 or 6. The fix says exactly what to change in this edit (cut at 0.0–1.2 s, show "…" as text from 0 s, move the reveal to 24 s, put the number on screen…). Never invent facts the video doesn't contain. Halal rules hold: never suggest music or anything haram.`;
 
-type Judged = { hook: { score: number; why: string; fix: string }; payoff: { score: number; why: string; fix: string }; summary: string };
+type Judged = { hook: { score: number; why: string; fix: string }; payoff: { score: number; why: string; fix: string }; lessons: { id: string; where: string; fix: string }[]; summary: string };
 
 /** Check one version: measure it, have the hook and payoff judged, and keep the report on the version. */
 export async function checkVersion(versionId: string, opts: { afterFix?: boolean } = {}): Promise<QualityReport> {
@@ -90,11 +106,13 @@ export async function checkVersion(versionId: string, opts: { afterFix?: boolean
   const items = measureEdit(spec, words);
   let judged = false;
   let summary = '';
+  const lessons = listLessons({ workspaceId: edit.workspaceId });
+  let broken: BrokenLesson[] = [];
   try {
     await waitForUsage('quality');
     const out = await askStructured<Judged>({
       task: 'quality',
-      system: [playbook('content-model', 'hooks', 'retention', 'halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'),
+      system: [playbook('content-model', 'hooks', 'retention', 'editing', 'halal'), lessonsText(edit.workspaceId, { ids: true }) || 'No lessons from the creator’s comments yet: `lessons` is empty.', INSTRUCTIONS].filter(Boolean).join('\n\n'),
       prompt: storyboard(spec, words, items),
       schema: SCHEMA,
       model: 'sonnet',
@@ -107,10 +125,15 @@ export async function checkVersion(versionId: string, opts: { afterFix?: boolean
     }
     judged = items.some((i) => i.judged);
     summary = out.summary?.trim() ?? '';
+    const byId = new Map(lessons.map((l) => [l.id, l]));
+    broken = (out.lessons ?? []).flatMap((b) => {
+      const l = byId.get(b.id?.trim());
+      return l && b.fix?.trim() ? [{ id: l.id, title: l.title, where: b.where?.trim() ?? '', fix: b.fix.trim() }] : [];
+    });
   } catch (err) {
     summary = `Measured only (the hook and payoff couldn't be judged: ${(err as Error).message.slice(0, 120)}).`;
   }
-  const report: QualityReport = { score: qualityScore(items), bar: QUALITY_BAR, items, summary, versionNumber: v.number, judged, afterFix: !!opts.afterFix, at: now() };
+  const report: QualityReport = { score: qualityScore(items), bar: QUALITY_BAR, items, summary, versionNumber: v.number, judged, afterFix: !!opts.afterFix, lessons: broken, at: now() };
   db.update(schema.editVersions).set({ quality: report }).where(eq(schema.editVersions.id, v.id)).run();
   emit({ type: 'changed', entity: 'edits', workspaceId: edit.workspaceId, id: edit.id, pieceId: edit.pieceId });
   return report;
@@ -128,8 +151,17 @@ export function checkEdit(editId: string, by: Author) {
   return p;
 }
 
-const fixPrompt = (report: QualityReport) =>
-  `Quality check before rendering v${report.versionNumber}: ${report.score}/100, under the bar of ${report.bar}. Fix the edit so it clears the bar: change what the fixes below need and keep what works (name the story if it's missing). Then answer in a line or two with what you changed. Don't call render_edit: the render starts by itself when you're done.\n\n${qualityText(report)}`;
+/** Below the bar, or a lesson from the creator's comments broken: Claude fixes it before it renders. */
+export const needsFix = (r: QualityReport, opts: { clip?: boolean } = {}) => !!r.lessons?.length || (!opts.clip && r.score < r.bar);
+
+const fixPrompt = (report: QualityReport, clip: boolean) => {
+  const broken = report.lessons?.length ?? 0;
+  const why = [
+    !clip && report.score < report.bar && `${report.score}/100, under the bar of ${report.bar}`,
+    broken && `it breaks ${broken} lesson${broken > 1 ? 's' : ''} the creator taught in comments on earlier videos`,
+  ].filter(Boolean);
+  return `Quality check before rendering v${report.versionNumber}: ${why.join(', and ')}. Fix the edit: ${broken ? 'every broken lesson first (the creator must never have to point those out again), then ' : ''}${clip ? 'anything else below that clearly hurts the clip (it is a clip: keep it sparse, no added graphics or sound effects for the score\'s sake)' : 'what the fixes below need to clear the bar'}, keeping what works (name the story if it's missing). Then answer in a line or two with what you changed. Don't call render_edit: the render starts by itself when you're done.\n\n${qualityText(report)}`;
+};
 
 /**
  * The `edit.check` job, for a render queued with the check: check the version, and below the bar have Claude fix it
@@ -143,9 +175,11 @@ export async function checkJob({ renderId }: { renderId: string }) {
     let report = await checkVersion(r.versionId);
     r = live();
     if (!r || r.status !== 'queued') return;
-    if (report.score < report.bar) {
+    // A clip is judged on the lessons only (its motion and sound scores are for motion videos).
+    const clip = !!db.select({ id: schema.moments.id }).from(schema.moments).where(eq(schema.moments.pieceId, r.pieceId)).get();
+    if (needsFix(report, { clip })) {
       const before = listEditVersions(r.editId)[0]?.id;
-      const fixed = await fixEdit(r, report);
+      const fixed = await fixEdit(r, report, clip);
       r = live();
       if (!r || r.status !== 'queued') return;
       const head = listEditVersions(r.editId)[0];
@@ -168,14 +202,14 @@ export async function checkJob({ renderId }: { renderId: string }) {
 }
 
 /** Claude fixes the edit in the video's own chat. False when that can't happen now (someone is already chatting there). */
-async function fixEdit(r: { id: string; workspaceId: string; pieceId: string }, report: QualityReport) {
+async function fixEdit(r: { id: string; workspaceId: string; pieceId: string }, report: QualityReport, clip: boolean) {
   const { isRunning, pieceThread, runChat, stopChat } = await import('../claude/agent');
   const thread = pieceThread(getPiece(r.pieceId));
   if (isRunning(thread.id)) return false;
-  setRender(r, { stage: `Quality ${report.score}/100: Claude is fixing it` });
+  setRender(r, { stage: report.lessons?.length ? `Breaks ${report.lessons.length} of your lessons: Claude is fixing it` : `Quality ${report.score}/100: Claude is fixing it` });
   onCancel.set(r.id, () => stopChat(thread.id));
   try {
-    await runChat({ threadId: thread.id, text: fixPrompt(report), contextPieceId: r.pieceId, contextView: 'video', onEvent: () => {} });
+    await runChat({ threadId: thread.id, text: fixPrompt(report, clip), contextPieceId: r.pieceId, contextView: 'video', onEvent: () => {} });
     return true;
   } catch (err) {
     console.error('Quality fix failed', err);

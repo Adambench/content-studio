@@ -9,6 +9,7 @@ import { directionText, normalizeDirection, normalizeDirections, type Direction,
 import { KIND_INFO } from '../../../shared/types';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
+import { lessonsText } from '../knowledge/lessons';
 import { waitForUsage } from '../claude/usage';
 import { db, schema } from '../db';
 import { emit } from '../lib/events';
@@ -132,7 +133,7 @@ export async function pitchDirections({ pieceId }: { pieceId: string }) {
   try {
     const out = await askStructured<{ directions: unknown[] }>({
       task: 'directions',
-      system: [playbook('content-model', 'hooks', 'retention', 'packaging', 'sound-design', 'halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'),
+      system: [playbook('content-model', 'hooks', 'retention', 'editing', 'packaging', 'sound-design', 'halal'), lessonsText(ws.id), INSTRUCTIONS].filter(Boolean).join('\n\n'),
       prompt,
       schema: DIRECTION_SCHEMA,
       model: 'sonnet',

@@ -1,7 +1,10 @@
 // Reframing that follows the speaker. `speakers.py` (the clip tools' OpenCV) finds the shots in a video and, in each,
 // the faces and how much each one's mouth moves; here that becomes focus spans: a close-up stays on its face, a wide
 // shot of two people goes to whoever is talking (holding at least a second and a half, so it doesn't flicker), and
-// shots without a face sit in the middle. The main track's clips are then split where the focus changes.
+// shots without a face sit in the middle. The main track's clips are then split where the focus changes. The frame
+// never moves without a reason: it stays on the clip's main speaker unless someone else clearly talks for a while (a
+// face in the source's own picture-in-picture, a nod from the listener, never takes it), and a speaker who leans
+// about within a shot is framed on the whole stretch he moves in (no punch-in then), so he never drifts out of it.
 import { readFile, writeFile } from 'node:fs/promises';
 import { eq } from 'drizzle-orm';
 import { join } from 'node:path';
@@ -19,11 +22,35 @@ export type SpeakerScan = {
   width: number;
   height: number;
   step: number;
-  shots: { start: number; end: number; samples: number; tracks: { x: number; y: number; h: number; n: number; activity: [number, number][] }[] }[];
+  shots: {
+    start: number;
+    end: number;
+    samples: number;
+    /** `x0`–`x1`: how far the face moves sideways in the shot (scans from before 2026-11-03 don't have it). */
+    tracks: { x: number; y: number; h: number; n: number; activity: [number, number][]; x0?: number; x1?: number }[];
+  }[];
 };
 
-/** Where to look, from `start` to `end` (seconds of the video), and how far to zoom in. */
-export type FocusSpan = { start: number; end: number; x: number; y: number; zoom: number };
+/** Where to look, from `start` to `end` (seconds of the video), and how far to zoom in. `steady`: no punch-in on top. */
+export type FocusSpan = { start: number; end: number; x: number; y: number; zoom: number; steady?: boolean };
+
+type Track = SpeakerScan['shots'][number]['tracks'][number];
+const samePerson = (a: Pick<Track, 'x' | 'y' | 'h'>, b: Pick<Track, 'x' | 'y' | 'h'>) => Math.abs(a.x - b.x) < 0.1 && Math.abs(a.y - b.y) < 0.12 && a.h / b.h > 0.7 && a.h / b.h < 1.4;
+
+/** The person on screen the longest across the video's shots (where the camera has them): the one the frame stays on. */
+export function mainPerson(scan: SpeakerScan): Pick<Track, 'x' | 'y' | 'h'> | null {
+  const groups: { p: Pick<Track, 'x' | 'y' | 'h'>; seconds: number }[] = [];
+  for (const shot of scan.shots) {
+    const seen = shot.tracks.filter((t) => t.n >= Math.max(2, shot.samples * 0.3));
+    for (const t of seen) {
+      const seconds = ((shot.end - shot.start) * t.n) / Math.max(1, shot.samples);
+      const g = groups.find((x) => samePerson(x.p, t));
+      if (g) g.seconds += seconds;
+      else groups.push({ p: { x: t.x, y: t.y, h: t.h }, seconds });
+    }
+  }
+  return groups.sort((a, b) => b.seconds - a.seconds)[0]?.p ?? null;
+}
 
 /** Run the shot and speaker scan on a video (about a quarter of real time for 1080p). */
 export async function scanSpeakers(file: string, opts: { track?: string } = {}): Promise<SpeakerScan> {
@@ -72,8 +99,20 @@ export function focusSpans(scan: SpeakerScan, format: EditFormat): FocusSpan[] {
   const spans: FocusSpan[] = [];
   const push = (s: FocusSpan) => {
     const last = spans[spans.length - 1];
-    if (last && Math.abs(last.x - s.x) < 0.04 && Math.abs(last.y - s.y) < 0.04 && Math.abs(last.zoom - s.zoom) < 0.05) last.end = s.end;
+    if (last && Math.abs(last.x - s.x) < 0.04 && Math.abs(last.y - s.y) < 0.04 && Math.abs(last.zoom - s.zoom) < 0.05 && !!last.steady === !!s.steady) last.end = s.end;
     else spans.push({ ...s, x: r3(s.x), y: r3(s.y) });
+  };
+  const main = mainPerson(scan);
+  /** One person framed: on the middle of where they move; when that needs the whole crop, no punch-in on top. */
+  const one = (p: Track, shot: { start: number; end: number }, start = shot.start, end = shot.end) => {
+    const zoom = zoomFor(p.h, cropH);
+    const x0 = p.x0 ?? p.x;
+    const x1 = p.x1 ?? p.x;
+    // The face and a little room either side of it, at each end of its stretch.
+    const needed = x1 - x0 + p.h * 0.75;
+    const window = cropW / zoom;
+    const moves = x1 - x0 > 0.02;
+    push({ start, end, x: moves ? (x0 + x1) / 2 : p.x, y: faceY(p.y), zoom, ...(moves && needed > window / 1.12 && { steady: true }) });
   };
 
   for (const shot of scan.shots) {
@@ -90,8 +129,7 @@ export function focusSpans(scan: SpeakerScan, format: EditFormat): FocusSpan[] {
       continue;
     }
     if (people.length === 1) {
-      const p = people[0];
-      push({ start: shot.start, end: shot.end, x: p.x, y: faceY(p.y), zoom: zoomFor(p.h, cropH) });
+      one(people[0], shot);
       continue;
     }
     const left = Math.min(...people.map((p) => p.x - p.h * 0.35));
@@ -101,7 +139,14 @@ export function focusSpans(scan: SpeakerScan, format: EditFormat): FocusSpan[] {
       push({ start: shot.start, end: shot.end, x: (left + right) / 2, y: faceY(mean(people.map((p) => p.y))), zoom: 1 });
       continue;
     }
-    // A wide shot: one window a second, whoever's mouth moves most; then smoothed so the frame holds ≥ 1.5 s.
+    // A wide shot: one window a second, whoever's mouth moves most; then smoothed so the frame holds ≥ 1.5 s. The
+    // person the frame is on keeps it unless another face is clearly busier (half as much again).
+    // Home is the main speaker when the camera has them where it usually does, else a face clearly bigger than the
+    // rest (the person this camera is on; a small face beside them is a listener far off or a picture in the picture).
+    const bySize = people.map((p, i) => ({ h: p.h, i })).sort((a, b) => b.h - a.h);
+    const dominant = bySize.length > 1 && bySize[0].h >= bySize[1].h * 1.3 ? bySize[0].i : -1;
+    const known = main ? people.findIndex((p) => samePerson(p, main)) : -1;
+    const home = known >= 0 ? known : dominant;
     const WINDOW = 1;
     const count = Math.max(1, Math.ceil((shot.end - shot.start) / WINDOW));
     const winners: number[] = [];
@@ -109,8 +154,9 @@ export function focusSpans(scan: SpeakerScan, format: EditFormat): FocusSpan[] {
       const a = shot.start + w * WINDOW;
       const b = a + WINDOW;
       const scores = people.map((p) => mean(p.activity.filter(([t]) => t >= a && t < b).map((x) => x[1])));
-      const best = scores.indexOf(Math.max(...scores));
-      winners.push(Math.max(...scores) > 0 ? best : (winners[w - 1] ?? best));
+      let best = scores.indexOf(Math.max(...scores));
+      if (home >= 0 && best !== home && scores[best] < scores[home] * 1.5) best = home;
+      winners.push(Math.max(...scores) > 0 ? best : (winners[w - 1] ?? (home >= 0 ? home : best)));
     }
     // Median of three windows, so a one-second blip doesn't switch.
     const smooth = winners.map((v, i) => {
@@ -136,11 +182,11 @@ export function focusSpans(scan: SpeakerScan, format: EditFormat): FocusSpan[] {
       merged[1].a = merged[0].a;
       merged.shift();
     }
+    // Away from the main speaker only for someone who talks a while (2.5 s): a nod, a laugh or a face in the
+    // source's own picture-in-picture doesn't move the frame.
+    if (home >= 0) for (const r of merged) if (r.who !== home && r.b - r.a < 2.5) r.who = home;
     runs = merged;
-    for (const r of runs) {
-      const p = people[r.who];
-      push({ start: r.a, end: r.b, x: p.x, y: faceY(p.y), zoom: zoomFor(p.h, cropH) });
-    }
+    for (const r of runs) one(people[r.who], shot, r.a, r.b);
   }
   // A sliver under 0.4 s (a flash, the first frame of a cut) joins its neighbour.
   for (let i = 0; i < spans.length; i++) {
@@ -180,7 +226,7 @@ export function applyFocusSpans(clips: EditClip[], mediaId: string, spans: Focus
       // A piece already framed on this span carries the span's zoom times its punch-in.
       const onSpan = Math.abs(clip.focusX - s.x) < 0.002 && Math.abs(clip.focusY - s.y) < 0.002;
       const own = onSpan && s.zoom > 0 ? clip.zoom / s.zoom : clip.zoom;
-      const punch = Math.abs(own - 1.12) < 0.01 ? 1.12 : 1;
+      const punch = Math.abs(own - 1.12) < 0.01 && !s.steady ? 1.12 : 1;
       const piece: EditClip = { ...clip, id: pieces.length ? newEditId() : clip.id, in: r3(a), out: r3(b), focusX: s.x, focusY: s.y, zoom: r3(Math.min(3, punch * s.zoom)), ...(pieces.length && { transition: null }) };
       const last = pieces[pieces.length - 1];
       // Slivers under 0.4 s aren't worth a reframe: they stay with the piece before.

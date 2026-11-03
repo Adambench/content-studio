@@ -255,6 +255,14 @@ function OverlayEditor({ overlay }: { overlay: EditOverlay }) {
           <ChoiceSelect label="Animation" value={overlay.animation} onChange={(animation) => set({ animation })} options={OVERLAY_ANIMATIONS.map((a) => ({ value: a, label: ANIMATION_LABELS[a] }))} />
         </Field>
       )}
+      {(overlay.type === 'text' || overlay.type === 'graphic') && (
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor={`quiet-${overlay.id}`} className="text-xs">
+            Captions wait while it’s on <span className="font-normal text-muted-foreground">(one thing to read at a time)</span>
+          </Label>
+          <Switch id={`quiet-${overlay.id}`} checked={!!overlay.hidesCaptions} onCheckedChange={(on) => set({ hidesCaptions: on })} />
+        </div>
+      )}
     </section>
   );
 }

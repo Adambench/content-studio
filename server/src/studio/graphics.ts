@@ -781,6 +781,8 @@ export function graphicsCss(ctx: GraphicContext) {
 .kn { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 .kn-in { max-width: 86%; text-align: center; font: 400 170px/1.02 ${font('Anton')}; text-transform: uppercase; color: #fff; }
 .kw { display: inline-block; margin: 0 .06em; }
+/* One colour for the whole line (a colour change makes it harder to read): the accent words are just bigger. */
+.kn-in .acc { color: inherit; font-size: 1.14em; }
 .gw { position: absolute; left: 0; right: 0; }
 .vs { position: relative; margin: 0 6%; display: flex; flex-direction: column; gap: 18px; }
 .vs-a, .vs-b { min-height: 250px; box-sizing: border-box; border-radius: 36px; display: flex; align-items: center; justify-content: center; text-align: center; box-shadow: 0 16px 44px rgba(0,0,0,.4); }

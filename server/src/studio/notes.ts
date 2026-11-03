@@ -10,6 +10,7 @@ import { badRequest, notFound } from '../lib/http';
 import { formatTime } from '../services/media';
 import { getPiece } from '../services/pieces';
 import { findEditForPiece, specMedia, specTranscripts } from './edits';
+import { lessonsText } from '../knowledge/lessons';
 
 type Row = typeof schema.videoNotes.$inferSelect;
 const round = (v: number) => Math.round(v * 10) / 10;
@@ -24,6 +25,7 @@ const toNote = (r: Row): VideoNote => ({
   text: r.text,
   status: r.status,
   reply: r.reply,
+  lessonId: r.lessonId,
   createdAt: r.createdAt,
   resolvedAt: r.resolvedAt,
 });
@@ -198,7 +200,7 @@ async function context(spec: EditSpec, at: number, end: number | null) {
  * version its render showed, the words, clip and overlays there, and a warning when the edit has changed since (its
  * times may have moved).
  */
-export async function notesText(pieceId: string, opts: { all?: boolean } = {}) {
+export async function notesText(pieceId: string, opts: { all?: boolean; lessons?: boolean } = {}) {
   const piece = getPiece(pieceId);
   const notes = listNotes(pieceId).filter((n) => opts.all || n.status === 'open');
   if (!notes.length) return `No ${opts.all ? '' : 'open '}comments on “${piece.title}”.`;
@@ -221,9 +223,15 @@ export async function notesText(pieceId: string, opts: { all?: boolean } = {}) {
     if (spec) for (const l of await context(spec, n.at, n.end)) out.push(`   ${l}`);
     if (head && n.version && head > n.version) out.push(`   the edit changed since v${n.version}: find the spot by its words, not its time`);
     if (n.reply) out.push(`   last answer: ${n.reply}`);
+    if (n.lessonId) out.push(`   taught the lesson ${n.lessonId}`);
   }
+  if (opts.lessons !== false) out.push('', LESSON_HOWTO, '', lessonsText(piece.workspaceId, { ids: true }) || 'No lessons yet: every comment fixed starts one.');
   return out.join('\n');
 }
+
+/** How a fixed comment becomes a lesson, for the chat's get_notes and Claude Code's notes script. */
+export const LESSON_HOWTO =
+  'Every comment is also a lesson: after fixing it, record the general rule behind it, the thing to always or never do in ANY video so the creator never has to say it again (not the fix for this one: "Never end a clip on an unfinished sentence; extend to the end of the story or cut back to the last finished one", not "removed \'there\'s also like\'"). When it repeats a lesson below, pass that lesson\'s id (and sharper words if this comment adds something). When the mistake came from how the app makes videos (the clip picker, the clip maker, the framing, a template), say so: that code should change too.';
 
 /** Every piece with open comments, newest comment first (for Claude Code: "fix my comments"). */
 export function piecesWithOpenNotes() {

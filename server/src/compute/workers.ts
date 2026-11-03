@@ -26,6 +26,7 @@ type Task = {
   error: string;
   uploaded: Set<string>;
   onProgress?: (text: string) => void;
+  onStart?: (worker: string) => void;
   settle: (r: { ok: true; stdout: string; on: string } | { ok: false; reason: 'no-worker' | 'lost' | 'failed'; message: string }) => void;
 };
 
@@ -58,13 +59,32 @@ export function llmWorker(): { name: string; url: string } | null {
 /** Whether some online worker has the tool (so a task is worth queueing). */
 export const workerFor = (tool: ComputeTool) => [...workers.values()].some((w) => online(w) && w.tools.includes(tool));
 
+/** How many online workers have the tool (renders run as many at once). */
+export const workersWith = (tool: ComputeTool) => [...workers.values()].filter((w) => online(w) && w.tools.includes(tool)).length;
+
 export type RemoteResult = { ok: true; stdout: string; on: string } | { ok: false; reason: 'no-worker' | 'lost' | 'failed'; message: string };
 
 /** Queue a task for a worker and wait for it. Resolves with why it couldn't be done when the caller should run it here. */
-export function runRemote(tool: ComputeTool, files: Record<string, string>, params: ToolParams, opts: { timeoutMs: number; onProgress?: (text: string) => void }): Promise<RemoteResult> {
+export function runRemote(
+  tool: ComputeTool,
+  files: Record<string, string>,
+  params: ToolParams,
+  opts: { timeoutMs: number; onProgress?: (text: string) => void; onStart?: (worker: string) => void; signal?: AbortSignal },
+): Promise<RemoteResult> {
   if (!workerFor(tool)) return Promise.resolve({ ok: false, reason: 'no-worker', message: 'No worker has this tool.' });
+  if (opts.signal?.aborted) return Promise.resolve({ ok: false, reason: 'failed', message: 'cancelled' });
   return new Promise((resolve) => {
     const id = newId();
+    // Cancelled: a queued task just goes; a running one is dropped here, and the worker stops its tool at its next
+    // heartbeat (the laptop answers that it no longer has the task).
+    const cancel = () => {
+      const t = tasks.get(id);
+      if (!t) return;
+      const w = t.workerId ? workers.get(t.workerId) : undefined;
+      if (w && w.taskId === id) w.taskId = null;
+      t.settle({ ok: false, reason: 'failed', message: 'cancelled' });
+    };
+    opts.signal?.addEventListener('abort', cancel, { once: true });
     tasks.set(id, {
       id,
       tool,
@@ -80,7 +100,9 @@ export function runRemote(tool: ComputeTool, files: Record<string, string>, para
       error: '',
       uploaded: new Set(),
       onProgress: opts.onProgress,
+      onStart: opts.onStart,
       settle: (r) => {
+        opts.signal?.removeEventListener('abort', cancel);
         tasks.delete(id);
         changed();
         resolve(r);
@@ -126,6 +148,7 @@ export async function poll(workerId: string, name: string, report: WorkerReport,
       t.attempts++;
       t.leaseUntil = now() + LEASE_MS;
       state.taskId = t.id;
+      t.onStart?.(name);
       changed();
       const inputs = await Promise.all(
         TOOL_INFO[t.tool].inputs.map(async (n) => ({ name: n, size: (await stat(t.files[n]).catch(() => null))?.size ?? 0 })),

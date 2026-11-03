@@ -255,6 +255,11 @@ versionCode from the tag (`v1.2.3` → 10203).
   be in the text).
 - After a clip is posted and submitted: campaign → Submissions → *Check now*; if nothing matches, the submissions page
   doesn't show post links → adjust `syncSubmissions`.
+- Renders on the home PCs: pull the repo on each PC and run `scripts/setup-worker.sh --server … --code … --with render`
+  (plus what else that PC runs). Settings → Compute should list *Video renders (HyperFrames)*; then render a video and
+  see the stage say "… on <PC>". Measure a 50 s clip there against the laptop (~5 min here).
+- The comment "make sure model ML and Flex are never visible" (He made $1M…) taught no lesson yet: say what ML and Flex
+  are (a campaign rule? a brand?) when it's fixed.
 - Compute: on each home PC run `scripts/setup-worker.sh --server … --code …` (code from Settings → Compute); check `journalctl --user -u content-studio-worker`, that Settings → Compute shows the GPU and four tools, and *Run a test* says it ran there. Then measure each tool's speed on both cards against the laptop (the plan's step 3 asks for it): Whisper, Demucs, matte, speaker scan. The CUDA builds for Pascal (cu126 wheels, cuDNN 9 for faster-whisper) are untried.
 - Find clips: check `DISCOVER_URL` (`server/src/finder/discover.ts`) is the page that lists Content Rewards campaigns; run it once with a real creator and see that the viral search finds their clips (`ytsearch` for "<creator> clips").
 - Self-hosted models (phase 9), on the home PCs: pull the repo, then on the 1070 PC `scripts/setup-worker.sh --server … --code … --with llm,video,voice` and on the 1050 Ti PC `… --with image` (generation needs `nvidia-cuda-toolkit`, git, cmake, build-essential; the model server needs `zstd`). Check Settings → Models says *Ready: qwen3-vl:30b-a3b-instruct · on <PC>*, Compute lists *Pictures*, *Video clips*, *My voice* and *Text model*. Then: a chat on *Local* that edits a video with tools; a background job with *Local only* on; *Generate* a picture from a video's Footage and look at it; a clip overnight; Settings → My voice: record 10–30 s, *Hear the clone*. Measure (the plan needs it): local chat turn time, a picture on each card, a clip on the 1070. Untried here (no GPU, no Hugging Face or ollama.com access): the Ollama download and `ollama pull`, every model download URL in `setup-worker.sh` (file names from memory; FLUX's `ae.safetensors` is from black-forest-labs/FLUX.1-schnell, which may ask for a Hugging Face login), the CUDA build of stable-diffusion.cpp on Pascal, Chatterbox on Pascal, and how well the local model calls the studio tools.
@@ -738,6 +743,33 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
   render since), *Looks good* (my click under the player, on that exact render; it closes Claude's fixes; a newer
   render asks again). A clip's yes in Review counts as watched. Cards carry the label, the board's chips show only
   those videos, and Claude's `get_board` sees it. Videos already out with nothing said aren't asked about.
+- **Lessons from my comments, renders on the home PCs (2026-11-03).** I said "train you": every comment now also
+  teaches a lesson, so no later video makes that mistake. A lesson is a Knowledge rule (source *From my comments*,
+  active at once, `knowledge/lessons.ts`), linked to the comments that taught it; a comment that repeats one joins it
+  (*You said it 6 times*). Fixing a comment needs one (`resolve_note` `lesson`/`lessonId`/`oneOff`; `npm run notes --
+  fix … --new|--lesson|--one-off`). Every prompt that picks, makes or judges a video lists them (clip picking, the
+  chat, directions, UGC, idea scripts), and the check before a render tests each one: a broken lesson sends the edit
+  back to Claude even above the bar. Clips now get that check too (lessons only: their motion and SFX scores are for
+  motion videos). Knowledge → Playbook → *From my comments* lists them. Seeded from my 31 open comments (11 lessons:
+  endings ×6, one visual hook in the first seconds ×6, the frame stays on the speaker ×4, cuts between thoughts,
+  no repeats, story steps, one-colour text, show what's said, no flash frames, open on a sentence start).
+  What the comments showed the pipeline doing wrong, now fixed in code: clips cut 6 s before and 16 s after the pick
+  and moved onto whole sentences (`clipping/bounds.ts`: back to where the first sentence starts, on to where the last
+  one ends, or back to the last finished one within the campaign's cap); the hook card hides the captions while it's on
+  (`hidesCaptions`, editor: *Captions wait while it's on*) and the *Who's this* arrow waits for the second shot; hook
+  and title text is one colour, emphasis by weight (titles) or size (word slam); the halal frame check looks at one
+  frame per shot (up to 12) instead of three; framing stays on the person the camera is on unless someone else clearly
+  talks 2.5 s (a face in the source's picture-in-picture took the frame before) and the speaker scan reports how far a
+  face moves in a shot (`x0`/`x1`), so a leaning speaker is framed on all of it without a punch-in.
+  **Renders on the home PCs**: tool `render` (`setup-worker.sh --with render`: the laptop's exact HyperFrames and
+  Chrome's headless shell, bundled `worker/src/render.ts`). The laptop still cuts and grades the footage, then sends
+  the project as one tar; the PC draws, encodes and sends the video back. One render per PC at a time (two PCs, two at
+  once); none online or a failed run, the laptop renders. Cancel stops the PC's run at its next heartbeat. Tried with a
+  worker process on this laptop against a test server: a render there (6 s in 18 s), a cancel mid-capture, the
+  fallback when the worker went away; the Knowledge page at desktop and phone width. Not tried: the real PCs (not paired
+  yet), a real quality check with lessons (no Claude call spent), a clip made with the new bounds. Still open: a
+  source's own layout animating (a picture-in-picture sliding in) drags the speaker off a static crop between scan
+  samples: framing that follows within a shot needs keyframed crops.
 
 Accounts (2026-10-27): each page gets its own mascot (not one shared). Once every buildable step is done, I go over
 each account with Claude (name, goal, niche, language, the mascot's look): steps 5 and 6 are built after that.

@@ -224,6 +224,8 @@ export type TextOverlay = OverlayBase & {
   /** Where its line sits (0–1 down the frame), when `position`'s place is taken (a watermark, a picture); null = by position. */
   y?: number | null;
   animation: OverlayAnimation;
+  /** The captions wait while it's on (a hook card: one thing to read at a time in the first seconds). */
+  hidesCaptions?: boolean;
 };
 export type ImageOverlay = OverlayBase & {
   type: 'image';
@@ -338,6 +340,8 @@ export type GraphicOverlay = OverlayBase & {
   position: GraphicPosition;
   /** Its own sound effects (a pop per point, a whoosh on a section card…), built in and non-musical. */
   sound: boolean;
+  /** The captions wait while it's on (a word slam: one thing to read at a time in the first seconds). */
+  hidesCaptions?: boolean;
 };
 
 /** A motion graphic Claude designed (shared/scene.ts): boxes, text, shapes and images with GSAP tweens, as data. */
@@ -766,6 +770,7 @@ function normalizeOverlay(input: Loose): EditOverlay | null {
         position: oneOf(input.position, ['top', 'center', 'bottom'] as const, 'top'),
         y: typeof input.y === 'number' && Number.isFinite(input.y) ? round(num(input.y, 0.15, 0.05, 0.95)) : null,
         animation,
+        ...(input.hidesCaptions === true && { hidesCaptions: true }),
       };
     case 'image':
       if (typeof input.mediaId !== 'string') return null;
@@ -785,6 +790,7 @@ function normalizeOverlay(input: Loose): EditOverlay | null {
         y: round(num(input.y, 0.5, 0, 1)),
         position: oneOf(input.position, ['top', 'center', 'bottom'] as const, GRAPHIC_INFO[template].position ?? 'center'),
         sound: typeof input.sound === 'boolean' ? input.sound : true,
+        ...(input.hidesCaptions === true && { hidesCaptions: true }),
       };
     }
     case 'scene': {

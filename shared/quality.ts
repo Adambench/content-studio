@@ -46,8 +46,12 @@ export type QualityReport = {
   judged: boolean;
   /** Claude fixed it once already before this check. */
   afterFix: boolean;
+  /** Lessons from the creator's comments (Knowledge) this version breaks: any of them sends it back to Claude. */
+  lessons?: BrokenLesson[];
   at: number;
 };
+
+export type BrokenLesson = { id: string; title: string; where: string; fix: string };
 
 export function qualityScore(items: Pick<QualityItem, 'criterion' | 'score'>[]) {
   return Math.round(items.reduce((sum, i) => sum + (Math.min(10, Math.max(0, i.score)) / 10) * QUALITY_INFO[i.criterion].weight, 0));
@@ -268,9 +272,13 @@ export function qualityText(r: QualityReport) {
   // Worst first = the most points lost.
   const lost = (i: QualityItem) => (10 - i.score) * QUALITY_INFO[i.criterion].weight;
   const fixes = [...r.items].sort((a, b) => lost(b) - lost(a)).filter((i) => i.fix);
+  const broken = r.lessons ?? [];
   return [
     `Quality ${r.score}/100 (bar ${r.bar}) for edit v${r.versionNumber}.${r.summary ? ` ${r.summary}` : ''}`,
     ...r.items.map((i) => `- ${QUALITY_INFO[i.criterion].label}: ${i.score}/10 (${i.measured}). ${i.why}`),
+    ...(broken.length
+      ? [`Breaks ${broken.length} lesson${broken.length > 1 ? 's' : ''} from the creator's comments (fix these first: they already had to say them once):`, ...broken.map((l) => `- [${l.id}] ${l.title}: ${l.where}. Fix: ${l.fix}`)]
+      : []),
     fixes.length ? 'Fix, worst first:' : 'Nothing to fix.',
     ...fixes.map((i, n) => `${n + 1}. ${QUALITY_INFO[i.criterion].label}: ${i.fix}`),
   ].join('\n');
