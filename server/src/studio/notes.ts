@@ -4,11 +4,12 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { clipAt, normalizeEdit, timelineWords, type EditSpec } from '../../../shared/edit';
 import { NOTE_MAX, type NoteStatus, type VideoNote } from '../../../shared/notes';
 import { reviewState, type ReviewState } from '../../../shared/review';
-import { db, newId, schema } from '../db';
+import { FIXING_STAGE, REVIEW_STAGE } from '../../../shared/types';
+import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, notFound } from '../lib/http';
 import { formatTime } from '../services/media';
-import { getPiece } from '../services/pieces';
+import { getPiece, getWorkspace } from '../services/pieces';
 import { findEditForPiece, specMedia, specTranscripts } from './edits';
 import { lessonsText } from '../knowledge/lessons';
 
@@ -63,6 +64,7 @@ export function addNote(pieceId: string, body: { mediaId?: string | null; at: nu
     .returning()
     .get();
   announce(row);
+  followComments(pieceId);
   return toNote(row);
 }
 
@@ -82,6 +84,7 @@ export function updateNote(id: string, patch: { text?: string; status?: NoteStat
   if (!Object.keys(set).length) return toNote(row);
   const next = db.update(schema.videoNotes).set(set).where(eq(schema.videoNotes.id, id)).returning().get();
   announce(next);
+  if (set.status) followComments(row.pieceId);
   return toNote(next);
 }
 
@@ -89,6 +92,39 @@ export function deleteNote(id: string) {
   const row = getNote(id);
   db.delete(schema.videoNotes).where(eq(schema.videoNotes.id, id)).run();
   announce(row);
+  followComments(row.pieceId);
+}
+
+/**
+ * Review holds only what I haven't watched (shared/types.ts FIXING_STAGE): a card there with a comment open goes to
+ * With Claude, and comes back once none is open, nothing is being made or rendered for it and its newest render shows
+ * the edit as it is now (Claude's fix, not the version I commented on). Pages without both columns keep their cards
+ * where they are. Returns where it is now.
+ */
+export function followComments(pieceId: string) {
+  const piece = db.select({ stage: schema.pieces.stage, workspaceId: schema.pieces.workspaceId }).from(schema.pieces).where(eq(schema.pieces.id, pieceId)).get();
+  if (!piece || (piece.stage !== REVIEW_STAGE && piece.stage !== FIXING_STAGE)) return piece?.stage ?? null;
+  const stages = getWorkspace(piece.workspaceId).stages.map((s) => s.id);
+  if (!stages.includes(REVIEW_STAGE) || !stages.includes(FIXING_STAGE)) return piece.stage;
+  const open = db.select({ id: schema.videoNotes.id }).from(schema.videoNotes).where(and(eq(schema.videoNotes.pieceId, pieceId), eq(schema.videoNotes.status, 'open'))).get();
+  let stage = piece.stage;
+  if (piece.stage === REVIEW_STAGE && open) stage = FIXING_STAGE;
+  else if (piece.stage === FIXING_STAGE && !open) {
+    const rendering = db.select({ id: schema.renders.id }).from(schema.renders).where(and(eq(schema.renders.pieceId, pieceId), inArray(schema.renders.status, ['queued', 'running']))).get();
+    const making = db.select({ id: schema.moments.id }).from(schema.moments).where(and(eq(schema.moments.pieceId, pieceId), eq(schema.moments.status, 'making'))).get();
+    const head = findEditForPiece(pieceId)?.headVersionId;
+    const shown = db
+      .select({ versionId: schema.renders.versionId })
+      .from(schema.renders)
+      .where(and(eq(schema.renders.pieceId, pieceId), eq(schema.renders.status, 'done')))
+      .orderBy(desc(schema.renders.createdAt))
+      .get()?.versionId;
+    if (!rendering && !making && (!head || shown === head)) stage = REVIEW_STAGE;
+  }
+  if (stage === piece.stage) return stage;
+  db.update(schema.pieces).set({ stage, updatedAt: now() }).where(eq(schema.pieces.id, pieceId)).run();
+  emit({ type: 'changed', entity: 'pieces', workspaceId: piece.workspaceId, id: pieceId });
+  return stage;
 }
 
 /** The newest finished video of a piece (what "looks good" is said about). */

@@ -5,7 +5,7 @@ import { and, desc, eq, inArray, isNull, like, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { ugcPieces } from '../campaigns/ugc';
 import { enqueue } from '../jobs/queue';
-import { REVIEW_STAGE, normalizeDraft, type DraftContent } from '../../../shared/types';
+import { inReview, normalizeDraft, type DraftContent } from '../../../shared/types';
 import { config } from '../config';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
@@ -283,8 +283,10 @@ export function buildTools(workspaceId: string) {
         const piece = ownPiece(pieceId);
         const ws = getWorkspace(workspaceId);
         if (stage && !ws.stages.some((s) => s.id === stage)) throw new ToolError(`Unknown stage. Valid ids: ${ws.stages.map((s) => s.id).join(', ')}`);
-        // Leaving Review is the creator's yes or no; Scheduled and Posted follow real posts.
-        if (stage && stage !== piece.stage && piece.stage === REVIEW_STAGE) throw new ToolError('Only the creator takes a card out of Review (approve or reject it there).');
+        // Leaving Review is the creator's yes or no (With Claude goes back to Review by itself); Scheduled and Posted
+        // follow real posts.
+        if (stage && stage !== piece.stage && inReview(piece.stage))
+          throw new ToolError('Only the creator takes a card out of Review (approve or reject it there). One in With Claude goes back to Review by itself once its comments are resolved and its new version has rendered.');
         if (stage && stage !== piece.stage && (stage === 'scheduled' || stage === 'posted')) throw new ToolError('Cards move to Scheduled and Posted by themselves when posts are scheduled and go out.');
         db.update(schema.pieces)
           .set({ title: title ?? piece.title, stage: stage ?? piece.stage, tags: tags ?? piece.tags, updatedAt: now() })

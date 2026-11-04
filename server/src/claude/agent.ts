@@ -4,7 +4,7 @@ import type { ChatPart, ChatStreamEvent } from '../../../shared/types';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { HttpError, notFound } from '../lib/http';
-import { REVIEW_STAGE } from '../../../shared/types';
+import { inReview } from '../../../shared/types';
 import { findEditForPiece, listEditVersions } from '../studio/edits';
 import { rerenderLatest } from '../studio/render';
 import { getWorkspace } from '../services/pieces';
@@ -197,7 +197,7 @@ export async function runChat(input: {
     const now_ = editHead();
     if (!now_?.version || now_.version.id === headBefore || now_.version.author !== 'claude') return;
     const stage = db.select({ stage: schema.pieces.stage }).from(schema.pieces).where(eq(schema.pieces.id, contextPiece.id)).get()?.stage;
-    if (stage !== REVIEW_STAGE) return;
+    if (!stage || !inReview(stage)) return;
     rerenderLatest(now_.edit.id, 'claude');
   };
 

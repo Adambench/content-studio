@@ -14,7 +14,7 @@ import {
   type GenerationSettings,
 } from '../../../shared/generate';
 import { normalizeEdit, type BrollOverlay } from '../../../shared/edit';
-import { REVIEW_STAGE } from '../../../shared/types';
+import { inReview } from '../../../shared/types';
 import { HOSTED_OUT, hostedPriceUsd } from '../../../shared/hosted';
 import { download, submit, waitFor } from '../ai/hosted/kie';
 import { fitsCap, hostedKey, hostedSettings, msUntilTomorrow, recordSpend, spentTodayUsd } from '../ai/hosted/ledger';
@@ -178,7 +178,7 @@ function place(job: GenerateJob, mediaId: string, durationMs: number | null) {
   spec.overlays = [...spec.overlays, overlay];
   saveEditVersion(edit.id, { author: job.by, message: `Generated b-roll: ${job.prompt.slice(0, 60)}`, spec });
   emit({ type: 'changed', entity: 'edits', workspaceId: job.workspaceId, id: edit.id });
-  if (getPiece(job.pieceId!).stage === REVIEW_STAGE) rerenderLatest(edit.id, job.by);
+  if (inReview(getPiece(job.pieceId!).stage)) rerenderLatest(edit.id, job.by);
   return true;
 }
 

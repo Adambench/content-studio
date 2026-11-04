@@ -91,9 +91,13 @@ export const DEFAULT_STAGES: Stage[] = [
   { id: 'posted', name: 'Posted' },
 ];
 
-/** A clipping page's board: clips are made for it, reviewed, then go out like any other piece. */
+/**
+ * A clipping page's board: clips are made for it, reviewed, then go out like any other piece. One I've commented on
+ * waits in With Claude until Claude has fixed it, then comes back to Review.
+ */
 export const CLIPPING_STAGES: Stage[] = [
   { id: 'making', name: 'Making' },
+  { id: 'fixing', name: 'With Claude' },
   { id: 'review', name: 'Review' },
   { id: 'ready', name: 'Ready' },
   { id: 'scheduled', name: 'Scheduled' },
@@ -107,6 +111,7 @@ export const ISLAMIC_STAGES: Stage[] = [
   { id: 'film', name: 'Record' },
   { id: 'edit', name: 'Edit' },
   { id: 'making', name: 'Clips making' },
+  { id: 'fixing', name: 'With Claude' },
   { id: 'review', name: 'Review' },
   { id: 'ready', name: 'Ready' },
   { id: 'scheduled', name: 'Scheduled' },
@@ -115,6 +120,13 @@ export const ISLAMIC_STAGES: Stage[] = [
 
 /** Where clips wait for my yes or no (Today lists them). */
 export const REVIEW_STAGE = 'review';
+/**
+ * Where a clip I've commented on waits while Claude fixes it, so Review holds only what I haven't watched: it moves
+ * here when a comment on it is open and back to Review once none is and its new version has rendered.
+ */
+export const FIXING_STAGE = 'fixing';
+/** Review or With Claude: a card I haven't said yes or no to yet, re-rendered when its edit changes. */
+export const inReview = (stage: string) => stage === REVIEW_STAGE || stage === FIXING_STAGE;
 
 export const WORKSPACE_COLORS = ['violet', 'blue', 'cyan', 'emerald', 'amber', 'orange', 'rose', 'pink'] as const;
 export type WorkspaceColor = (typeof WORKSPACE_COLORS)[number];

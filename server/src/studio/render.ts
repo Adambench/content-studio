@@ -23,6 +23,7 @@ import { getPiece, getWorkspace, type Author } from '../services/pieces';
 import { ensureRenderer } from './browser';
 import { BUNDLED_FONTS, composeEdit, type ComposeMedia, type ComposeSource } from './compose';
 import { getEdit, saveEditVersion, specMedia, specTranscripts } from './edits';
+import { followComments } from './notes';
 import { makeProxy, proxyPath } from './proxy';
 import type { WorkerMessage, WorkerRequest } from './worker';
 import { RENDER_PROGRESS } from '../../../shared/compute';
@@ -357,6 +358,12 @@ export async function renderJob({ renderId }: { renderId: string }) {
     if (by) {
       rerenderAfter.delete(r.editId);
       rerenderLatest(r.editId, by);
+    }
+    // Claude's fix rendered (or its render stopped): a card With Claude with nothing left open is mine to watch again.
+    try {
+      followComments(r.pieceId);
+    } catch (err) {
+      console.error('[render] could not move the card back to Review', err);
     }
   }
 }

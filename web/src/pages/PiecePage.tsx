@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import type { ReviewClip } from '@shared/clipping';
-import { LIMITS, PLATFORM_LABELS, REVIEW_STAGE, type DraftContent, type Platform } from '@shared/types';
+import { LIMITS, PLATFORM_LABELS, inReview, type DraftContent, type Platform } from '@shared/types';
 import { ACTIVE_PLATFORMS, isActivePlatform } from '@shared/publish';
 import { MediaCard } from '@/components/MediaCard';
 import { MediaDialog } from '@/components/MediaDialog';
@@ -131,7 +131,7 @@ function Editor({ piece }: { piece: PieceDetail }) {
   }
 
   // Videos waiting for my eyes on any page (not the ones with Claude): step through them without going back.
-  const reviewing = !!summary.data && (summary.data.stage === REVIEW_STAGE || !!summary.data.render || !!summary.data.rendering);
+  const reviewing = !!summary.data && (inReview(summary.data.stage) || !!summary.data.render || !!summary.data.rendering);
   const waiting = queue;
   const at = waiting.findIndex((c) => c.pieceId === piece.id);
   const after = at >= 0 ? (waiting[at + 1] ?? waiting[at - 1]) : waiting.find((c) => c.pieceId !== piece.id);

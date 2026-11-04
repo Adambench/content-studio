@@ -6,7 +6,7 @@ import { checkRules, type ClipFacts, type ReviewClip } from '../../../shared/cli
 import type { ApprovePlan } from '../../../shared/dashboard';
 import { normalizeEdit } from '../../../shared/edit';
 import { isActivePlatform, PUBLISH_PLATFORMS, type PublishPlatform, type TikTokPrivacy } from '../../../shared/publish';
-import { REVIEW_STAGE, normalizeDraft, type DraftContent, type WorkspaceColor } from '../../../shared/types';
+import { FIXING_STAGE, REVIEW_STAGE, inReview, normalizeDraft, type DraftContent, type WorkspaceColor } from '../../../shared/types';
 import { getCampaignRow, getSource, toMoment } from '../campaigns/campaigns';
 import { db, now, schema } from '../db';
 import { emit } from '../lib/events';
@@ -209,14 +209,15 @@ export function undoApprove(pieceId: string, stage: string) {
  */
 export async function rejectClip(pieceId: string, reason: string) {
   const piece = getPiece(pieceId);
-  if (piece.stage !== REVIEW_STAGE) throw new HttpError(409, 'It isn’t waiting for review any more.');
+  if (!inReview(piece.stage)) throw new HttpError(409, 'It isn’t waiting for review any more.');
   const m = db.select().from(schema.moments).where(eq(schema.moments.pieceId, pieceId)).get();
   if (m) {
     updateMoment(m.id, { status: 'rejected', rejectReason: reason.trim().slice(0, 300), detail: '' });
     await discardClip(pieceId);
     return { removed: true };
   }
-  const stages = getWorkspace(piece.workspaceId).stages.map((s) => s.id);
+  // The column before Review and With Claude.
+  const stages = getWorkspace(piece.workspaceId).stages.map((s) => s.id).filter((id) => id !== FIXING_STAGE);
   const back = stages[Math.max(0, stages.indexOf(REVIEW_STAGE) - 1)];
   if (!back) throw notFound('No column to send it back to.');
   moveTo(piece, back);

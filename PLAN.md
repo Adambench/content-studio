@@ -175,7 +175,10 @@ unchanged meanwhile); queue times and ideas only on my click. Numbers stay mecha
 Every finished video goes round: my review (*To watch*, or *Check again* after Claude's changes) → my comments make it
 *With Claude* (I say "fix my comments" in Claude Code; it fixes, re-renders, records the lesson) → back to me → *Approve
 & schedule* (the queue rule above; Undo in the toast) → Scheduled → Posted. One decision card on the video's page shows
-the step and holds the buttons; approving is refused while a comment is open. The dashboard (Today) has the totals on
+the step and holds the buttons; approving is refused while a comment is open. On boards with a Review column (clipping,
+Islamic) the card follows the loop (2026-11-04): my first open comment moves it to the *With Claude* column just before
+Review, so Review holds only what I haven't watched; it comes back by itself once no comment is open and its newest
+render shows the edit as it is now (`followComments`, `studio/notes.ts`). The dashboard (Today) has the totals on
 top (my turn, with Claude, going out today, 7-day views) and one column per page: posting goal (posts a week, mine or
 the kind's: personal 3, Islamic 7, clipping 14), this week and today against it, 7-day views and followers, what needs
 me there, my turn, Claude's turn, going out, posted lately.

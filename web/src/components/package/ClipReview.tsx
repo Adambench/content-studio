@@ -7,7 +7,7 @@ import { PUBLISH_PLATFORM_LABELS, TIKTOK_PRIVACY_LABELS, type PublishPlatform, t
 import { RULE_KIND_LABELS } from '@shared/campaigns';
 import { FLOW_STEPS, type ApprovePlan, type FlowStep } from '@shared/dashboard';
 import { reviewState } from '@shared/review';
-import { REVIEW_STAGE } from '@shared/types';
+import { REVIEW_STAGE, inReview } from '@shared/types';
 import { PlatformIcon, StatusIcon, accountName, statusText } from '@/components/publish/common';
 import { useWorkspaceContext } from '@/components/WorkspaceLayout';
 import { WorkspaceDot } from '@/components/WorkspaceDot';
@@ -232,7 +232,7 @@ export function ClipReview({ clip, piece, onDone, onSchedule }: { clip: ReviewCl
   const directTikTok = clip.accounts.some((a) => a.platform === 'tiktok' && a.tiktokMode === 'direct' && !a.reconnect);
   const platforms = Object.keys(clip.copy) as PublishPlatform[];
   const canApprove = !!clip.render && !open && !failing.length && !unticked && (!directTikTok || !!privacy) && !busy;
-  const inReview = clip.stage === REVIEW_STAGE;
+  const rejectable = inReview(clip.stage);
   const at = m ? `${clock(m.start)}–${clock(m.end)}` : null;
   const sourceLink = m && clip.source?.link ? (/youtube\.com\/watch/.test(clip.source.link) ? `${clip.source.link}&t=${Math.floor(m.start)}s` : clip.source.link) : null;
   // Undo puts it back in Review (or the column before Ready on boards without one).
@@ -384,7 +384,7 @@ export function ClipReview({ clip, piece, onDone, onSchedule }: { clip: ReviewCl
               <Button size="lg" onClick={() => approve()} disabled={!canApprove} className="flex-1 sm:flex-none">
                 {busy ? <Spinner /> : <Check />} Approve & schedule
               </Button>
-              {inReview && (
+              {rejectable && (
                 <Button size="lg" variant="outline" onClick={() => setRejecting(true)} className="flex-1 sm:flex-none">
                   <X /> Reject
                 </Button>
@@ -394,7 +394,7 @@ export function ClipReview({ clip, piece, onDone, onSchedule }: { clip: ReviewCl
             {open > 0 && <p className="text-xs text-amber-300">Close or delete the open comments first.</p>}
             {directTikTok && !privacy && <p className="text-xs text-muted-foreground">Choose who can see it on TikTok to approve.</p>}
             <PlanLine plan={plan.data} />
-            {inReview && <p className="text-xs text-muted-foreground">Reject only when the clip can’t be saved: {m ? 'it’s deleted and the next picks avoid it' : 'it goes back a column'}.</p>}
+            {rejectable && <p className="text-xs text-muted-foreground">Reject only when the clip can’t be saved: {m ? 'it’s deleted and the next picks avoid it' : 'it goes back a column'}.</p>}
           </div>
           {checks}
         </div>

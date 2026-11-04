@@ -6,7 +6,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { eq } from 'drizzle-orm';
-import { REVIEW_STAGE } from '../../../shared/types';
+import { inReview } from '../../../shared/types';
 import { MATTE_EFFECT_INFO, matteFilter, type MatteEffect, type MatteEffectOptions } from '../../../shared/effects';
 import { normalizeEdit } from '../../../shared/edit';
 import { config } from '../config';
@@ -97,7 +97,7 @@ export async function applyEffect(job: EffectJob) {
     saveEditVersion(edit.id, { author: 'claude', message: `Effect: ${label.toLowerCase()}`, spec });
     emit({ type: 'changed', entity: 'edits', workspaceId: piece.workspaceId, id: edit.id });
     // A clip waiting in Review shows the result by itself, like any change Claude makes there.
-    if (getPiece(job.pieceId).stage === REVIEW_STAGE) rerenderLatest(edit.id, 'claude');
+    if (inReview(getPiece(job.pieceId).stage)) rerenderLatest(edit.id, 'claude');
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }

@@ -16,7 +16,7 @@ import {
   type Submission,
   type SubmissionStatus,
 } from '../../../shared/campaigns';
-import { REVIEW_STAGE } from '../../../shared/types';
+import { inReview } from '../../../shared/types';
 import { parsePage } from '../claude/extract';
 import { db, newId, now, schema } from '../db';
 import { desktopAvailable, readPage } from '../lib/desktop';
@@ -193,7 +193,7 @@ export function campaignResults(campaignId: string): CampaignResults {
     if (m.status === 'rejected') clips.rejected++;
     if (m.status !== 'made' || !m.stage) continue;
     clips.made++;
-    if (m.stage === REVIEW_STAGE) clips.inReview++;
+    if (inReview(m.stage)) clips.inReview++;
     else if (m.stage !== 'making') clips.approved++;
   }
   const pieceIds = campaignPieceIds(campaignId);

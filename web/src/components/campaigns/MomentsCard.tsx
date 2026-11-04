@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import { toast } from 'sonner';
 import type { CampaignDetail } from '@shared/campaigns';
 import { MOMENT_KIND_LABELS, MOMENT_STATUS_LABELS, clock, type Moment } from '@shared/clipping';
-import { REVIEW_STAGE } from '@shared/types';
+import { FIXING_STAGE, REVIEW_STAGE } from '@shared/types';
 import { WorkspaceDot } from '@/components/WorkspaceDot';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -35,7 +35,7 @@ function HookCard({ text }: { text: string }) {
 }
 
 /** Where a made clip is now, by its card's column. */
-const CLIP_STAGE_LABELS: Record<string, string> = { making: 'Rendering', [REVIEW_STAGE]: 'In review', ready: 'Approved', scheduled: 'Scheduled', posted: 'Posted' };
+const CLIP_STAGE_LABELS: Record<string, string> = { making: 'Rendering', [FIXING_STAGE]: 'With Claude', [REVIEW_STAGE]: 'In review', ready: 'Approved', scheduled: 'Scheduled', posted: 'Posted' };
 
 const STATUS_TONE: Partial<Record<Moment['status'], string>> = {
   made: 'text-emerald-400',
