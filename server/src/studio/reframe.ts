@@ -161,7 +161,9 @@ export function focusSpans(scan: SpeakerScan, format: EditFormat): FocusSpan[] {
       const b = a + WINDOW;
       const scores = people.map((p) => mean(p.activity.filter(([t]) => t >= a && t < b).map((x) => x[1])));
       let best = scores.indexOf(Math.max(...scores));
-      if (home >= 0 && best !== home && scores[best] < scores[home] * 1.5) best = home;
+      // A face much smaller than home's is a listener far off or footage the source put beside the speaker (a split
+      // screen's B-roll): busy as it may be, it never takes the frame.
+      if (home >= 0 && best !== home && (scores[best] < scores[home] * 1.5 || people[home].h >= people[best].h * 1.8)) best = home;
       winners.push(Math.max(...scores) > 0 ? best : (winners[w - 1] ?? (home >= 0 ? home : best)));
     }
     // Median of three windows, so a one-second blip doesn't switch.
