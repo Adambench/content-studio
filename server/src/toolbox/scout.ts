@@ -35,6 +35,7 @@ const REPO_QUERIES = [
   'sound effects in:name,description',
   'short-form video in:name,description',
   'faceless video in:name,description',
+  'talking head video in:name,description',
 ];
 const MODEL_TAGS = ['text-to-video', 'image-to-video', 'text-to-image', 'text-to-speech'];
 
@@ -206,9 +207,9 @@ const JUDGED = {
   },
 };
 
-const INSTRUCTIONS = `You scout tools for Content Studio, a desktop app that makes short vertical videos (TikTok, Reels, Shorts) with Claude: a personal brand (Muslim entrepreneurship, lifestyle) and an Islamic page. The focus now is faceless motion explainers: designed animation, kinetic type, graphics and 3D (HyperFrames: HTML + GSAP rendered by headless Chrome), recorded non-melodic sound effects on the frame of each motion, voiceover, strong hooks and payoffs.
+const INSTRUCTIONS = `You scout tools for Content Studio, a desktop app that makes short vertical videos (TikTok, Reels, Shorts) with Claude: a personal brand (Muslim entrepreneurship, lifestyle) and an Islamic page. The focus now: the personal brand is the creator on camera (talking-head footage filmed on a phone: cutting pauses, stumbles and retakes, punch-ins, captions, motion graphics over the footage), and faceless motion explainers for the rest: designed animation, kinetic type, graphics and 3D (HyperFrames: HTML + GSAP rendered by headless Chrome), recorded non-melodic sound effects on the frame of each motion, voiceover, strong hooks and payoffs.
 You get candidates (GitHub repos and Hugging Face models) found this week, and what's installed. Judge each candidate: would it make these videos better, and how?
-Hard rules: no music ever (a music generator, a music library or music advice is worth 0); generated pictures and clips must never show people or animals (a tool whose point is avatars, faces or AI personas is worth 2 at most and says so); no Anthropic API key (Claude runs on the Pro login); the home PCs are a GTX 1070 (8 GB) and a GTX 1050 Ti (4 GB). Prefer licences that allow commercial use.
+Hard rules: no music ever (a music generator, a music library or music advice is worth 0); generated pictures and clips must never show people or animals (a tool whose point is AI avatars, generated faces or AI personas is worth 2 at most and says so; tools that edit real footage of the creator are fine); no Anthropic API key (Claude runs on the Pro login); the home PCs are a GTX 1070 (8 GB) and a GTX 1050 Ti (4 GB). Prefer licences that allow commercial use.
 Coming next in the app, so finds that feed these are worth more: a library of recorded sound effects (non-melodic, with a clear licence) placed on the frame of each motion; a motion scene library ported from prompt and scene collections (GSAP, Three.js, Canvas, WebGL) into seek-safe HyperFrames scenes; a 2D outline mascot rig (vector poses, gestures, walk); measuring reference videos (hook, beats, cuts per second, sound timing).
 Be strict: most candidates are a 3 to 5. A 7+ adds something the app doesn't have (a better motion technique, scenes, SFX with a clear licence, a stronger hook method, a faster or better model that fits the hardware). Say which installed thing it would replace or add to. The licence is checked separately: don't list it as a risk. Return every candidate once, by its url.`;
 

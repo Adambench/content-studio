@@ -40,7 +40,7 @@ clipping data; the three clipping pages start clean.
 | Topics | Halal business; lifestyle and discipline. Real experience: selling products, services, content/clipping |
 | Audience | Anyone, through a Muslim lens (how visible the lens is, and the call to action, are in my scripts) |
 | Scripts | I write them. Claude never rewrites my words; it offers 2–3 alternative first lines I can take or leave |
-| Format | Faceless. My voice (a voice memo), the AI voice as backup. Mascot explainers for lessons, my own faceless B-roll for lifestyle |
+| Format | On camera (2026-11-03; was faceless): I film myself talking to camera on my phone and share the clips to the app; the edit cuts pauses, stumbles and retakes. My voice on camera (a voice memo for parts I don't film), the AI voice as backup. Mascot explainers and paper boards as cutaways in lessons, my own B-roll for lifestyle. My own editing touches go in as Knowledge rules |
 | Tone | Changes with the video: calm for lessons, blunt for opinions, energetic, funny for the relatable ones |
 | Look | Paper / sketch (off-white paper, ink lines); clean sentence captions, a line at a time; accent picked by Claude |
 | Cadence | 3 a week |
@@ -78,7 +78,7 @@ Both clipping pages: big word-by-word captions. Brands (2026-10-29): Claude draf
 picture, palette, fonts, captions, voice, bio) and I approve or ask for changes. Drafts in
 `~/Documents/content-studio-brand/` (open `index.html`; rebuilt by `node src/build.mjs` there, mascots drawn in
 `src/rig.mjs` as one posed outline rig). All approved (2026-10-30):
-- Personal brand (amber, paper and ink): me faceless (no eyes or mouth, like the page): a cap with an amber
+- Personal brand (amber, paper and ink): me faceless (no eyes or mouth; the page went on camera on 2026-11-03, the mascot stayed faceless as my drawn double for cutaways): a cap with an amber
   growth-arrow patch, gold aviators, a full beard, the oversized amber hoodie, a crossbody bag with cash sticking out.
   Profile picture: him on an amber circle with a hand-drawn rising chart and $ behind him.
 - Gentle Return (emerald and gold): the Traveller (faceless, thobe and kufi, a lantern). Profile picture, flat with no

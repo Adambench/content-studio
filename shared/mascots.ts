@@ -225,7 +225,7 @@ function limb(c: Ctx, side: 'la' | 'ra' | 'll' | 'rl', [x, y]: Pt, l1: number, l
   return layer(line, w + ow * 2, '') + layer(fill, w, tip);
 }
 
-// The founder: the user, faceless like the page.
+// The founder: the user's drawn double, faceless (the page itself is on camera since 2026-11-03).
 const PB = { ink: '#1E1B18', paper: '#FFFCF5', hoodie: '#E39B2D', hoodieDark: '#B8741A', pants: '#3F3A35', dark: '#2B2724', lens: '#141210', gold: '#C9A45C', cash: '#8DBF7A' };
 function founder(c: Ctx, lift: number) {
   const { ink, paper, hoodie, hoodieDark, pants, dark, lens, gold, cash } = PB;
