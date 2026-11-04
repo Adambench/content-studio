@@ -1100,6 +1100,89 @@ export function tightenClips(clips: EditClip[], speech: Record<string, [number, 
   return out;
 }
 
+/**
+ * Jump cuts that read as cuts, not glitches. Two clips of the same footage on (about) the same framing with almost
+ * nothing removed between them (under 0.15 s: padding, a breath) become one: the skip only shows as a twitch. Where more was
+ * removed, the second frames clearly tighter or wider (12 %) when the two zooms are within 6 % of each other: a punch-in
+ * of 1.12 against 1.14 looks like the picture slipped.
+ */
+export function smoothJumps(clips: EditClip[], opts: { fixedZoom?: (clip: EditClip) => boolean } = {}): EditClip[] {
+  const out: EditClip[] = [];
+  for (const clip of clips) {
+    const prev = out[out.length - 1];
+    const same = prev && prev.mediaId === clip.mediaId && prev.fit === clip.fit && Math.abs(prev.focusX - clip.focusX) < 0.01 && Math.abs(prev.focusY - clip.focusY) < 0.01;
+    const gap = same ? clip.in - prev.out : Infinity;
+    const near = same && Math.abs(clip.zoom / prev.zoom - 1) < 0.06;
+    if (near && gap >= -0.01 && gap < 0.15 && !clip.transition && prev.motion === clip.motion && prev.filter === clip.filter) {
+      out[out.length - 1] = { ...prev, out: clip.out };
+      continue;
+    }
+    // A whole picture is never cropped, and a speaker who moves about keeps the frame he fits in.
+    if (near && gap >= 0.15 && !clip.transition && clip.fit !== 'whole' && !opts.fixedZoom?.(clip)) {
+      out.push({ ...clip, zoom: round(prev.zoom >= 1.1 ? Math.max(1, prev.zoom / 1.12) : prev.zoom * 1.12) });
+      continue;
+    }
+    out.push(clip);
+  }
+  return out;
+}
+
+/**
+ * Cuts moved off the middle of a word: a clip that starts or ends inside one (a cut made by hand, by the times on a
+ * render) keeps the word whole when most of it is in, and drops it when most of it is out. `words` maps media ids to
+ * their words (source time). Returns the clips and what moved, to tell whoever made the cut.
+ */
+export function wholeWordCuts(clips: EditClip[], words: Record<string, { start: number; end: number; word: string }[]>): { clips: EditClip[]; moved: string[] } {
+  const moved: string[] = [];
+  const out = clips.map((c) => {
+    const ws = words[c.mediaId];
+    if (!ws?.length) return c;
+    let { in: a, out: b } = c;
+    const inside = (t: number) => ws.findIndex((w) => w.start + 0.01 < t && t < w.end - 0.01);
+    const i = inside(a);
+    if (i >= 0) {
+      const w = ws[i];
+      a = a - w.start <= w.end - a ? Math.max(ws[i - 1]?.end ?? 0, w.start - 0.06) : w.end + 0.02;
+      moved.push(`the start was inside “${w.word.trim()}”`);
+    }
+    const j = inside(b);
+    if (j >= 0) {
+      const w = ws[j];
+      b = b - w.start >= w.end - b ? Math.min(ws[j + 1]?.start ?? Infinity, w.end + 0.08) : w.start - 0.02;
+      moved.push(`the end was inside “${w.word.trim()}”`);
+    }
+    return a !== c.in || b !== c.out ? (b - a >= 0.2 ? { ...c, in: round(a), out: round(b) } : c) : c;
+  });
+  return { clips: out, moved };
+}
+
+/**
+ * The cuts that land inside a sentence, as lines to read: a clip that starts right after words the speaker said
+ * without a stop (what it leaves out just before it), or ends right before more of the same sentence. `words` maps media
+ * ids to their words (source time, with Whisper's punctuation).
+ */
+export function midSentenceCuts(clips: EditClip[], words: Record<string, { start: number; end: number; word: string }[]>): string[] {
+  const stops = (w?: { word: string }) => !!w && /[.!?…]["'”’)\]]*$/.test(w.word.trim());
+  const text = (ws: { word: string }[]) => ws.map((w) => w.word.trim()).join(' ');
+  const out: string[] = [];
+  clips.forEach((c, i) => {
+    const ws = words[c.mediaId];
+    if (!ws?.length) return;
+    const kept = ws.filter((w) => w.end > c.in + 0.03 && w.start < c.out - 0.03);
+    if (!kept.length) return;
+    // Words some clip of this footage plays (a pause cut keeps them all; a cut that drops some doesn't).
+    const played = (w: { start: number; end: number }) => clips.some((x) => x.mediaId === c.mediaId && w.end > x.in + 0.03 && w.start < x.out - 0.03);
+    const before = ws.filter((w) => w.end <= kept[0].start + 0.01).slice(-4);
+    const last = before[before.length - 1];
+    if (i > 0 && last && !played(last) && !stops(last) && kept[0].start - last.end < 0.6)
+      out.push(`clip ${i + 1} starts mid-sentence: “${text(kept.slice(0, 5))}…”, right after “…${text(before)}” (left out)`);
+    const after = ws.filter((w) => w.start >= kept[kept.length - 1].end - 0.01).slice(0, 4);
+    if (after.length && !played(after[0]) && !stops(kept[kept.length - 1]) && after[0].start - kept[kept.length - 1].end < 0.6)
+      out.push(`clip ${i + 1} ends mid-sentence: “…${text(kept.slice(-5))}”, before “${text(after)}…” (left out)`);
+  });
+  return out;
+}
+
 /** Split a clip at a moment of the finished video. */
 export function splitClipAt(spec: EditSpec, time: number): EditSpec {
   const hit = clipAt(spec, time);

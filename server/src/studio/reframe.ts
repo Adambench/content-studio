@@ -31,8 +31,11 @@ export type SpeakerScan = {
   }[];
 };
 
-/** Where to look, from `start` to `end` (seconds of the video), and how far to zoom in. `steady`: no punch-in on top. */
-export type FocusSpan = { start: number; end: number; x: number; y: number; zoom: number; steady?: boolean };
+/**
+ * Where to look, from `start` to `end` (seconds of the video), and how far to zoom in. `steady`: no punch-in on top.
+ * `newShot`: it starts where the source cuts to another shot, so the framing before it never carries into it.
+ */
+export type FocusSpan = { start: number; end: number; x: number; y: number; zoom: number; steady?: boolean; newShot?: boolean };
 
 type Track = SpeakerScan['shots'][number]['tracks'][number];
 const samePerson = (a: Pick<Track, 'x' | 'y' | 'h'>, b: Pick<Track, 'x' | 'y' | 'h'>) => Math.abs(a.x - b.x) < 0.1 && Math.abs(a.y - b.y) < 0.12 && a.h / b.h > 0.7 && a.h / b.h < 1.4;
@@ -97,10 +100,12 @@ export function focusSpans(scan: SpeakerScan, format: EditFormat): FocusSpan[] {
   const cropW = srcAspect > outAspect ? outAspect / srcAspect : 1;
   const cropH = srcAspect > outAspect ? 1 : srcAspect / outAspect;
   const spans: FocusSpan[] = [];
+  // The start of the shot being framed, when the source cuts to it.
+  let cut = -1;
   const push = (s: FocusSpan) => {
     const last = spans[spans.length - 1];
     if (last && Math.abs(last.x - s.x) < 0.04 && Math.abs(last.y - s.y) < 0.04 && Math.abs(last.zoom - s.zoom) < 0.05 && !!last.steady === !!s.steady) last.end = s.end;
-    else spans.push({ ...s, x: r3(s.x), y: r3(s.y) });
+    else spans.push({ ...s, x: r3(s.x), y: r3(s.y), ...(cut >= 0 && Math.abs(s.start - cut) < 1e-6 && { newShot: true }) });
   };
   const main = mainPerson(scan);
   /** One person framed: on the middle of where they move; when that needs the whole crop, no punch-in on top. */
@@ -115,7 +120,8 @@ export function focusSpans(scan: SpeakerScan, format: EditFormat): FocusSpan[] {
     push({ start, end, x: moves ? (x0 + x1) / 2 : p.x, y: faceY(p.y), zoom, ...(moves && needed > window / 1.12 && { steady: true }) });
   };
 
-  for (const shot of scan.shots) {
+  for (const [k, shot] of scan.shots.entries()) {
+    cut = k ? shot.start : -1;
     // Faces seen in a good part of the shot and not tiny next to the biggest (someone in the background).
     const seen = shot.tracks.filter((t) => t.n >= Math.max(2, shot.samples * 0.3));
     const biggest = Math.max(0, ...seen.map((t) => t.h));
@@ -188,11 +194,13 @@ export function focusSpans(scan: SpeakerScan, format: EditFormat): FocusSpan[] {
     runs = merged;
     for (const r of runs) one(people[r.who], shot, r.a, r.b);
   }
-  // A sliver under 0.4 s (a flash, the first frame of a cut) joins its neighbour.
+  // A sliver under 0.4 s within a shot joins its neighbour. One that is a shot of its own keeps its own framing: the
+  // framing of the shot before, carried into another, shows whatever sits there (a can on the table, the other camera).
   for (let i = 0; i < spans.length; i++) {
     if (spans.length < 2 || spans[i].end - spans[i].start >= 0.4) continue;
-    if (i > 0) spans[i - 1].end = spans[i].end;
-    else spans[1].start = spans[0].start;
+    if (i > 0 && !spans[i].newShot) spans[i - 1].end = spans[i].end;
+    else if (i + 1 < spans.length && !spans[i + 1].newShot) spans[i + 1] = { ...spans[i + 1], start: spans[i].start, ...(spans[i].newShot && { newShot: true }) };
+    else continue;
     spans.splice(i, 1);
     i--;
   }
@@ -229,18 +237,39 @@ export function applyFocusSpans(clips: EditClip[], mediaId: string, spans: Focus
       const punch = Math.abs(own - 1.12) < 0.01 && !s.steady ? 1.12 : 1;
       const piece: EditClip = { ...clip, id: pieces.length ? newEditId() : clip.id, in: r3(a), out: r3(b), focusX: s.x, focusY: s.y, zoom: r3(Math.min(3, punch * s.zoom)), ...(pieces.length && { transition: null }) };
       const last = pieces[pieces.length - 1];
-      // Slivers under 0.4 s aren't worth a reframe: they stay with the piece before.
-      if (last && b - a < 0.4) last.out = piece.out;
+      // Slivers under 0.4 s aren't worth a reframe: they stay with the piece before, within a shot (never into another
+      // shot: that one's own framing, or the crop shows the wrong thing).
+      if (last && b - a < 0.4 && !s.newShot) last.out = piece.out;
       else pieces.push(piece);
     });
-    // A sliver at the very start (the shot changes just after the clip begins) goes with the piece after it.
-    if (pieces.length > 1 && pieces[0].out - pieces[0].in < 0.4) {
+    // A sliver at the very start (just before the focus changes within the shot) goes with the piece after it.
+    if (pieces.length > 1 && pieces[0].out - pieces[0].in < 0.4 && !inside.find((s) => Math.abs(s.start - pieces[1].in) < 0.002)?.newShot) {
       pieces[1] = { ...pieces[1], id: pieces[0].id, in: pieces[0].in };
       pieces.shift();
     }
     out.push(...pieces);
   }
   return out;
+}
+
+/**
+ * Clips of one video trimmed off a sliver of another shot at either end: the source cuts just after a clip starts or
+ * just before it ends, and a few frames of the product on the table, a drink or the other camera flash past. Trimmed
+ * when nothing is said in the sliver (a word in it keeps it, framed on its own shot); `words` are the video's.
+ */
+export function trimSlivers(clips: EditClip[], mediaId: string, shots: { start: number }[], words: { start: number; end: number }[], max = 0.45): EditClip[] {
+  const cuts = shots.slice(1).map((s) => s.start);
+  const silent = (a: number, b: number) => !words.some((w) => w.end > a + 0.03 && w.start < b - 0.03);
+  return clips.map((c) => {
+    if (c.mediaId !== mediaId) return c;
+    let a = c.in;
+    let b = c.out;
+    const head = cuts.filter((t) => t > a + 0.01 && t < a + max).pop();
+    if (head !== undefined && silent(a, head)) a = head;
+    const tail = cuts.find((t) => t < b - 0.01 && t > b - max);
+    if (tail !== undefined && silent(tail, b)) b = tail;
+    return (a !== c.in || b !== c.out) && b - a >= 0.5 ? { ...c, in: r3(a), out: r3(b) } : c;
+  });
 }
 
 /** The `edit.reframe` job: "Follow the speaker" on an edit's footage, saved as a new version. */

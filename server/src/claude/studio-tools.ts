@@ -21,6 +21,8 @@ import {
   newEditId,
   normalizeEdit,
   timelineWords,
+  midSentenceCuts,
+  wholeWordCuts,
   type EditSpec,
 } from '../../../shared/edit';
 import { BUILTIN_SFX, builtinSfxId, SFX_GROUPS } from '../../../shared/sfx';
@@ -36,6 +38,7 @@ import { queueRender } from '../studio/render';
 import { checkEdit, needsFix } from '../studio/quality';
 import { getNote, notesText, updateNote } from '../studio/notes';
 import { learnFromNote } from '../knowledge/lessons';
+import { clipSource, recutClip } from '../clipping/recut';
 import { QUALITY_BAR, qualityText } from '../../../shared/quality';
 import { previewOverlay } from '../studio/preview';
 import { normalizeScene, SCENE_FONTS, SCENE_MAX_ELEMENTS, SCENE_MAX_SECONDS, SCENE_MAX_TWEENS, SCENE_SOUNDS } from '../../../shared/scene';
@@ -104,7 +107,8 @@ const overlayShape = z.object({
   sub: z.string().optional().describe('graphic: the second line (see template)'),
   items: z.array(z.string()).max(6).optional().describe('graphic list: the points'),
   sound: z.boolean().optional().describe('graphic: its own built-in sound effects (default on)'),
-  text: z.string().optional().describe('text and graphic: what it says; wrap the accent word in asterisks (*word*) to show it in the accent colour'),
+  text: z.string().optional().describe('text and graphic: what it says, in one colour; wrap a word in asterisks (*word*) to show it bolder (a title) or bigger (a word slam), only words that carry the message read on their own (often none)'),
+  hidesCaptions: z.boolean().optional().describe('text and graphic: the captions wait while it is on (a hook card at the start does this by default: one thing to read in the first seconds)'),
   style: z.enum(['title', 'label', 'note']).optional().describe('text: title = big hook text, label = pill in the accent colour, note = small'),
   position: z.enum(['top', 'center', 'bottom']).optional().describe('text, and graphics that sit somewhere (progress: top or bottom edge)'),
   animation: z
@@ -141,6 +145,10 @@ export function studioToolLabel(name: string, input: Record<string, any>): strin
       return 'Watched the rendered video';
     case 'get_notes':
       return 'Read your comments on the video';
+    case 'get_clip_source':
+      return 'Read the source video around the clip';
+    case 'recut_clip':
+      return 'Cut the clip again from its source';
     case 'resolve_note':
       return input.fixed === false ? 'Answered a comment' : 'Fixed a comment';
     case 'follow_speaker':
@@ -339,11 +347,15 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
           if (!scene) throw new ToolError(`There’s no scene with id ${o.id ?? '(none)'}: write new scenes with write_scene.`);
           return { ...scene, start: o.start, end: o.end };
         });
+        // A hook card Claude puts on at the start shows alone: the captions wait for it (unless it says otherwise).
+        const hooked = kept?.map((o) =>
+          (o.type === 'text' && o.style === 'title') || (o.type === 'graphic' && o.template === 'kinetic') ? (o.start < 0.5 && o.hidesCaptions === undefined ? { ...o, hidesCaptions: true } : o) : o,
+        );
         const next: EditSpec = {
           ...spec,
           format: format ?? spec.format,
           clips: (clips as EditSpec['clips'] | undefined) ?? spec.clips,
-          overlays: (kept as unknown as EditSpec['overlays'] | undefined) ?? spec.overlays,
+          overlays: (hooked as unknown as EditSpec['overlays'] | undefined) ?? spec.overlays,
           captions: { ...spec.captions, ...(captions?.preset && captions.preset !== spec.captions.preset ? CAPTION_PRESET_DEFAULTS[captions.preset] : {}), ...captions },
           // The nasheed stays the creator's (saveEditVersion keeps it too).
           audio: { ...spec.audio, ...(audio as Partial<EditSpec['audio']>), nasheed: spec.audio.nasheed },
@@ -357,10 +369,19 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
           if (!m || m.kind !== 'audio' || m.assetType || (m.source !== 'capture' && m.source !== 'tts')) throw new ToolError('The voiceover must be one of the creator’s recordings (get_edit lists them).');
           if (m.source === 'tts' && ownVoiceOnly()) throw new ToolError(OWN_VOICE);
         }
+        // A cut never lands inside a word (half a word is the worst-sounding cut there is).
+        let moved: string[] = [];
+        let midSentence: string[] = [];
+        if (clips) {
+          const transcripts = await specTranscripts(next, specMedia(next));
+          const words = Object.fromEntries(Object.entries(transcripts).map(([id, t]) => [id, (t?.segments ?? []).flatMap((s) => s.words ?? []).filter((w) => w.word.trim())]));
+          ({ clips: next.clips, moved } = wholeWordCuts(next.clips, words));
+          midSentence = midSentenceCuts(next.clips, words);
+        }
         const { version, unchanged } = saveEditVersion(edit.id, { author: 'claude', message, spec: next });
         if (unchanged) return ok('No changes — the edit already looked like that.');
         const saved = normalizeEdit(version.spec);
-        return ok(`Saved v${version.number}. The video is now ${editDuration(saved).toFixed(1)} s with ${saved.clips.length} clip(s).`);
+        return ok(`Saved v${version.number}. The video is now ${editDuration(saved).toFixed(1)} s with ${saved.clips.length} clip(s).${moved.length ? ` Moved ${moved.length} cut(s) off the middle of a word (${moved.join('; ')}): read the words either side of those cuts again.` : ''}${midSentence.length ? `\nCuts inside a sentence (fine for a pause cut that keeps every word; not when words are left out — say whether each still reads as one sentence, or move it):\n- ${midSentence.slice(0, 12).join('\n- ')}` : ''}`);
       }),
     ),
 
@@ -712,6 +733,30 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         } finally {
           await Promise.all(files.map((f) => rm(f, { force: true })));
         }
+      }),
+    ),
+
+    tool(
+      'get_clip_source',
+      'For a clip cut from a long source video (a podcast, an interview, a stream): the source’s words around it, a line per caption with its time in the source, the clip’s own lines marked. ' +
+        'Read it when the clip starts in the middle of its story or ends before the story does (a sentence cut off, “and…”, a point never made): where the story begins and where it ends.',
+      { pieceId: z.string(), around: z.number().min(10).max(180).optional().describe('Seconds of the source either side of the clip (default 60)') },
+      safe(async ({ pieceId, around }) => {
+        ownPiece(pieceId);
+        return ok(await clipSource(pieceId, around));
+      }),
+    ),
+
+    tool(
+      'recut_clip',
+      'Cut a clip again from its source with a new start and end (seconds of the source, from get_clip_source): for words the clip’s cut doesn’t reach, the end of the story or its start. ' +
+        'The same card keeps its comments and versions; the clip is made again (music check, framing, whole sentences, the check against the lessons) as a new version and rendered, ' +
+        'so your edits to it start over. Start where a sentence starts and the story can be followed; end where the story ends, never on a new question or thought. Within the campaign’s length cap.',
+      { pieceId: z.string(), start: z.number().min(0), end: z.number().min(0), why: z.string().max(300).describe('What the new cut gains, for the version note') },
+      safe(async ({ pieceId, start, end }) => {
+        ownPiece(pieceId);
+        const r = recutClip(pieceId, start, end);
+        return ok(`Cutting it again: ${r.at} of the source (${r.seconds} s). The new version shows on the card in a few minutes and renders by itself.`);
       }),
     ),
 

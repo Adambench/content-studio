@@ -269,8 +269,6 @@ versionCode from the tag (`v1.2.3` → 10203).
 - Renders on the home PCs: pull the repo on each PC and run `scripts/setup-worker.sh --server … --code … --with render`
   (plus what else that PC runs). Settings → Compute should list *Video renders (HyperFrames)*; then render a video and
   see the stage say "… on <PC>". Measure a 50 s clip there against the laptop (~5 min here).
-- The comment "make sure model ML and Flex are never visible" (He made $1M…) taught no lesson yet: say what ML and Flex
-  are (a campaign rule? a brand?) when it's fixed.
 - Compute: on each home PC run `scripts/setup-worker.sh --server … --code …` (code from Settings → Compute); check `journalctl --user -u content-studio-worker`, that Settings → Compute shows the GPU and four tools, and *Run a test* says it ran there. Then measure each tool's speed on both cards against the laptop (the plan's step 3 asks for it): Whisper, Demucs, matte, speaker scan. The CUDA builds for Pascal (cu126 wheels, cuDNN 9 for faster-whisper) are untried.
 - Find clips: check `DISCOVER_URL` (`server/src/finder/discover.ts`) is the page that lists Content Rewards campaigns; run it once with a real creator and see that the viral search finds their clips (`ytsearch` for "<creator> clips").
 - Self-hosted models (phase 9), on the home PCs: pull the repo, then on the 1070 PC `scripts/setup-worker.sh --server … --code … --with llm,video,voice` and on the 1050 Ti PC `… --with image` (generation needs `nvidia-cuda-toolkit`, git, cmake, build-essential; the model server needs `zstd`). Check Settings → Models says *Ready: qwen3-vl:30b-a3b-instruct · on <PC>*, Compute lists *Pictures*, *Video clips*, *My voice* and *Text model*. Then: a chat on *Local* that edits a video with tools; a background job with *Local only* on; *Generate* a picture from a video's Footage and look at it; a clip overnight; Settings → My voice: record 10–30 s, *Hear the clone*. Measure (the plan needs it): local chat turn time, a picture on each card, a clip on the 1070. Untried here (no GPU, no Hugging Face or ollama.com access): the Ollama download and `ollama pull`, every model download URL in `setup-worker.sh` (file names from memory; FLUX's `ae.safetensors` is from black-forest-labs/FLUX.1-schnell, which may ask for a Hugging Face login), the CUDA build of stable-diffusion.cpp on Pascal, Chatterbox on Pascal, and how well the local model calls the studio tools.
@@ -781,6 +779,28 @@ library; (5) mascot rig; (6) the Islamic page; (7) reference measuring.
   yet), a real quality check with lessons (no Claude call spent), a clip made with the new bounds. Still open: a
   source's own layout animating (a picture-in-picture sliding in) drags the speaker off a static crop between scan
   samples: framing that follows within a shot needs keyframed crops.
+- **My 31 comments fixed, and what they showed the pipeline still did wrong (2026-11-03).** The seven clips the app
+  made from the Iced Coffee Hour × Bloom source were cut again on their own cards (`clipping/recut.ts`: the moment's
+  new start and end, made the whole way again, comments and versions kept; chat `get_clip_source`/`recut_clip`,
+  terminal `npm run notes -- source|recut`), each on where its story starts and ends; the four the terminal maker
+  built were fixed by hand or cut again from new segment lists. Fixed in code so the next clip can't do it: a question
+  the speaker starts at the end ("Do you guys feel…") is cut before rather than finished, and a lead-in "And/So" isn't
+  pulled in at the start (`bounds.ts`); the speaker scan gives each face its own track (two hosts side by side shared
+  one, so their mouths compared to each other looked like talking and took the frame) and finds a cut's exact frame;
+  the framing of one shot never carries into the next (a quarter second of the next shot kept the last crop and
+  showed the can on the table), and a sliver of another shot at a clip's edge is trimmed when nothing is said in it;
+  jump cuts read as cuts (`smoothJumps`: a 0.07 s skip on the same framing becomes no cut, two zooms within 6 % get a
+  clear 12 % punch); another brand's logo burned into the source (Model ML and Flex on 20VC) is found by the frame
+  check and framed out (`cropBurnedIn`); a cut Claude makes by hand never lands inside a word (`wholeWordCuts`), and
+  the fix after the lessons check is checked again before the render (it used to be dropped by Review's re-render).
+  What watching the remakes taught on top: the in-app fix after the check sometimes made things worse (cut the setup,
+  ended on "…gathering. And", cut through "hours"), so a clip never renders ending on and/but/so (`trimDanglingEnd`,
+  "looks like." is fine), a hook card Claude adds hides the captions by default and `update_edit` can set it, the
+  judge is told when the captions are hidden (it kept flagging them), the clip's padding never runs into the next
+  word ("…family. Like"), and the halal frame check judges each frame as the vertical clip shows it (the bank clip
+  was dropped for product footage in the right half of a split screen its crop never shows). Not fixed: Whisper on a
+  whole cut sometimes merges a stutter ("is, is, is, is" became one "is"), so tightening keeps it; Whisper on the
+  finished render hears it, which is how I check every render by ear now.
 
 Accounts (2026-10-27): each page gets its own mascot (not one shared). Once every buildable step is done, I go over
 each account with Claude (name, goal, niche, language, the mascot's look): steps 5 and 6 are built after that.

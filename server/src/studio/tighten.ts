@@ -1,4 +1,4 @@
-import { editDuration, normalizeEdit, speechRangesFromTranscript, tightenClips, type TightenOptions } from '../../../shared/edit';
+import { editDuration, normalizeEdit, smoothJumps, speechRangesFromTranscript, tightenClips, type TightenOptions } from '../../../shared/edit';
 import { detectSpeech } from '../lib/ffmpeg';
 import { badRequest } from '../lib/http';
 import { mediaPath } from '../services/media';
@@ -33,6 +33,7 @@ export async function tightenEdit(editId: string, opts: TightenOptions, by: Auth
   }
   let clips = tightenClips(spec.clips, speech, opts);
   for (const [id, v] of voices) clips = snapCuts(clips, id, v.env, v.words);
+  clips = smoothJumps(clips);
   if (!clips.length) throw badRequest('Couldn’t find any speech to keep, so nothing was cut.');
   const removed = Math.max(0, editDuration(spec) - editDuration({ clips }));
   const { version } = saveEditVersion(editId, { author: by, message: `Tightened: cut ${removed.toFixed(1)} s`, spec: { ...spec, clips } });

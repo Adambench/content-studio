@@ -42,18 +42,25 @@ export function clipFromMedia(m: Pick<MediaRow, 'id' | 'kind' | 'durationMs'>): 
   return { id: crypto.randomUUID().slice(0, 8), mediaId: m.id, in: 0, out: Math.round(length * 1000) / 1000, focusX: 0.5, focusY: 0.5, zoom: 1, fit: 'fill', volume: 1, transition: null, motion: 'none', filter: null };
 }
 
-/** Start a piece's edit: the brand's video template, with the piece's footage laid end to end. */
-export function createEdit(pieceId: string, by: Author) {
-  const existing = findEditForPiece(pieceId);
-  if (existing) return existing;
+/** A new edit of a piece: the page's template, the footage on the main track and the chosen direction's story. */
+export function startingSpec(pieceId: string, footage: Parameters<typeof clipFromMedia>[0][] = pieceFootage(pieceId)) {
   const piece = getPiece(pieceId);
   const ws = getWorkspace(piece.workspaceId);
   let spec = emptyEdit();
   if (ws.editTemplate) spec = applyTemplate(spec, normalizeTemplate(ws.editTemplate));
-  spec.clips = pieceFootage(pieceId).map(clipFromMedia);
+  spec.clips = footage.map(clipFromMedia);
   // The chosen direction already names the promise and the payoff.
   const chosen = normalizeDirections(piece.directions)?.chosen;
   if (chosen) spec.story = { promise: chosen.promise, payoff: chosen.payoff, payoffAt: null };
+  return spec;
+}
+
+/** Start a piece's edit: the brand's video template, with the piece's footage laid end to end. */
+export function createEdit(pieceId: string, by: Author) {
+  const existing = findEditForPiece(pieceId);
+  if (existing) return existing;
+  const ws = getWorkspace(getPiece(pieceId).workspaceId);
+  const spec = startingSpec(pieceId);
   const id = newId();
   db.insert(schema.edits).values({ id, workspaceId: ws.id, pieceId, working: spec }).run();
   saveEditVersion(id, { author: by, message: spec.clips.length ? `Started from ${spec.clips.length} clip${spec.clips.length === 1 ? '' : 's'}` : 'Started' });

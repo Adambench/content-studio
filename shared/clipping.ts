@@ -77,7 +77,12 @@ export type MusicCheck = {
 export type MomentSpeaker = { name: string; about: string; known: boolean };
 
 /** The halal look at three frames of the clip. */
-export type FramesCheck = { verdict: HalalVerdict; reasons: string[] };
+/**
+ * Text or a logo the source put over its picture near the top or bottom edge that names another brand (a sponsor's
+ * logo, an advertiser's name, a ticker): `depth` is how far in from that edge it reaches (a fraction of the height).
+ */
+export type BurnedIn = { what: string; edge: 'top' | 'bottom'; depth: number };
+export type FramesCheck = { verdict: HalalVerdict; reasons: string[]; burnedIn?: BurnedIn[] };
 
 export type Moment = {
   id: string;

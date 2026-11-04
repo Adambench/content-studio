@@ -69,6 +69,7 @@ while index < last:
     ok, frame = cap.retrieve()
     if not ok:
         break
+    frame_no = index
     index += 1
     small = cv2.resize(frame, size) if scale < 1 else frame
     tiny = cv2.resize(small, (64, 36))
@@ -99,7 +100,7 @@ while index < last:
                 crop = cv2.resize(region, (24, 16)).astype(np.float32)
                 crop = (crop - crop.mean()) / (crop.std() + 1e-3)
         faces.append({"x": (x + w / 2) / size[0], "y": (y + h / 2) / size[1], "h": h / size[1], "crop": crop})
-    samples.append({"t": t, "diff": diff, "hist": hdist, "faces": faces})
+    samples.append({"t": t, "frame": frame_no, "diff": diff, "hist": hdist, "faces": faces})
 
 end_time = last_t + 1 / fps
 
@@ -117,13 +118,48 @@ for a, b in spans:
     else:
         merged.append((a, b))
 
+
+
+def exact_cut(before, after):
+    """The time of the frame the picture changes on, between two samples (the scan only looks at every few frames: a
+    shot's framing that starts at the sample after the cut would show the frames before it with the last shot's crop)."""
+    if after["frame"] - before["frame"] <= 1:
+        return after["t"]
+    cap.set(cv2.CAP_PROP_POS_FRAMES, before["frame"])
+    prev, best, best_t = None, -1.0, after["t"]
+    for _ in range(after["frame"] - before["frame"] + 1):
+        ok, frame = cap.read()
+        if not ok:
+            break
+        pos = cap.get(cv2.CAP_PROP_POS_MSEC)
+        g = cv2.cvtColor(cv2.resize(frame, (64, 36)), cv2.COLOR_BGR2GRAY).astype(np.float32)
+        if prev is not None:
+            d = float(np.abs(g - prev).mean())
+            if d > best and pos >= 0:
+                best, best_t = d, pos / 1000
+        prev = g
+    # A seek that landed somewhere else: the sample's time it is.
+    return best_t if before["t"] < best_t <= after["t"] + 1e-3 else after["t"]
+
+
 out = []
 for k, (a, b) in enumerate(merged):
     tracks = []
     for s in samples[a:b]:
-        for f in s["faces"]:
-            track = min(tracks, key=lambda tr: abs(tr["lx"] - f["x"]) + abs(tr["ly"] - f["y"]), default=None)
-            if track is None or abs(track["lx"] - f["x"]) + abs(track["ly"] - f["y"]) > MATCH * 2:
+        # Each face to its nearest track, nearest pairs first and one face per track: two people sitting close together
+        # keep a track each (sharing one, each mouth was compared with the other's and both looked like they talked).
+        pairs = sorted(
+            (abs(tr["lx"] - f["x"]) + abs(tr["ly"] - f["y"]), i, j) for i, f in enumerate(s["faces"]) for j, tr in enumerate(tracks)
+        )
+        owner, taken = {}, set()
+        for d, i, j in pairs:
+            if d <= MATCH * 2 and i not in owner and j not in taken:
+                owner[i] = j
+                taken.add(j)
+        for i, f in enumerate(s["faces"]):
+            if i in owner:
+                track = tracks[owner[i]]
+            else:
                 track = {"xs": [], "ys": [], "hs": [], "activity": [], "lx": f["x"], "ly": f["y"], "last": None, "lt": None}
                 tracks.append(track)
             if f["crop"] is not None and track["last"] is not None and s["t"] - track["lt"] <= step * 1.6:
@@ -133,8 +169,8 @@ for k, (a, b) in enumerate(merged):
             track["hs"].append(f["h"])
             track["lx"], track["ly"], track["last"], track["lt"] = f["x"], f["y"], f["crop"], s["t"]
     out.append({
-        "start": round(samples[a]["t"], 3) if k else round(args.start, 3),
-        "end": round(samples[b]["t"], 3) if b < len(samples) else round(end_time, 3),
+        "start": round(exact_cut(samples[a - 1], samples[a]), 3) if k else round(args.start, 3),
+        "end": round(exact_cut(samples[b - 1], samples[b]), 3) if b < len(samples) else round(end_time, 3),
         "samples": b - a,
         "tracks": [
             {"x": round(statistics.median(tr["xs"]), 4), "y": round(statistics.median(tr["ys"]), 4), "h": round(statistics.median(tr["hs"]), 4), "n": len(tr["xs"]), "activity": tr["activity"],

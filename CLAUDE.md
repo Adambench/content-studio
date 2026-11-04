@@ -84,7 +84,9 @@ measurements, open items and the current build plan (phase 8). Read only the sec
 - `npm run notes` — my open comments on finished videos (pinned to a moment or stretch, with the words, clip and
   overlays there) and the lessons so far; after fixing, `npm run notes -- fix <noteId> "<what changed>"` plus the
   lesson: `--lesson <id> ["sharper rule"]`, `--new <topic> "<title>" "<rule>"` or `--one-off "<why>"` (`answer`
-  leaves it open; `lessons` lists them).
+  leaves it open; `lessons` lists them). A clip whose story starts earlier or ends later than its cut:
+  `npm run notes -- source <pieceId>` (the source's words around it), then `recut <pieceId> <start> <end>` (the running
+  app makes it again on the same card, comments kept, and renders it; the chat has `get_clip_source`/`recut_clip`).
 - `npm run db:generate -w server` after editing `server/src/db/schema.ts` (migrations run on startup). drizzle-kit
   drops `ON DELETE` from foreign keys it adds with `ALTER TABLE`: check the SQL.
 - `npm run android` — app UI build + `cap sync`. APKs: CI, or JDK 21 + SDK (`cd mobile/android && ./gradlew assembleDebug`)

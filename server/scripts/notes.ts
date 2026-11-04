@@ -5,6 +5,9 @@
 //   npm run notes -- answer <noteId> "<reply>" [<lesson>]         answer it and leave it open (couldn't, or they choose)
 //   npm run notes -- learn <noteId> <lesson>                      record a comment's lesson on its own
 //   npm run notes -- lessons                                      every lesson, with how many comments taught it
+//   npm run notes -- source <pieceId> [seconds]                   a clip's source words around it (its start/end)
+//   npm run notes -- recut <pieceId> <start> <end>                cut a clip again from its source (seconds of it);
+//                                                                 the running app makes and renders it on the same card
 // <lesson> is what the comment teaches every later video, one of:
 //   --lesson <lessonId> ["<sharper rule>"]                         it repeats a lesson (optionally reworded)
 //   --new <topic> "<title>" "<rule>" [--page]                      a new lesson (--page: only this page's videos)
@@ -15,6 +18,7 @@ import { runMigrations } from '../src/db';
 import { learnFromNote, listLessons, type LessonInput } from '../src/knowledge/lessons';
 import { getNote, LESSON_HOWTO, notesText, piecesWithOpenNotes, updateNote } from '../src/studio/notes';
 import { lessonsText } from '../src/knowledge/lessons';
+import { clipSource, recutClip } from '../src/clipping/recut';
 
 runMigrations();
 const argv = process.argv.slice(2);
@@ -54,6 +58,15 @@ if (cmd === 'fix' || cmd === 'answer') {
   if (!a || !lesson) throw new Error('Usage: notes learn <noteId> <--lesson id ["rule"] | --new topic "title" "rule">');
   const learned = learnFromNote(a, lesson);
   console.log(`lesson ${learned.id}: ${learned.title} (${learned.taught?.count ?? 1}×)`);
+} else if (cmd === 'source') {
+  if (!a) throw new Error('Usage: notes source <pieceId> [seconds either side]');
+  const r = await clipSource(a, Number(args[2]) || 60);
+  console.log(`${r.source}\nclip ${r.clip.at} (${r.clip.start}–${r.clip.end} s, ${r.clip.seconds} s; the campaign takes ${r.maxSeconds} s at most)\n\n${r.words}`);
+} else if (cmd === 'recut') {
+  const [start, end] = [Number(args[2]), Number(args[3])];
+  if (!a || !Number.isFinite(start) || !Number.isFinite(end)) throw new Error('Usage: notes recut <pieceId> <start> <end> (seconds of the source)');
+  const r = recutClip(a, start, end);
+  console.log(`Cutting it again: ${r.at} (${r.seconds} s). The running app makes it on the same card and renders it.`);
 } else if (cmd === 'lessons') {
   const lessons = listLessons({ all: true });
   if (!lessons.length) console.log('No lessons yet.');

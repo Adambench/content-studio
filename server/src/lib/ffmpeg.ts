@@ -73,11 +73,14 @@ export async function extractAudio(file: string, out: string) {
 }
 
 /** Grab single frames at the given times (seconds) as JPEGs no wider than `width`. */
-export async function extractFrames(file: string, times: number[], outPattern: (i: number) => string, width = 768) {
+/** Frames at `times`, `width` wide at most; `crops` (fractions of the width, per frame) keep only that part of each. */
+export async function extractFrames(file: string, times: number[], outPattern: (i: number) => string, width = 768, crops?: ({ x0: number; x1: number } | null)[]) {
   const outputs: string[] = [];
   for (const [i, t] of times.entries()) {
     const out = outPattern(i);
-    await execFile(requireBinary('ffmpeg'), ['-y', '-v', 'error', '-ss', t.toFixed(2), '-i', file, '-frames:v', '1', '-vf', `scale='min(${width},iw)':-2`, '-q:v', '5', out]);
+    const c = crops?.[i];
+    const crop = c && c.x1 - c.x0 < 0.99 ? `crop=iw*${(c.x1 - c.x0).toFixed(4)}:ih:iw*${c.x0.toFixed(4)}:0,` : '';
+    await execFile(requireBinary('ffmpeg'), ['-y', '-v', 'error', '-ss', t.toFixed(2), '-i', file, '-frames:v', '1', '-vf', `${crop}scale='min(${width},iw)':-2`, '-q:v', '5', out]);
     outputs.push(out);
   }
   return outputs;

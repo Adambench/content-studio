@@ -8,9 +8,9 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { and, eq, inArray } from 'drizzle-orm';
-import { MOMENT_KIND_LABELS, clock, type FramesCheck, type MusicCheck } from '../../../shared/clipping';
-import { TIGHTEN_PRESETS, clipStarts, editDuration, normalizeEdit, speechRangesFromTranscript, tightenClips } from '../../../shared/edit';
-import { emptyDraft, type Transcript } from '../../../shared/types';
+import { MOMENT_KIND_LABELS, clock, type BurnedIn, type FramesCheck, type MusicCheck } from '../../../shared/clipping';
+import { TIGHTEN_PRESETS, clipStarts, editDuration, normalizeEdit, smoothJumps, speechRangesFromTranscript, tightenClips, type EditClip } from '../../../shared/edit';
+import { emptyDraft, normalizeDraft, type Transcript } from '../../../shared/types';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
 import { waitForUsage } from '../claude/usage';
@@ -25,14 +25,14 @@ import { getSetting } from '../lib/settings';
 import { JobError } from '../jobs/queue';
 import { clipToolsInstalled } from '../services/cliptools';
 import { adoptFile, deleteMedia, whisperInstalled } from '../services/media';
-import { createPiece, getWorkspace } from '../services/pieces';
+import { createPiece, getBranch, getPiece, getWorkspace, saveVersion } from '../services/pieces';
 import { applyLook, lookTag, pickLook } from '../studio/clip-looks';
 import { isLectureCampaign, speakerTag } from '../islamic/lectures';
 import { sentenceBounds } from './bounds';
 import { fillHook, whoTag } from './framing';
-import { createEdit, saveEditVersion } from '../studio/edits';
+import { createEdit, saveEditVersion, startingSpec } from '../studio/edits';
 import { refineWords, snapCuts, voiceEnvelope } from '../studio/clean-cuts';
-import { applyFocusSpans, focusSpans, scanSpeakers, type SpeakerScan } from '../studio/reframe';
+import { applyFocusSpans, focusSpans, scanSpeakers, trimSlivers, type SpeakerScan } from '../studio/reframe';
 import { cancelRender, queueRender, renderingHere } from '../studio/render';
 import { getMoment, momentExists, updateMoment } from './moments';
 import { runTool } from '../compute/run';
@@ -100,19 +100,38 @@ export async function musicCheck(voice: string, rest: string, words: { start: nu
 const FRAMES_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['verdict', 'reasons'],
-  properties: { verdict: { type: 'string', enum: ['ok', 'flag', 'reject'] }, reasons: { type: 'array', items: { type: 'string' } } },
+  required: ['verdict', 'reasons', 'burnedIn'],
+  properties: {
+    verdict: { type: 'string', enum: ['ok', 'flag', 'reject'] },
+    reasons: { type: 'array', items: { type: 'string' } },
+    burnedIn: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['what', 'edge', 'depth'],
+        properties: { what: { type: 'string' }, edge: { type: 'string', enum: ['top', 'bottom'] }, depth: { type: 'number' } },
+      },
+    },
+  },
 };
 
 /**
  * Frames to Haiku, against the halal rules: one from every shot of the clip (a shot of a drink for a few frames counts
  * as much as a long one), or three across it without a shot scan. Up to 12.
  */
-async function framesCheck(video: string, range: { start: number; end: number }, shots: { start: number; end: number }[] | null, dir: string): Promise<FramesCheck> {
+export async function framesCheck(
+  video: string,
+  range: { start: number; end: number },
+  shots: { start: number; end: number }[] | null,
+  dir: string,
+  /** The part of the picture the clip shows at a time (fractions of the width), when it's cropped: judged with a little margin. */
+  shown?: (t: number) => { x0: number; x1: number } | null,
+): Promise<FramesCheck> {
   const inside = (shots ?? []).map((sh) => ({ a: Math.max(range.start, sh.start), b: Math.min(range.end, sh.end) })).filter((sh) => sh.b - sh.a >= 0.08);
   let times = inside.length ? inside.map((sh) => (sh.a + sh.b) / 2) : [0.15, 0.5, 0.85].map((f) => range.start + f * (range.end - range.start));
   if (times.length > 12) times = Array.from({ length: 12 }, (_, i) => times[Math.round((i * (times.length - 1)) / 11)]);
-  const files = await extractFrames(video, times, (i) => join(dir, `frame${i}.jpg`), times.length > 6 ? 512 : 768);
+  const files = await extractFrames(video, times, (i) => join(dir, `frame${i}.jpg`), times.length > 6 ? 512 : 768, shown ? times.map(shown) : undefined);
   const images = await Promise.all(files.map(async (f) => ({ data: (await readFile(f)).toString('base64'), mediaType: 'image/jpeg' as const })));
   const out = await askStructured<FramesCheck>({
     task: 'clips',
@@ -120,15 +139,44 @@ async function framesCheck(video: string, range: { start: number; end: number },
       playbook('halal'),
       'You look at frames of a short clip cut from a podcast, stream or interview (one from each of its shots, in order), for a creator who keeps every post halal by the rules above. Judge only what is visible in the frames, every one of them, the background too (a drink on the table, a bottle on a shelf, a brand on a shirt): `reject` when one clearly shows something never promoted or shown (a drink of alcohol, gambling on screen, smoking or vaping, immodest dress or imagery, a haram product as the point); `flag` when something visible is a gray area, or a frame is too dark or blurred to judge; `ok` when nothing visible applies, with no reasons.',
       'Sound and music are checked separately: never mention them. Don’t flag what you can’t see (“can’t rule out” is not a reason). One short line per reason, naming the frame and what is in it.',
+      'Separately, `burnedIn`: text or logos the source laid over its picture near the top or bottom edge that name another brand: a sponsor’s or an advertiser’s logo or name, a ticker, a promo banner (not the show’s or channel’s own name, not a name tag of who is speaking, not things in the room like a can on the table or a logo on a shirt). For each: what it says, the edge it sits on, and `depth`, how far in from that edge its far side reaches as a fraction of the frame’s height (0.12 = within the last eighth). Generous rather than tight. Empty when there are none.',
     ]
       .filter(Boolean)
       .join('\n\n'),
-    prompt: `${files.length} frames, in order, at ${times.map((t) => `${(t - range.start).toFixed(1)} s`).join(', ')} of the clip.`,
+    prompt: `${files.length} frames, in order, at ${times.map((t) => `${(t - range.start).toFixed(1)} s`).join(', ')} of the clip${shown ? ', each cut to the part of the picture the vertical clip shows' : ''}.`,
     images,
     schema: FRAMES_SCHEMA,
     model: 'haiku',
   });
-  return { verdict: ['ok', 'flag', 'reject'].includes(out.verdict) ? out.verdict : 'flag', reasons: (out.reasons ?? []).map((r) => r.trim()).filter(Boolean).slice(0, 5) };
+  const burnedIn = (out.burnedIn ?? [])
+    .filter((b) => (b.edge === 'top' || b.edge === 'bottom') && b.depth > 0 && b.depth <= 0.35)
+    .map((b) => ({ what: b.what.trim().slice(0, 80), edge: b.edge, depth: Math.round(Math.min(0.35, b.depth + 0.02) * 1000) / 1000 }))
+    .slice(0, 4);
+  return { verdict: ['ok', 'flag', 'reject'].includes(out.verdict) ? out.verdict : 'flag', reasons: (out.reasons ?? []).map((r) => r.trim()).filter(Boolean).slice(0, 5), ...(burnedIn.length && { burnedIn }) };
+}
+
+/**
+ * Clips framed so another brand's logo or name burned into the source's top or bottom never shows: zoomed in just
+ * enough (at most 1.6×) and moved away from that edge. A whole picture can't be cropped: it's left (and noted).
+ */
+export function cropBurnedIn(clips: EditClip[], mediaId: string, burnedIn: BurnedIn[]): { clips: EditClip[]; left: boolean } {
+  const top = Math.max(0, ...burnedIn.filter((b) => b.edge === 'top').map((b) => b.depth));
+  const bottom = 1 - Math.max(0, ...burnedIn.filter((b) => b.edge === 'bottom').map((b) => b.depth));
+  if (top === 0 && bottom === 1) return { clips, left: false };
+  let left = false;
+  const out = clips.map((c) => {
+    if (c.mediaId !== mediaId) return c;
+    const zoom = Math.max(c.zoom, 1 / (bottom - top));
+    if (c.fit === 'whole' || zoom > 1.6) {
+      left = true;
+      return c;
+    }
+    // The crop's height is 1/zoom of the source's, centred on focusY (kept inside the picture): between the bands.
+    const half = 0.5 / zoom;
+    const focusY = Math.min(Math.max(c.focusY, top + half), bottom - half);
+    return { ...c, zoom: Math.round(zoom * 1000) / 1000, focusY: Math.round(focusY * 1000) / 1000 };
+  });
+  return { clips: out, left };
 }
 
 /** The source's own transcript between two times, shifted to start at 0 (when Whisper isn't installed). */
@@ -174,8 +222,11 @@ export async function makeClip({ momentId }: { momentId: string }) {
   }
   const s = getSource(m.sourceId);
   const c = getCampaignRow(m.campaignId);
-  // Paused or ended meanwhile: it waits as found, to make later by hand.
-  if (c.status !== 'active') {
+  // Made again (a retry, or a new start or end for a clip on the board): the same card keeps its comments, its versions
+  // and its place on the board, and gets the new cut and a new edit version. A card deleted meanwhile: a new one.
+  const keep = m.pieceId && db.select({ id: schema.pieces.id }).from(schema.pieces).where(eq(schema.pieces.id, m.pieceId)).get() ? m.pieceId : null;
+  // Paused or ended meanwhile: it waits as found, to make later by hand (a clip on the board is cut again all the same).
+  if (c.status !== 'active' && !keep) {
     updateMoment(momentId, { status: 'candidate', detail: 'Not made: the campaign isn’t active.' });
     return;
   }
@@ -184,11 +235,7 @@ export async function makeClip({ momentId }: { momentId: string }) {
   const info = await probe(file);
   if (!info.hasVideo || !info.hasAudio) throw new JobError('The source needs both picture and sound to make a clip.', { retry: false });
   const sourceSeconds = (info.durationMs ?? s.durationMs ?? 0) / 1000;
-  // A retry starts clean: the card an earlier attempt made goes.
-  if (m.pieceId) {
-    await discardClip(m.pieceId);
-    m = updateMoment(momentId, { pieceId: null });
-  }
+  if (keep) for (const r of db.select().from(schema.renders).where(and(eq(schema.renders.pieceId, keep), inArray(schema.renders.status, ['queued', 'running']))).all()) cancelRender(r.id);
 
   const dir = join(config.tmpDir, 'clips', momentId);
   await rm(dir, { recursive: true, force: true });
@@ -256,7 +303,20 @@ export async function makeClip({ momentId }: { momentId: string }) {
 
     // 5. What the clip shows, shot by shot.
     step('Checking what’s on screen');
-    const frames = await framesCheck(video, rel, speakers?.shots ?? null, dir);
+    // Judged on what the clip shows: a tall crop of a wide picture leaves out the rest (the other half of a split
+    // screen), so each frame is cut to its crop with a little room either side.
+    const cutInfo = await probe(video);
+    const wide = showsWhole({ width: cutInfo.width, height: cutInfo.height }, speakers, [c.category, c.type, c.brand, c.title, getWorkspace(m.workspaceId).niche].join(' '));
+    const shownSpans = speakers && !wide ? focusSpans(speakers, '9:16') : [];
+    const shown = (t: number) => {
+      const sp = shownSpans.find((x) => t >= x.start && t < x.end);
+      if (!sp || !cutInfo.width || !cutInfo.height) return null;
+      const w = Math.min(1, ((9 / 16) * cutInfo.height) / cutInfo.width / sp.zoom) * 1.16;
+      if (w >= 0.99) return null;
+      const x0 = Math.min(Math.max(0, sp.x - w / 2), 1 - w);
+      return { x0, x1: x0 + w };
+    };
+    const frames = await framesCheck(video, rel, speakers?.shots ?? null, dir, shown);
     if (frames.verdict === 'reject') {
       updateMoment(momentId, { status: 'dropped', frames, music, detail: `Dropped by the halal check: ${frames.reasons[0] ?? 'something on screen'}`.slice(0, 300) });
       return;
@@ -282,6 +342,7 @@ export async function makeClip({ momentId }: { momentId: string }) {
       `${MOMENT_KIND_LABELS[m.kind]} · standalone score ${m.score}/10${m.why ? `\n${m.why}` : ''}`,
       m.halalFlags.length && `Halal flags:\n${m.halalFlags.map((f) => `- ${f}`).join('\n')}`,
       frames.verdict === 'flag' && `On screen (check it):\n${frames.reasons.map((f) => `- ${f}`).join('\n')}`,
+      frames.burnedIn?.length && `Another brand on the source’s picture (${frames.burnedIn.map((b) => b.what).join(', ')}): framed out of the clip where the picture allows; check it doesn’t show.`,
       music.verdict === 'removed' && 'Background music was removed: only the voice is kept.',
       music.verdict === 'unverified' && 'There was sound behind the voice and it’s been removed, but the speech never pauses long enough to check: listen for any music left.',
       m.checkByEye.length && `Check by eye:\n${m.checkByEye.map((f) => `- ${f}`).join('\n')}`,
@@ -290,15 +351,22 @@ export async function makeClip({ momentId }: { momentId: string }) {
       .filter(Boolean)
       .join('\n\n');
     const tag = (c.brand || c.title).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 24);
-    const { pieceId } = createPiece(ws.id, {
-      title: m.title || `Clip from ${s.title || 'a source'}`,
-      // A clipping page's Making column; a page without one (a business's) gets it in Edit.
-      stage: ['making', 'edit'].find((id) => ws.stages.some((st) => st.id === id)),
-      tags: tag ? [tag] : [],
-      content: { ...draft, hook: m.hookCard.replace(/\*/g, '') || m.firstLine, script: spoken || m.firstLine, notes },
-      author: 'claude',
-      message: `Clip of ${at}`,
-    });
+    const content = { hook: m.hookCard.replace(/\*/g, '') || m.firstLine, script: spoken || m.firstLine, notes };
+    let pieceId: string;
+    if (keep) {
+      pieceId = keep;
+      const branchId = getPiece(keep).activeBranchId;
+      if (branchId) saveVersion(branchId, { author: 'claude', message: `Made again: ${at}`, content: normalizeDraft({ ...getBranch(branchId).working, ...content }) });
+    } else
+      pieceId = createPiece(ws.id, {
+        title: m.title || `Clip from ${s.title || 'a source'}`,
+        // A clipping page's Making column; a page without one (a business's) gets it in Edit.
+        stage: ['making', 'edit'].find((id) => ws.stages.some((st) => st.id === id)),
+        tags: tag ? [tag] : [],
+        content: { ...draft, ...content },
+        author: 'claude',
+        message: `Clip of ${at}`,
+      }).pieceId;
     updateMoment(momentId, { pieceId, music, frames });
     const media = await adoptFile(ws.id, clip, `${(m.title || s.title || 'Clip').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80)}.mp4`, 'video/mp4', { pieceId, source: 'clip', transcript });
     db.update(schema.media)
@@ -310,15 +378,19 @@ export async function makeClip({ momentId }: { momentId: string }) {
 
     // 7. The edit, in the page's look.
     const edit = createEdit(pieceId, 'claude');
-    const spec = normalizeEdit(edit.working);
+    // Made again: the edit starts over from the new cut (the old versions stay, to go back to).
+    const spec = keep ? startingSpec(pieceId, [media]) : normalizeEdit(edit.working);
     const first = words.find((w) => w.end > rel.start + 0.05);
     const last = [...words].reverse().find((w) => w.start < rel.end - 0.05);
     const clipLen = (clipInfo.durationMs ?? length * 1000) / 1000;
     const base = spec.clips.find((x) => x.mediaId === media.id) ?? spec.clips[0];
     if (!base) throw new Error('The edit didn’t pick up the cut.');
     base.mediaId = media.id;
-    base.in = Math.max(0, (first?.start ?? rel.start) - 0.1);
-    base.out = Math.min(clipLen, (last?.end ?? rel.end) + 0.35);
+    // A little air either side, never into the word before or after ("…larger family. Like").
+    const wordBefore = first ? words[words.indexOf(first) - 1] : undefined;
+    const wordAfter = last ? words[words.indexOf(last) + 1] : undefined;
+    base.in = Math.max(0, (first?.start ?? rel.start) - 0.1, wordBefore ? wordBefore.end + 0.03 : 0);
+    base.out = Math.min(clipLen, (last?.end ?? rel.end) + 0.35, wordAfter ? wordAfter.start - 0.03 : Infinity);
     // A game or a screen shows whole (cropping cuts its HUD and its text); people are framed on.
     const whole = showsWhole({ width: clipInfo.width, height: clipInfo.height }, speakers, [c.category, c.type, c.brand, c.title, ws.niche].join(' '));
     const spans = speakers && !whole ? focusSpans(speakers, spec.format) : [];
@@ -332,6 +404,8 @@ export async function makeClip({ momentId }: { momentId: string }) {
     let clips = tightenClips([base], { [media.id]: speechRangesFromTranscript(transcript, true) }, TIGHTEN_PRESETS.tight);
     if (!clips.length) clips = [base];
     clips = snapCuts(clips, media.id, envelope, words);
+    // No frames of another shot at a cut (the source cuts just before or after it).
+    if (speakers) clips = trimSlivers(clips, media.id, speakers.shots, words);
     clips = applyFocusSpans(clips, media.id, spans);
     if (whole) clips = fillHook(clips, speakers);
     const look = pickLook(ws.id);
@@ -350,6 +424,12 @@ export async function makeClip({ momentId }: { momentId: string }) {
       next.captions = { ...next.captions, position: Math.max(next.captions.position, 0.77) };
       next.overlays = next.overlays.map((o) => (o.type === 'text' && o.position === 'center' ? { ...o, position: 'top' } : o));
     }
+    // Cuts that show as cuts: no twitch of a few frames, and a jump cut frames clearly tighter or wider.
+    const steady = (x: { mediaId: string; in: number; out: number }) => x.mediaId === media.id && spans.some((sp) => sp.steady && (x.in + x.out) / 2 >= sp.start && (x.in + x.out) / 2 < sp.end);
+    next.clips = smoothJumps(next.clips, { fixedZoom: steady });
+    // Another brand's logo or name the source put over its picture never shows.
+    const logos = frames.burnedIn?.length ? cropBurnedIn(next.clips, media.id, frames.burnedIn) : null;
+    if (logos) next.clips = logos.clips;
     // A lecture names its speaker on screen for the whole clip.
     const speaker = isLectureCampaign(c.id) ? speakerTag(next, s, m.hookCard ? 2.5 : 0, total) : null;
     if (speaker) next.overlays.push(speaker);
@@ -360,7 +440,7 @@ export async function makeClip({ momentId }: { momentId: string }) {
     const second = clipStarts(next).find((t) => t >= after - 0.01 && t <= 6) ?? after;
     const who = !whole && !speaker && speakers && m.speaker ? whoTag(next, media.id, speakers, m.speaker, clipInfo, 0.65, second) : null;
     if (who) next.overlays.push(who);
-    saveEditVersion(edit.id, { author: 'claude', message: `Clip of ${at}: tightened, hook card, captions${who ? `, ${m.speaker?.name} named` : ''}${lookTag(look)}`, spec: next });
+    saveEditVersion(edit.id, { author: 'claude', message: `${keep ? 'Made again' : 'Clip'} of ${at}: tightened, hook card, captions${who ? `, ${m.speaker?.name} named` : ''}${lookTag(look)}`, spec: next });
 
     // 8. Checked against the lessons from my comments (a broken one: Claude fixes it first), then rendered; finishing
     // moves it to Review.

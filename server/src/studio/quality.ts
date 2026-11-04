@@ -1,3 +1,5 @@
+import { trimDanglingEnd } from '../clipping/bounds';
+import { isScenePreset, SCENE_LIBRARY } from '../../../shared/scene-library';
 import { eq } from 'drizzle-orm';
 import { editDuration, normalizeEdit, timelineWords, type EditSpec, type TimelineWord } from '../../../shared/edit';
 import { measureEdit, QUALITY_BAR, QUALITY_INFO, qualityScore, qualityText, screenEvents, type BrokenLesson, type QualityItem, type QualityReport } from '../../../shared/quality';
@@ -28,6 +30,12 @@ function spokenLines(words: TimelineWord[]) {
   return lines.map((l) => `[${r1(l.start)}–${r1(l.end)}] ${l.text.join(' ')}`);
 }
 
+/** When the captions stand aside for something on screen (a hook card), so the judge doesn't count them there. */
+function captionsHidden(spec: EditSpec) {
+  const quiet = spec.overlays.filter((o) => (o.type === 'scene' && isScenePreset(o.preset) && SCENE_LIBRARY[o.preset].hidesCaptions) || ((o.type === 'text' || o.type === 'graphic') && o.hidesCaptions));
+  return quiet.length ? `, hidden while ${quiet.map((o) => `${r1(o.start)}–${r1(o.end)} s`).join(', ')} (nothing but that on screen to read then)` : '';
+}
+
 /** The edit as the judge reads it: the story, what's said and what appears on screen, second by second. */
 function storyboard(spec: EditSpec, words: TimelineWord[], measured: QualityItem[]) {
   const duration = editDuration(spec);
@@ -36,7 +44,7 @@ function storyboard(spec: EditSpec, words: TimelineWord[], measured: QualityItem
   return [
     `Length: ${r1(duration)} s, ${spec.format}.${rec ? ` A ${rec.kind} format video${rec.kind === 'story' ? ` (the post card reads “${rec.title}” until ${r1(rec.titleEnd)} s)` : ''}.` : ''}`,
     `Story named in the edit: promise “${spec.story.promise || '(not named)'}”; payoff “${spec.story.payoff || '(not named)'}”; payoff at ${spec.story.payoffAt === null ? '(not placed)' : `${r1(spec.story.payoffAt)} s`}.`,
-    `Captions: ${spec.captions.enabled ? `on (${spec.captions.preset}, ${spec.captions.maxWords} words at a time)` : 'off'}.`,
+    `Captions: ${spec.captions.enabled ? `on (${spec.captions.preset}, ${spec.captions.maxWords} words at a time)${captionsHidden(spec)}` : 'off'}.`,
     `What's said (seconds on the finished video):\n${spokenLines(words).join('\n') || '(nothing: no speech)'}`,
     `What appears on screen:\n${
       events
@@ -160,7 +168,7 @@ const fixPrompt = (report: QualityReport, clip: boolean) => {
     !clip && report.score < report.bar && `${report.score}/100, under the bar of ${report.bar}`,
     broken && `it breaks ${broken} lesson${broken > 1 ? 's' : ''} the creator taught in comments on earlier videos`,
   ].filter(Boolean);
-  return `Quality check before rendering v${report.versionNumber}: ${why.join(', and ')}. Fix the edit: ${broken ? 'every broken lesson first (the creator must never have to point those out again), then ' : ''}${clip ? 'anything else below that clearly hurts the clip (it is a clip: keep it sparse, no added graphics or sound effects for the score\'s sake)' : 'what the fixes below need to clear the bar'}, keeping what works (name the story if it's missing). Then answer in a line or two with what you changed. Don't call render_edit: the render starts by itself when you're done.\n\n${qualityText(report)}`;
+  return `Quality check before rendering v${report.versionNumber}: ${why.join(', and ')}. Fix the edit: ${broken ? 'every broken lesson first (the creator must never have to point those out again), then ' : ''}${clip ? 'anything else below that clearly hurts the clip (it is a clip: keep it sparse, no added graphics or sound effects for the score\'s sake)' : 'what the fixes below need to clear the bar'}, keeping what works (name the story if it's missing).${clip ? ' When the words it needs lie outside its cut (the story starts earlier or ends later), read get_clip_source and cut it again with recut_clip instead.' : ''} Read the words either side of every cut you make (get_edit): none may end on “and…”, half a sentence or a cut-off word. Then answer in a line or two with what you changed. Don't call render_edit: the render starts by itself when you're done.\n\n${qualityText(report)}`;
 };
 
 /**
@@ -191,6 +199,16 @@ export async function checkJob({ renderId }: { renderId: string }) {
     }
     r = live();
     if (!r || r.status !== 'queued') return;
+    // A clip never ends on "and…", whoever cut it last.
+    if (clip) {
+      const head = listEditVersions(r.editId)[0];
+      const spec = normalizeEdit(db.select({ spec: schema.editVersions.spec }).from(schema.editVersions).where(eq(schema.editVersions.id, head.id)).get()!.spec);
+      const tidy = trimDanglingEnd(spec, await specTranscripts(spec, specMedia(spec)));
+      if (tidy) {
+        const { version } = saveEditVersion(r.editId, { author: 'claude', message: 'Ends on the last finished word, not on “and…”', spec: tidy });
+        setRender(r, { versionId: version.id, versionNumber: version.number, durationMs: Math.round(editDuration(tidy) * 1000) });
+      }
+    }
     setRender(r, { stage: `Quality ${report.score}/100 · waiting for the renderer` });
   } catch (err) {
     console.error('Quality check failed; rendering anyway', err);
@@ -209,7 +227,7 @@ async function fixEdit(r: { id: string; workspaceId: string; pieceId: string }, 
   setRender(r, { stage: report.lessons?.length ? `Breaks ${report.lessons.length} of your lessons: Claude is fixing it` : `Quality ${report.score}/100: Claude is fixing it` });
   onCancel.set(r.id, () => stopChat(thread.id));
   try {
-    await runChat({ threadId: thread.id, text: fixPrompt(report, clip), contextPieceId: r.pieceId, contextView: 'video', onEvent: () => {} });
+    await runChat({ threadId: thread.id, text: fixPrompt(report, clip), contextPieceId: r.pieceId, contextView: 'video', noRerender: true, onEvent: () => {} });
     return true;
   } catch (err) {
     console.error('Quality fix failed', err);

@@ -45,6 +45,8 @@ export async function runChat(input: {
   /** Which screen the piece is open in. */
   contextView?: 'video' | null;
   model?: string | null;
+  /** A clip in Review isn't rendered again when Claude changes it (the check before a render fixing it renders it after checking the fix). */
+  noRerender?: boolean;
   onEvent: (event: ChatStreamEvent) => void;
 }) {
   const thread = db.select().from(schema.chatThreads).where(eq(schema.chatThreads.id, input.threadId)).get();
@@ -191,7 +193,7 @@ export async function runChat(input: {
   };
 
   const rerenderForReview = () => {
-    if (!contextPiece || abort.signal.aborted) return;
+    if (!contextPiece || abort.signal.aborted || input.noRerender) return;
     const now_ = editHead();
     if (!now_?.version || now_.version.id === headBefore || now_.version.author !== 'claude') return;
     const stage = db.select({ stage: schema.pieces.stage }).from(schema.pieces).where(eq(schema.pieces.id, contextPiece.id)).get()?.stage;
