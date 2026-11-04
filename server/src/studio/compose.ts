@@ -11,8 +11,10 @@ import {
   timelineWords,
   transitionWindows,
   type BrollOverlay,
+  type EditClip,
   type EditSpec,
 } from '../../../shared/edit';
+import type { ClipMotion } from '../../../shared/looks';
 import { ARABIC_FONT, BUNDLED_FONTS, type FontSubset } from '../../../shared/fonts';
 import { isScenePreset, SCENE_LIBRARY } from '../../../shared/scene-library';
 import { captionCss, captionHtml, CAPTION_STYLE, captionTweens } from './captions';
@@ -84,6 +86,19 @@ const MASTER_FX = { version: 1, nodes: [{ type: 'truepeak', id: 'm1', label: 'De
 const GRAPHICS_CSS_MARK = '/* graphics */';
 const SCENE_CSS_MARK = '/* scenes */';
 
+/** Camera moves that only zoom: they turn about the face the frame is on. */
+const ZOOM_MOVES: ClipMotion[] = ['push-in', 'pull-out', 'punch', 'pulse'];
+
+/**
+ * The point of the frame a clip's camera move turns about: a zoom about the face the frame is on (about the middle, a
+ * snap zoom pushes a face near the top of the frame out of it), any other move about the middle (a pan needs the room
+ * either side). Any point in the frame is safe: zooming in about it never shows the picture's edge.
+ */
+function movePivot(clip: Pick<EditClip, 'focusX' | 'focusY' | 'fit' | 'motion'>, g: { left: number; top: number; width: number; height: number }, W: number, H: number, framed: boolean) {
+  if (framed || clip.fit === 'whole' || !ZOOM_MOVES.includes(clip.motion)) return { x: W / 2, y: H / 2 };
+  return { x: Math.min(W, Math.max(0, g.left + clip.focusX * g.width)), y: Math.min(H, Math.max(0, g.top + clip.focusY * g.height)) };
+}
+
 export function composeEdit(input: ComposeInput) {
   const { spec, media } = input;
   const { width: W, height: H } = EDIT_FORMATS[spec.format];
@@ -114,8 +129,8 @@ export function composeEdit(input: ComposeInput) {
     const { w, h } = sizeOf(clip.mediaId);
     const g = source.framed ? { left: 0, top: 0, width: W, height: H } : clipGeometry(clip, w, h, W, H);
     const box = `left:${px(g.left)};top:${px(g.top)};width:${px(g.width)};height:${px(g.height)}`;
-    // Camera moves turn about the middle of the frame.
-    const origin = `transform-origin:${px(-g.left + W / 2)} ${px(-g.top + H / 2)}${lookStyle(clip.filter ?? spec.grade.filter)}`;
+    const pivot = movePivot(clip, g, W, H, !!source.framed);
+    const origin = `transform-origin:${px(pivot.x - g.left)} ${px(pivot.y - g.top)}${lookStyle(clip.filter ?? spec.grade.filter)}`;
     if (clip.motion !== 'none') tl.push(...motionTweens(`#c${i}`, clip.motion, start, len, W, H));
     if (m.kind === 'image') {
       body.push(`<img id="c${i}" class="clip pic" src="${esc(source.src)}" alt="" ${timing} style="${box};${clip.motion === 'none' ? `transform-origin:${n(clip.focusX * 100)}% ${n(clip.focusY * 100)}%${lookStyle(clip.filter ?? spec.grade.filter)}` : origin}">`);
@@ -160,7 +175,8 @@ export function composeEdit(input: ComposeInput) {
       const z = side === 'a' ? (OUTGOING_ON_TOP.includes(w.type) ? 8 : 6) : 7;
       // Held where the clip's camera move has it at the cut (its end for the outgoing shot, its start for the next).
       const held = motionStyle(motionState(clip.motion, side === 'a' ? 1 : 0, W, H)) + lookStyle(clip.filter ?? spec.grade.filter);
-      const style = `left:${px(g.left)};top:${px(g.top)};width:${px(g.width)};height:${px(g.height)};clip-path:inset(${inset});transform-origin:${px(-g.left + W / 2)} ${px(-g.top + H / 2)};z-index:${z}${held}`;
+      const pivot = movePivot(clip, g, W, H, !!source.framed);
+      const style = `left:${px(g.left)};top:${px(g.top)};width:${px(g.width)};height:${px(g.height)};clip-path:inset(${inset});transform-origin:${px(pivot.x - g.left)} ${px(pivot.y - g.top)};z-index:${z}${held}`;
       const timing = `data-start="${n(w.start)}" data-duration="${n(w.end - w.start)}" data-track-index="5"`;
       const id = `t${side}${w.index}`;
       if (m.kind === 'image') {

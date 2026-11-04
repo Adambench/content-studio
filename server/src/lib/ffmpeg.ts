@@ -14,6 +14,11 @@ export type ProbeResult = {
   hasAudio: boolean;
   /** HLG or PQ footage (recent phones record it), which needs tone-mapping to look right everywhere else. */
   hdr: boolean;
+  /** The picture's frames a second, and whether every frame lasts as long (a phone's recording often doesn't). */
+  fps: number | null;
+  cfr: boolean;
+  /** When the first frame shows, from the file's start (seconds; a cut whose sound starts first has it a little late). */
+  videoStart: number;
 };
 
 export async function probe(file: string): Promise<ProbeResult> {
@@ -21,11 +26,14 @@ export async function probe(file: string): Promise<ProbeResult> {
     maxBuffer: 10 * 1024 * 1024,
   });
   const data = JSON.parse(stdout) as {
-    format?: { duration?: string };
+    format?: { duration?: string; start_time?: string };
     streams?: {
       codec_type: string;
       width?: number;
       height?: number;
+      r_frame_rate?: string;
+      avg_frame_rate?: string;
+      start_time?: string;
       color_transfer?: string;
       disposition?: { attached_pic?: number };
       tags?: { rotate?: string };
@@ -39,6 +47,13 @@ export async function probe(file: string): Promise<ProbeResult> {
   // Phones record portrait video as landscape + a rotation flag; report the displayed size.
   const rotation = Math.abs(Number(video?.tags?.rotate ?? video?.side_data_list?.find((d) => d.rotation !== undefined)?.rotation ?? 0));
   const swap = rotation === 90 || rotation === 270;
+  const rate = (r?: string) => {
+    const [a, b] = (r ?? '').split('/').map(Number);
+    return a > 0 && b > 0 ? a / b : null;
+  };
+  const fps = rate(video?.r_frame_rate) ?? rate(video?.avg_frame_rate);
+  const avg = rate(video?.avg_frame_rate);
+  const startOf = (s?: string) => (s && s !== 'N/A' && Number.isFinite(Number(s)) ? Number(s) : 0);
   return {
     durationMs: Number.isFinite(duration) ? duration : null,
     width: (swap ? video?.height : video?.width) ?? null,
@@ -46,6 +61,9 @@ export async function probe(file: string): Promise<ProbeResult> {
     hasVideo: !!video,
     hasAudio: streams.some((s) => s.codec_type === 'audio'),
     hdr: video?.color_transfer === 'arib-std-b67' || video?.color_transfer === 'smpte2084',
+    fps: fps && fps <= 240 ? fps : null,
+    cfr: !!fps && !!avg && Math.abs(fps - avg) < fps * 0.01,
+    videoStart: Math.max(0, startOf(video?.start_time) - startOf(data.format?.start_time)),
   };
 }
 
@@ -147,11 +165,29 @@ export async function cutSegment(input: {
    * never clicks or leaves half a syllable: a few milliseconds each side, longer where the video ends.
    */
   fades?: { at: number; length: number; fadeIn: number; fadeOut: number } | null;
+  /**
+   * The picture plays only from `from` to `to` (seconds of the file, inside the cut): before, it holds the frame at
+   * `from`; after, the frame before `to`. A few frames of another shot beside a cut flash past; the frame next to them,
+   * held, doesn't show. The sound plays all the way.
+   */
+  play?: { from: number; to: number } | null;
   lut?: { file: string; intensity: number } | null;
   cwd: string;
   signal?: AbortSignal;
 }) {
   const { info, box } = input;
+  // Every cut lands between two of the file's own frames: the first frame is the cut's first (not the next one, shown
+  // twice), and nothing of the frame before or after slips in.
+  const fps = info.fps ?? 30;
+  const frame = 1 / fps;
+  const snap = (t: number) => info.videoStart + Math.round((t - info.videoStart) * fps) / fps;
+  const a = Math.max(0, snap(input.start));
+  const b = Math.max(a + frame, snap(input.start + input.duration));
+  const p0 = Math.min(b - frame, Math.max(a, snap(input.play?.from ?? a)));
+  const p1 = Math.max(p0 + frame, Math.min(b, snap(input.play?.to ?? b)));
+  const exact = [info.cfr && `trim=end_frame=${Math.round((p1 - p0) * fps)}`, 'setpts=PTS-STARTPTS'].filter(Boolean).join(',');
+  // The held frames go on after the change to 30 fps (before it, that filter drops the last frame of the clip).
+  const hold = p0 - a > frame / 2 || b - p1 > frame / 2 ? `tpad=start_duration=${(p0 - a).toFixed(4)}:stop_duration=${(b - p1).toFixed(4)}:start_mode=clone:stop_mode=clone` : null;
   let base: string;
   if (input.whole) {
     const sw = info.width ?? box.width;
@@ -159,7 +195,7 @@ export async function cutSegment(input: {
     const g = wholeGeometry(sw, sh, box.width, box.height, input.whole.focusX, input.whole.focusY, input.zoom);
     const small = { width: even(box.width / 8), height: even(box.height / 8) };
     base = [
-      [info.hdr && TONEMAP, 'fps=30', 'split[wa][wb]'].filter(Boolean).join(','),
+      [exact, info.hdr && TONEMAP, 'fps=30', hold, 'split[wa][wb]'].filter(Boolean).join(','),
       // The blur is made small and scaled up: soft, and fast.
       `[wa]scale=${small.width}:${small.height}:force_original_aspect_ratio=increase,crop=${small.width}:${small.height},boxblur=4:2,scale=${box.width}:${box.height}:flags=bilinear,colorchannelmixer=rr=0.45:gg=0.45:bb=0.45[wbg]`,
       `[wb]scale=${even(g.width)}:${even(g.height)}:flags=lanczos[wfg]`,
@@ -167,7 +203,7 @@ export async function cutSegment(input: {
     ].join(';');
   } else {
     const size = fillSize(info.width ?? box.width, info.height ?? box.height, box.width, box.height, input.zoom);
-    base = [info.hdr && TONEMAP, `scale=${size.width}:${size.height}:flags=lanczos`, 'fps=30'].filter(Boolean).join(',');
+    base = [exact, info.hdr && TONEMAP, `scale=${size.width}:${size.height}:flags=lanczos`, 'fps=30', hold].filter(Boolean).join(',');
   }
   let vf = `${base},format=yuv420p`;
   if (input.lut && input.lut.intensity > 0) {
@@ -179,10 +215,14 @@ export async function cutSegment(input: {
         : // Partial strength: mix original and graded (normal blend = top × opacity + bottom × (1 − opacity), native and fast).
           `${base},format=gbrp,split[a][b];[b]${lut}[g];[a][g]blend=all_mode=normal:all_opacity=${(1 - k).toFixed(3)},format=yuv420p`;
   }
+  const t = (x: number) => x.toFixed(4);
   await run(
     [
-      '-ss', input.start.toFixed(3), '-t', input.duration.toFixed(3), '-i', input.file,
-      '-map', '0:v:0', ...(input.audio ? ['-map', '0:a:0?'] : ['-an']),
+      // The picture from a quarter frame before its first frame (so that frame is the first in, whatever the rounding),
+      // the sound from exactly the cut's start.
+      '-ss', t(Math.max(0, p0 - frame / 4)), '-t', t(p1 - p0), '-i', input.file,
+      ...(input.audio ? ['-ss', t(a), '-t', t(b - a), '-i', input.file] : []),
+      '-map', '0:v:0', ...(input.audio ? ['-map', '1:a:0?'] : ['-an']),
       // A single-input graph (even with split/blend inside) is still a simple -vf graph.
       '-vf', vf,
       ...(input.audio && input.fades ? ['-af', clipFades(input.fades)] : []),

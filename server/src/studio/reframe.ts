@@ -19,9 +19,17 @@ import { getEdit, saveEditVersion } from './edits';
 import { runTool } from '../compute/run';
 
 export type SpeakerScan = {
+  /** 2: camera changes read from every frame, exact to the frame (older scans are made again). */
+  version?: number;
   width: number;
   height: number;
+  /** Frames a second (version 2). */
+  fps?: number;
   step: number;
+  /** Every camera change: the time of the first frame of the new shot (version 2). */
+  cuts?: number[];
+  /** For each camera change, how much each of 16 × 9 cells of the picture changes (0–255, row by row). */
+  cutGrids?: (number[] | null)[];
   shots: {
     start: number;
     end: number;
@@ -55,23 +63,38 @@ export function mainPerson(scan: SpeakerScan): Pick<Track, 'x' | 'y' | 'h'> | nu
   return groups.sort((a, b) => b.seconds - a.seconds)[0]?.p ?? null;
 }
 
-/** Run the shot and speaker scan on a video (about a quarter of real time for 1080p). */
-export async function scanSpeakers(file: string, opts: { track?: string } = {}): Promise<SpeakerScan> {
+export const SCAN_VERSION = 2;
+
+/**
+ * Run the shot and speaker scan on a video (about a sixth of real time for 1080p). `addCuts`: camera changes found
+ * some other way (the check of a finished video) that count as well.
+ */
+export async function scanSpeakers(file: string, opts: { track?: string; addCuts?: number[] } = {}): Promise<SpeakerScan> {
   if (!clipToolsInstalled()) throw new JobError('Install the clip tools first (Settings → Clip tools): they find the faces.', { retry: false });
-  const out = await runTool('speakers', { video: file }, { fps: 8 }, { timeoutMs: 30 * 60_000, track: opts.track });
-  return JSON.parse(out.trim().split('\n').pop() ?? '{}') as SpeakerScan;
+  const scan = async (local: boolean) => {
+    const out = await runTool('speakers', { video: file }, { fps: 8, addCuts: opts.addCuts }, { timeoutMs: 30 * 60_000, track: opts.track, local });
+    return JSON.parse(out.trim().split('\n').pop() ?? '{}') as SpeakerScan;
+  };
+  const first = await scan(false);
+  // A home PC with an older copy of the scan finds camera changes a few frames late: this computer scans it again.
+  return (first.version ?? 1) >= SCAN_VERSION ? first : scan(true);
 }
 
-/** A library video's scan, kept beside its frames so the same footage isn't scanned twice. */
-export async function speakersOf(mediaId: string) {
-  const cache = join(config.framesDir, `speakers-${mediaId}.json`);
-  try {
-    return JSON.parse(await readFile(cache, 'utf8')) as SpeakerScan;
-  } catch {
-    const scan = await scanSpeakers(mediaPath(getMedia(mediaId)));
-    await writeFile(cache, JSON.stringify(scan));
-    return scan;
-  }
+const scanCache = (mediaId: string) => join(config.framesDir, `speakers-${mediaId}.json`);
+
+/**
+ * A library video's scan, kept beside its frames so the same footage isn't scanned twice (a scan from before camera
+ * changes were exact to the frame is made again). `addCuts`: scan it again with these camera changes added.
+ */
+export async function speakersOf(mediaId: string, opts: { addCuts?: number[] } = {}) {
+  const cached = await readFile(scanCache(mediaId), 'utf8').then((t) => JSON.parse(t) as SpeakerScan, () => null);
+  const exact = cached && (cached.version ?? 1) >= SCAN_VERSION ? cached : null;
+  if (exact && !opts.addCuts?.length) return exact;
+  // Camera changes added before (a check of a finished video found them) stay added.
+  const addCuts = opts.addCuts?.length ? [...new Set([...(exact?.cuts ?? []), ...opts.addCuts])].sort((a, b) => a - b) : undefined;
+  const scan = await scanSpeakers(mediaPath(getMedia(mediaId)), { addCuts });
+  await writeFile(scanCache(mediaId), JSON.stringify(scan));
+  return scan;
 }
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);

@@ -66,6 +66,8 @@ export type ToolParams = {
   /** Transcribe: the language spoken, when Whisper's own guess is wrong. */
   language?: string;
   fps?: number;
+  /** Speaker scan: camera changes found some other way (a check of a finished video), seconds of the video. */
+  addCuts?: number[];
   /** Generation: what to make, at what size, from which seed; frames for a clip. */
   prompt?: string;
   negative?: string;
@@ -86,7 +88,7 @@ export function commandFor(tool: ComputeTool, files: Record<string, string>, par
     case 'matte':
       return { bin: m.toolsPython, args: [script('matte.py'), files.video, '--model', m.matteModel, '--out', files.mask, '--ffmpeg', m.ffmpeg] };
     case 'speakers':
-      return { bin: m.toolsPython, args: [script('speakers.py'), files.video, '--model', m.yunetModel, '--fps', String(params.fps ?? 8)] };
+      return { bin: m.toolsPython, args: [script('speakers.py'), files.video, '--model', m.yunetModel, '--ffmpeg', m.ffmpeg, '--fps', String(params.fps ?? 8), ...(params.addCuts?.length ? ['--add-cuts', params.addCuts.join(',')] : [])] };
     case 'probe':
       return { bin: m.toolsPython, args: [script('probe.py'), '--matte-model', m.matteModel, '--ffmpeg', m.ffmpeg] };
     case 'image':

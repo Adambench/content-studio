@@ -2,7 +2,7 @@
 // An edit is plain JSON; the server compiles it to a HyperFrames composition for preview and rendering.
 
 import { bundledFamily } from './fonts';
-import { BROLL_LAYOUTS, CLIP_MOTIONS, FILTER_LOOKS, NO_TEXTURES, OVERLAY_ANIMATIONS, type BrollLayout, type ClipMotion, type FilterLook, type OverlayAnimation, type Textures } from './looks';
+import { BROLL_LAYOUTS, CLIP_MOTIONS, FILTER_LOOKS, MOTION_SCALE, NO_TEXTURES, OVERLAY_ANIMATIONS, type BrollLayout, type ClipMotion, type FilterLook, type OverlayAnimation, type Textures } from './looks';
 import { normalizeRecipe, type Recipe } from './recipe';
 import { normalizeScene, type SceneSpec } from './scene';
 import { refitScene, sceneMaxSeconds } from './scene-library';
@@ -1123,8 +1123,9 @@ export function tightenClips(clips: EditClip[], speech: Record<string, [number, 
 /**
  * Jump cuts that read as cuts, not glitches. Two clips of the same footage on (about) the same framing with almost
  * nothing removed between them (under 0.15 s: padding, a breath) become one: the skip only shows as a twitch. Where more was
- * removed, the second frames clearly tighter or wider (12 %) when the two zooms are within 6 % of each other: a punch-in
- * of 1.12 against 1.14 looks like the picture slipped.
+ * removed, the second frames clearly tighter or wider (12 %) when the picture either side of the cut is zoomed within
+ * 6 % of the other, camera moves included (a push-in ending at 1.16 against a clip at 1.12 looks like the picture
+ * slipped, as does a punch-in of 1.12 against 1.14).
  */
 export function smoothJumps(clips: EditClip[], opts: { fixedZoom?: (clip: EditClip) => boolean } = {}): EditClip[] {
   const out: EditClip[] = [];
@@ -1138,8 +1139,13 @@ export function smoothJumps(clips: EditClip[], opts: { fixedZoom?: (clip: EditCl
       continue;
     }
     // A whole picture is never cropped, and a speaker who moves about keeps the frame he fits in.
-    if (near && gap >= 0.15 && !clip.transition && clip.fit !== 'whole' && !opts.fixedZoom?.(clip)) {
-      out.push({ ...clip, zoom: round(prev.zoom >= 1.1 ? Math.max(1, prev.zoom / 1.12) : prev.zoom * 1.12) });
+    const ends = prev ? prev.zoom * MOTION_SCALE[prev.motion][1] : 1;
+    const starts = MOTION_SCALE[clip.motion][0];
+    if (same && Math.abs((clip.zoom * starts) / ends - 1) < 0.06 && gap >= 0.15 && !clip.transition && clip.fit !== 'whole' && !opts.fixedZoom?.(clip)) {
+      // Wider when the picture before ends zoomed in, else tighter; then whichever way stays inside 1–3.
+      const wider = Math.max(1, ends / 1.12 / starts);
+      const zoom = ends >= 1.1 && Math.abs((wider * starts) / ends - 1) >= 0.06 ? wider : Math.min(3, (ends * 1.12) / starts);
+      out.push({ ...clip, zoom: round(zoom) });
       continue;
     }
     out.push(clip);

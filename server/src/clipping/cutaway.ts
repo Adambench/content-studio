@@ -21,6 +21,7 @@ import { requireBinary } from '../lib/bin';
 import { extractFrames, probe } from '../lib/ffmpeg';
 import { adoptFile, mediaPath } from '../services/media';
 import { getPiece } from '../services/pieces';
+import { pictureChanges } from '../studio/exact-cuts';
 import { scanSpeakers } from '../studio/reframe';
 import { findEditForPiece, saveEditVersion } from '../studio/edits';
 import { getMoment } from './moments';
@@ -282,13 +283,22 @@ export async function addListenerCutaway(opts: { spec: EditSpec; sourceFile: str
       ['-y', '-v', 'error', '-ss', found.start.toFixed(3), '-i', opts.sourceFile, '-t', found.seconds.toFixed(3), '-map', '0:v:0', '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', piece],
       { timeout: 5 * 60_000 },
     );
+    // The shots above are read a few times a second: the piece is checked frame by frame, and only its longest part on
+    // one shot shows (never a frame of the shot before or after it, a flash).
+    const changes = (await pictureChanges(piece).catch(() => ({ times: [] as number[] }))).times.filter((x) => x > 0.02 && x < found.seconds - 0.02);
+    const edges = [0, ...changes, found.seconds];
+    let [from, to] = [0, 0];
+    for (let i = 1; i < edges.length; i++) if (edges[i] - edges[i - 1] > to - from) [from, to] = [edges[i - 1], edges[i]];
+    if (to - from < 1.1) continue;
+    const at = changes.length ? cutawayTime(opts.spec, to - from, opts.hookEnd) : t;
+    if (at === null) continue;
     const info = await probe(piece);
     const [W, H] = [info.width ?? 1920, info.height ?? 1080];
     const focus = await focusOn(piece, W, H, found.side);
     // Checked on exactly what the clip will show: the tall crop of it, never the speaker in it, nobody talking.
     const w = Math.min(1, ((9 / 16) * H) / W);
     const x0 = Math.min(Math.max(0, focus.x - w / 2), 1 - w);
-    const crops = await extractFrames(piece, [found.seconds * 0.25, found.seconds * 0.75], (i) => join(opts.dir, `crop${k}-${i}.jpg`), 384, [{ x0, x1: x0 + w }, { x0, x1: x0 + w }]);
+    const crops = await extractFrames(piece, [from + (to - from) * 0.25, from + (to - from) * 0.75], (i) => join(opts.dir, `crop${k}-${i}.jpg`), 384, [{ x0, x1: x0 + w }, { x0, x1: x0 + w }]);
     const seen = await askStructured<CropCheck>({
       task: 'clips',
       system: CROP_CHECK,
@@ -302,8 +312,8 @@ export async function addListenerCutaway(opts: { spec: EditSpec; sourceFile: str
     const media = await adoptFile(opts.workspaceId, piece, 'Listening.mp4', 'video/mp4', { pieceId: opts.pieceId, source: 'clip' });
     db.update(schema.media).set({ durationMs: info.durationMs, width: info.width, height: info.height }).where(eq(schema.media.id, media.id)).run();
     const round = (n: number) => Math.round(n * 1000) / 1000;
-    const overlay: BrollOverlay = { id: newId().slice(0, 8), type: 'broll', mediaId: media.id, in: 0, layout: 'full', focusX: round(focus.x), focusY: round(focus.y), start: round(t), end: round(t + found.seconds) };
-    return { spec: normalizeEdit({ ...opts.spec, overlays: [...opts.spec.overlays, overlay] }), from: found.start };
+    const overlay: BrollOverlay = { id: newId().slice(0, 8), type: 'broll', mediaId: media.id, in: round(from), layout: 'full', focusX: round(focus.x), focusY: round(focus.y), start: round(at), end: round(at + to - from) };
+    return { spec: normalizeEdit({ ...opts.spec, overlays: [...opts.spec.overlays, overlay] }), from: found.start + from };
   }
   return null;
 }

@@ -30,7 +30,8 @@ export const localMachine = (): MachinePaths => ({
   renderDir: join(config.toolsDir, 'render'),
 });
 
-export type RunToolOptions = { timeoutMs: number; track?: string; onProgress?: (text: string) => void };
+/** `local`: run it on this computer even when a worker has the tool (a worker's copy of a script is out of date). */
+export type RunToolOptions = { timeoutMs: number; track?: string; onProgress?: (text: string) => void; local?: boolean };
 
 /**
  * `files` maps the tool's input and output names to paths here. A worker with the tool takes it when one is online; a
@@ -42,7 +43,7 @@ export async function runTool(tool: ComputeTool, files: Record<string, string>, 
 
 /** `runTool`, and where it ran: a worker's name or 'laptop'. */
 export async function runToolOn(tool: ComputeTool, files: Record<string, string>, params: ToolParams, opts: RunToolOptions): Promise<{ stdout: string; on: string }> {
-  const remote = await runRemote(tool, files, params, opts);
+  const remote = opts.local ? ({ ok: false, reason: 'no-worker', message: '' } as const) : await runRemote(tool, files, params, opts);
   if (remote.ok) return { stdout: remote.stdout, on: remote.on };
   // Generation and the cloned voice need a worker's GPU: the job waits for one (or fails like any tool run).
   if (WORKER_ONLY.includes(tool)) {

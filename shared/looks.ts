@@ -67,6 +67,23 @@ export const CLIP_MOTION_INFO: Record<ClipMotion, { label: string; hint: string 
   pulse: { label: 'Pulse', hint: 'Breathes in and out once a second: energy without music' },
 };
 
+/** How far each camera move has the picture zoomed at the clip's start and end (server/src/studio/motion.ts draws them). */
+export const MOTION_SCALE: Record<ClipMotion, [number, number]> = {
+  none: [1, 1],
+  'push-in': [1, 1.16],
+  'pull-out': [1.16, 1],
+  'pan-left': [1.15, 1.15],
+  'pan-right': [1.15, 1.15],
+  'pan-up': [1.15, 1.15],
+  'pan-down': [1.15, 1.15],
+  drift: [1.08, 1.14],
+  punch: [1.28, 1],
+  shake: [1.06, 1.06],
+  handheld: [1.06, 1.06],
+  tilt: [1.12, 1.12],
+  pulse: [1, 1],
+};
+
 // ---------- textures over the whole video ----------
 
 export type Textures = {

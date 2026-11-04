@@ -15,6 +15,7 @@ import { db, newId, now, schema } from '../db';
 import { findBinary } from '../lib/bin';
 import { emit } from '../lib/events';
 import { cutSegment, gradeImage, normalizeLoudness, probe } from '../lib/ffmpeg';
+import { checkCuts, exactPlan, handlePlay } from './exact-cuts';
 import { badRequest, HttpError, notFound } from '../lib/http';
 import { notify } from '../lib/push';
 import { enqueue } from '../jobs/queue';
@@ -189,14 +190,20 @@ export async function renderJob({ renderId }: { renderId: string }) {
       lut = { file: 'grade.cube', intensity: spec.grade.intensity };
     }
 
+    // Cuts exact to the frame: each video's camera changes (scanned once and kept) split the framing where a shot
+    // changes, and a sliver of another shot beside a cut holds the frame next to it (studio/exact-cuts.ts).
+    progress(0.02, 'Finding the camera changes');
+    let plan = await exactPlan(spec);
+    if (plan.changes.length) console.log(`[render] ${r.id} exact cuts: ${plan.changes.join('; ')}`);
+
     // Full-quality, graded segments for every shot (the preview uses lighter copies of whole files).
     const brolls = spec.overlays.map((o, i) => ({ o, i })).filter((x) => x.o.type === 'broll');
-    const total = spec.clips.length + brolls.length;
+    let total = plan.clips.length + brolls.length;
     let done = 0;
     const picture = async (
       m: MediaRow,
       name: string,
-      cut: { start: number; duration: number; zoom: number; whole?: { focusX: number; focusY: number } | null; audio: boolean; before?: number; after?: number; fadeIn?: number; fadeOut?: number },
+      cut: { start: number; duration: number; zoom: number; whole?: { focusX: number; focusY: number } | null; audio: boolean; before?: number; after?: number; fadeIn?: number; fadeOut?: number; playFrom?: number; playTo?: number },
     ): Promise<ComposeSource> => {
       if (abort.signal.aborted) throw new Error('cancelled');
       progress(0.05 + 0.25 * (done / total), `Preparing footage ${done + 1} of ${total}`);
@@ -214,24 +221,14 @@ export async function renderJob({ renderId }: { renderId: string }) {
       const fileEnd = info.durationMs ? info.durationMs / 1000 : Infinity;
       const to = Math.min(fileEnd, cut.start + cut.duration + (cut.after ?? 0));
       const fades = cut.fadeIn || cut.fadeOut ? { at: cut.start - from, length: cut.duration, fadeIn: cut.fadeIn ?? 0, fadeOut: cut.fadeOut ?? 0 } : null;
-      await cutSegment({ file: mediaPath(m), out: join(dir, 'media', `${name}.mp4`), info, start: from, duration: to - from, zoom: cut.zoom, whole: cut.whole, audio: cut.audio && info.hasAudio, fades, box, lut, cwd: dir, signal: abort.signal });
+      // The picture holds still where it would show another shot: a sliver beside the cut, or a transition's handle
+      // that reaches past a camera change.
+      const shots = plan.cuts.get(m.id);
+      const span = { in: cut.start, out: cut.start + cut.duration, playFrom: cut.playFrom, playTo: cut.playTo };
+      const play = shots ? handlePlay(span, from, to, shots.cuts, shots.fps) : cut.playFrom !== undefined || cut.playTo !== undefined ? { from: cut.playFrom ?? from, to: cut.playTo ?? to } : null;
+      await cutSegment({ file: mediaPath(m), out: join(dir, 'media', `${name}.mp4`), info, start: from, duration: to - from, zoom: cut.zoom, whole: cut.whole, audio: cut.audio && info.hasAudio, fades, play, box, lut, cwd: dir, signal: abort.signal });
       return { src: `media/${name}.mp4`, mediaStart: Math.round((cut.start - from) * 1000) / 1000, duration: to - from, silent: !info.hasAudio, framed: !!cut.whole };
     };
-    const clipSources: ComposeSource[] = [];
-    const handles = transitionHandles(spec);
-    for (const [i, clip] of spec.clips.entries()) {
-      const m = byId.get(clip.mediaId);
-      const whole = clip.fit === 'whole' && m?.kind === 'video' ? { focusX: clip.focusX, focusY: clip.focusY } : null;
-      // The sound fades a hair at every real cut (a shot running straight on into the next, the same file, doesn't),
-      // and a little longer where the video ends.
-      const prev = spec.clips[i - 1];
-      const next = spec.clips[i + 1];
-      const joinedIn = !!prev && prev.mediaId === clip.mediaId && Math.abs(prev.out - clip.in) < 0.02;
-      const joinedOut = !!next && next.mediaId === clip.mediaId && Math.abs(clip.out - next.in) < 0.02;
-      const fadeIn = joinedIn ? 0 : 0.012;
-      const fadeOut = !next ? 0.12 : joinedOut ? 0 : 0.012;
-      clipSources[i] = m ? await picture(m, `c${i}`, { start: clip.in, duration: clipLength(clip), zoom: clip.zoom, whole, audio: clip.volume > 0, fadeIn, fadeOut, ...handles[i] }) : null;
-    }
     const brollSources: ComposeSource[] = [];
     for (const { o, i } of brolls) {
       if (o.type !== 'broll') continue;
@@ -262,40 +259,79 @@ export async function renderJob({ renderId }: { renderId: string }) {
     for (const f of BUNDLED_FONTS.flatMap((f) => f.files)) await copyFile(join(config.assetsDir, 'fonts', f), join(dir, 'fonts', f));
     for (const f of GSAP_FILES) await copyFile(gsapFilePath(f), join(dir, f));
 
-    const { html } = composeEdit({
-      spec,
-      mascot: getWorkspace(r.workspaceId).mascot,
-      media: composeMedia(rows),
-      transcripts,
-      clipSource: (i) => clipSources[i] ?? null,
-      brollSource: (i) => brollSources[i] ?? null,
-      fileUrl: (id) => `media/${fileNames.get(id) ?? id}`,
-      fontUrl: (file) => `fonts/${file}`,
-      scripts: GSAP_FILES,
-      preview: false,
-    });
-    await writeFile(join(dir, 'index.html'), html);
-
     const output = join(dir, 'render.mp4');
-    // A home PC draws the frames when one has the renderer, which keeps this laptop free; otherwise, or when its run
-    // fails, this computer does.
-    const remote = await renderRemote(dir, output, editDuration(spec), progress, abort.signal);
-    if (abort.signal.aborted) throw new Error('cancelled');
-    if (!remote) {
-      const browser = chrome ?? (await ensureRenderer((f) => progress(0.3 * f, 'Downloading the video renderer (first time only)')));
-      drawingHere.add(r.id);
-      try {
-        await runWorker(
-          { projectDir: dir, output },
-          browser,
-          (value, stage) => progress(0.3 + 0.62 * value, stageLabel(stage)),
-          (tail) => (logTail = tail),
-          abort.signal,
-        );
-      } finally {
-        drawingHere.delete(r.id);
+    /** Cut the main track's footage as the plan has it, write the composition and draw it into `output`. */
+    const draw = async () => {
+      const drawn: EditSpec = { ...spec, clips: plan.clips };
+      const clipSources: ComposeSource[] = [];
+      const handles = transitionHandles(drawn);
+      for (const [i, clip] of plan.clips.entries()) {
+        const m = byId.get(clip.mediaId);
+        const whole = clip.fit === 'whole' && m?.kind === 'video' ? { focusX: clip.focusX, focusY: clip.focusY } : null;
+        // The sound fades a hair at every real cut (a shot running straight on into the next, the same file, doesn't),
+        // and a little longer where the video ends.
+        const prev = plan.clips[i - 1];
+        const next = plan.clips[i + 1];
+        const joinedIn = !!prev && prev.mediaId === clip.mediaId && Math.abs(prev.out - clip.in) < 0.02;
+        const joinedOut = !!next && next.mediaId === clip.mediaId && Math.abs(clip.out - next.in) < 0.02;
+        const fadeIn = joinedIn ? 0 : 0.012;
+        const fadeOut = !next ? 0.12 : joinedOut ? 0 : 0.012;
+        clipSources[i] = m ? await picture(m, `c${i}`, { start: clip.in, duration: clipLength(clip), zoom: clip.zoom, whole, audio: clip.volume > 0, fadeIn, fadeOut, playFrom: clip.playFrom, playTo: clip.playTo, ...handles[i] }) : null;
+      }
+
+      const { html } = composeEdit({
+        spec: drawn,
+        mascot: getWorkspace(r.workspaceId).mascot,
+        media: composeMedia(rows),
+        transcripts,
+        clipSource: (i) => clipSources[i] ?? null,
+        brollSource: (i) => brollSources[i] ?? null,
+        fileUrl: (id) => `media/${fileNames.get(id) ?? id}`,
+        fontUrl: (file) => `fonts/${file}`,
+        scripts: GSAP_FILES,
+        preview: false,
+      });
+      await writeFile(join(dir, 'index.html'), html);
+
+      // A home PC draws the frames when one has the renderer, which keeps this laptop free; otherwise, or when its run
+      // fails, this computer does.
+      const remote = await renderRemote(dir, output, editDuration(spec), progress, abort.signal);
+      if (abort.signal.aborted) throw new Error('cancelled');
+      if (!remote) {
+        const browser = chrome ?? (await ensureRenderer((f) => progress(0.3 * f, 'Downloading the video renderer (first time only)')));
+        drawingHere.add(r.id);
+        try {
+          await runWorker(
+            { projectDir: dir, output },
+            browser,
+            (value, stage) => progress(0.3 + 0.62 * value, stageLabel(stage)),
+            (tail) => (logTail = tail),
+            abort.signal,
+          );
+        } finally {
+          drawingHere.delete(r.id);
+        }
+      }
+    };
+    await draw();
+
+    // The finished video checked frame by frame: a picture change the plan didn't make, inside a clip's footage, is a
+    // camera change the scan missed. Its video is scanned again with it, and the video drawn again (once).
+    const check = await checkCuts(output, spec, plan, abort.signal).catch((err: Error) => (console.warn(`[render] ${r.id} cut check: ${err.message}`), null));
+    if (check?.missed.length) {
+      const addCuts = new Map<string, number[]>();
+      for (const x of check.missed) addCuts.set(x.mediaId, [...(addCuts.get(x.mediaId) ?? []), x.source]);
+      console.warn(`[render] ${r.id}: picture changes the plan didn't make at ${check.missed.map((x) => `${x.at.toFixed(2)} s`).join(', ')}: scanning again`);
+      progress(0.92, 'Checking the cuts');
+      const again = await exactPlan(spec, { addCuts });
+      if (JSON.stringify(again.clips) !== JSON.stringify(plan.clips)) {
+        plan = again;
+        done = 0;
+        total = plan.clips.length;
+        await draw();
       }
     }
+    if (check?.flashes.length) console.warn(`[render] ${r.id}: picture changes a few frames apart at ${check.flashes.map((t) => `${t.toFixed(2)} s`).join(', ')}`);
 
     let final = output;
     // A video with every clip muted and no nasheed or sound effects has no sound to level.

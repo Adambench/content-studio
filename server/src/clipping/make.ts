@@ -277,13 +277,16 @@ export async function makeClip({ momentId }: { momentId: string }) {
   try {
     // 1. The cut, with margins: the picture at full quality, the sound as WAV for Demucs.
     step('Cutting it from the source');
-    const cutStart = Math.max(0, m.start - HEAD);
+    // The cut starts on one of the source's own frames, and its first frame shows at 0: the clip's frames, its camera
+    // changes and every cut made in it count time the same way, frame for frame.
+    const rate = info.fps ?? 30;
+    const cutStart = Math.max(0, info.videoStart + Math.round((Math.max(0, m.start - HEAD) - info.videoStart) * rate) / rate);
     const cutEnd = Math.min(sourceSeconds || m.end + TAIL, m.end + TAIL);
     const length = cutEnd - cutStart;
     const video = join(dir, 'video.mp4');
     const original = join(dir, 'original.wav');
-    await ffmpeg(['-ss', cutStart.toFixed(3), '-i', file, '-t', length.toFixed(3), '-map', '0:v:0', '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', video]);
-    await ffmpeg(['-ss', cutStart.toFixed(3), '-i', file, '-t', length.toFixed(3), '-map', '0:a:0', '-ac', '2', '-ar', '44100', '-c:a', 'pcm_s16le', original]);
+    await ffmpeg(['-ss', Math.max(0, cutStart - 0.25 / rate).toFixed(4), '-i', file, '-t', length.toFixed(3), '-map', '0:v:0', '-an', '-vf', 'setpts=PTS-STARTPTS', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', video]);
+    await ffmpeg(['-ss', cutStart.toFixed(4), '-i', file, '-t', length.toFixed(3), '-map', '0:a:0', '-ac', '2', '-ar', '44100', '-c:a', 'pcm_s16le', original]);
 
     // 2. Voice and everything else apart (about 30 s for 45 s of clip).
     step('Separating the voice from any music');
