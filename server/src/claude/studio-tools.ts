@@ -39,6 +39,7 @@ import { checkEdit, needsFix } from '../studio/quality';
 import { getNote, notesText, updateNote } from '../studio/notes';
 import { learnFromNote } from '../knowledge/lessons';
 import { clipSource, recutClip } from '../clipping/recut';
+import { focusSpans, followShotChanges, type SpeakerScan } from '../studio/reframe';
 import { QUALITY_BAR, qualityText } from '../../../shared/quality';
 import { previewOverlay } from '../studio/preview';
 import { normalizeScene, SCENE_FONTS, SCENE_MAX_ELEMENTS, SCENE_MAX_SECONDS, SCENE_MAX_TWEENS, SCENE_SOUNDS } from '../../../shared/scene';
@@ -377,6 +378,11 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
           const words = Object.fromEntries(Object.entries(transcripts).map(([id, t]) => [id, (t?.segments ?? []).flatMap((s) => s.words ?? []).filter((w) => w.word.trim())]));
           ({ clips: next.clips, moved } = wholeWordCuts(next.clips, words));
           midSentence = midSentenceCuts(next.clips, words);
+          // A clip made to run across a camera change is framed on the new shot after it (scans already made only).
+          for (const id of new Set(next.clips.map((c) => c.mediaId))) {
+            const scan = await readFile(join(config.framesDir, `speakers-${id}.json`), 'utf8').then((t) => JSON.parse(t) as SpeakerScan, () => null);
+            if (scan) next.clips = followShotChanges(next.clips, id, focusSpans(scan, next.format)).clips;
+          }
         }
         const { version, unchanged } = saveEditVersion(edit.id, { author: 'claude', message, spec: next });
         if (unchanged) return ok('No changes — the edit already looked like that.');

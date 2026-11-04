@@ -253,6 +253,23 @@ export function applyFocusSpans(clips: EditClip[], mediaId: string, spans: Focus
 }
 
 /**
+ * A clip that runs across a cut in the source (made longer by hand) split there, the part after it framed on its own
+ * shot: one framing held through a camera change lands on the wrong spot. The part before keeps its framing.
+ */
+export function followShotChanges(clips: EditClip[], mediaId: string, spans: FocusSpan[]): { clips: EditClip[]; split: number } {
+  let split = 0;
+  const out = clips.flatMap((c) => {
+    if (c.mediaId !== mediaId || c.fit === 'whole' || !spans.some((s) => s.newShot && s.start > c.in + 0.05 && s.start < c.out - 0.05)) return [c];
+    const pieces = applyFocusSpans([c], mediaId, spans);
+    if (pieces.length < 2) return [c];
+    split++;
+    pieces[0] = { ...pieces[0], focusX: c.focusX, focusY: c.focusY, zoom: c.zoom };
+    return pieces;
+  });
+  return { clips: out, split };
+}
+
+/**
  * Clips of one video trimmed off a sliver of another shot at either end: the source cuts just after a clip starts or
  * just before it ends, and a few frames of the product on the table, a drink or the other camera flash past. Trimmed
  * when nothing is said in the sliver (a word in it keeps it, framed on its own shot); `words` are the video's.

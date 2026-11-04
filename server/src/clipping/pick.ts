@@ -52,7 +52,7 @@ function schemaFor(pageIds: string[]) {
             start: { type: 'number', description: 'In point, seconds in the source: the start of the first word of a sentence, with the context a stranger needs to follow (never mid-sentence, never mid-story)' },
             end: { type: 'number', description: 'Out point, seconds in the source: the end of the last word of the payoff, where the story or the point is finished (never on a sentence that goes on, a dangling "and…", or a new thought that starts and stops; a longer clip is fine)' },
             firstLine: { type: 'string', description: 'The spoken first line, word for word' },
-            hookCard: { type: 'string', description: '6 words or fewer for the screen in the first ~2.5 s, or empty when the first line carries the hook. Mark at most 2 words *like this* for emphasis, only ones that alone still carry the message (they show bolder, never in another colour)' },
+            hookCard: { type: 'string', description: 'Usually empty: a strong first line in the captions is the hook, and the creator prefers it to text on top. Only when the opening words can\'t say what the clip is about: 6 words or fewer for the screen in the first ~2.5 s. Mark at most 2 words *like this* for emphasis, only ones that alone still carry the message (they show bolder, never in another colour)' },
             title: { type: 'string' },
             kind: { type: 'string', enum: MOMENT_KINDS },
             why: { type: 'string', description: 'One line: the kind, the turn or payoff, who it’s for' },

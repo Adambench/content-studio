@@ -83,10 +83,13 @@ export function whoTag(spec: EditSpec, mediaId: string, scan: SpeakerScan, speak
     else runs.push({ t0: s.t0, t1: s.t1, first: s });
   }
   const from = Math.max(after, 0.2);
-  const run = runs.find((r) => r.t1 - Math.max(r.t0, from) >= 1.6);
+  // Long enough to read while the captions run too (4.5 s): a shot that holds that long, soon; else the first that
+  // holds 1.6 s.
+  const room = (r: (typeof runs)[number]) => r.t1 - Math.max(r.t0, from);
+  const run = runs.find((r) => room(r) >= 3.5 && r.t0 < from + 6) ?? runs.find((r) => room(r) >= 1.6);
   if (!run) return null;
   const start = round(Math.max(run.t0, from));
-  const end = round(Math.min(run.t1, start + 3));
+  const end = round(Math.min(run.t1, start + 4.5));
   // Their face on the finished frame, from the first clip of the run (the frame holds through a run of one shot).
   const { clip, who } = run.first;
   const g = clipGeometry(clip, src.width, src.height, W, H);
