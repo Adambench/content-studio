@@ -200,6 +200,7 @@ versionCode from the tag (`v1.2.3` → 10203).
 | Kokoro | 32 s of speech in 19 s; Whisper `small` returns its words exactly |
 | Renders | 35 s clip ≈ 3.5 min with the CPU free; transitions cost nothing extra; CSS filter/clip-path/grid animate fine |
 | Research | Signed out, TikTok sometimes answers “Something went wrong” instead of the grid → sign in; Instagram's reels grid has no captions (yt-dlp for those) |
+| Camera changes | FFmpeg `scdet` (threshold 10, every frame) on a 60 s 1080p source: 3.3 s, all 14 on their exact frame. The speaker scan had 10 of 13 late by 1–3 frames and missed a 0.57 s shot |
 
 ## Phases
 
@@ -230,6 +231,7 @@ versionCode from the tag (`v1.2.3` → 10203).
 10. **Hosted generation** — built 2026-10-19 against a stand-in (see *Phase 10 build plan*)
 11. **Ideas canvas and save-from-anywhere** — built 2026-10-21 (see *Phase 11*)
 12. **Viral quality, knowledge base, toolbox** — built except step 3's recorded library (waits on my pick of a source): steps 0–7 done by 2026-10-30 (see *Phase 12*)
+13. **Frame-exact cuts + Kdenlive** — proposed 2026-11-04 (see *Phase 13*)
 
 ## Waiting on me
 
@@ -807,3 +809,62 @@ Accounts (2026-10-27): each page gets its own mascot (not one shared). Once ever
 each account with Claude (name, goal, niche, language, the mascot's look): steps 5 and 6 are built after that.
 
 Open: which SFX source (licence); the personal brand's name; the third clipping page.
+
+## Phase 13 (2026-11-04, proposed): frame-exact cuts, and Kdenlive for fixing a video by hand
+
+Why: my renders "glitch when switching clips" (11 comments on three clips: "bad cut", "weird cut", "bad frame",
+"again"), and fixing anything means going through Claude. Every comment, looked at frame by frame: the renderer isn't
+the cause. Where the framing follows the source's camera change, 1–3 frames of the new camera still wear the old crop
+(a chair, a mic, a hedge flashes past), sometimes up to 0.4 s of it. Measured on the Paribus source (`2e49e9d3`): the
+speaker scan puts camera changes 1–3 frames late (10 of 13: 4.400 for the real 4.333, 53.333 for 53.233; the
+seek-and-read in `exact_cut` misses the frame) and merges a real 0.57 s reaction shot away (its "under half a second"
+rule), which was then shown with the guest's crop for 17 frames. Cuts aren't on frame boundaries, so
+`cutSegment -ss 4.280` starts a segment 1/30 s late and its first frame shows twice. A cut a few frames before a camera
+change takes the next shot's framing early. One clip ran 1.2 s past a camera change on its old crop (Bloom v7, 0:24),
+and one jump cut kept the same framing (Bloom v7, 0:15, `punch` motion). Any editor given the same cut list shows the
+same flashes, so step 1 comes first.
+
+Research (2026-11-04): no paid editor has been open-sourced. Lightworks promised to in 2010 and never did; Resolve is
+closed, and its free version can barely be scripted.
+
+| Option | Verdict |
+|---|---|
+| Kdenlive (KDE, GPL; 26.04, 26.08; Flathub) | **Pick.** The most complete open editor on Linux. Project = MLT XML (text, in/out in frames) that `melt` renders headless with the engine its own monitor uses; OTIO import/export rewritten in C++ (26.04) |
+| Shotcut (MLT, GPL; 26.9) | Fallback: same engine and `melt`, simpler file, weaker trimming and subtitles |
+| OpenShot 4.0, Blender VSE, Olive | Scriptable (Python), but slow or heavy for a quick cut fix; Olive has stalled |
+| WeftCut (MIT), OpenChatCut (AGPL), OpenCut (MIT, mid-rewrite), Palmier Pro (GPL, Mac) | Built for agents (MCP timelines), but one-person, pre-1.0, Mac-first or buggy on export: on the tech radar, look again in 2027 |
+| HyperFrames Studio (HeyGen, embeddable React) | Edits the HyperFrames page (graphics timing), not footage: maybe later, for overlays |
+| Kdenlive MCP servers | 12bijaya (no licence, 0 stars); IO-AtelierTech and d-ogi need a patched Kdenlive: not used. auto-editor (public domain) writes `.kdenlive`/`.mlt`: the reference for ours |
+
+| Topic | Decision (proposed) |
+|---|---|
+| No fork | Install the official Kdenlive (Flatpak, version pinned) and plug in through its project file and `melt`. No clone or build: there's no C toolchain here, and a fork trails every release |
+| Source of truth | The edit (EditSpec, versions) stays the app's. Kdenlive is where I fix things by hand; my save comes back as a version authored `you` |
+| Footage render | `melt` renders picture and clip sound from the same project Kdenlive shows (what I saw is what renders); HyperFrames draws captions and graphics over that one video |
+| Claude | Edits the edit with its studio tools as now (the project is written again from it); never opens Kdenlive; still no publishing or scheduling |
+| Halal | A Kdenlive save with any sound that isn't the clips' own, the SFX library, a voiceover (`tts`/`capture`) or the nasheed is refused |
+| Phone | Kdenlive is desktop only; the phone keeps commenting |
+
+- [ ] Step 1 — Frame-exact cuts (no editor needed). Camera changes come from `scdet` at full frame rate (the scan keeps
+  the faces; cached `speakers-*.json` are redone). Every in/out sits on a source frame. A cut within 0.5 s of a camera
+  change, with nothing said between, moves onto it; otherwise the clip splits there and each side is framed on its own
+  shot (after Claude's edits too). `cutSegment` seeks frame-exact. A jump cut never ends up on the same framing (`punch`
+  included). After every render, `scdet` checks the finished video: a shot under 4 frames, or a camera change that
+  isn't a planned cut, is a flash, and the app moves the cut and renders again by itself. Then the three videos are
+  rendered again and the 11 comments resolved (lesson "No flash frames of another shot", sharpened).
+- [ ] Step 2 — Out to Kdenlive. `studio/kdenlive.ts` writes the edit as a project:
+  - original sources, in/out in frames;
+  - the reframe as a Transform effect (fill, whole, zoom, motion as keyframes), and the LUT;
+  - clip sound with its fades, b-roll on V2, SFX and the nasheed;
+  - my comments as markers;
+  - captions and graphics as a locked, transparent overlay track (HyperFrames with alpha), so I see the finished video.
+
+  "Edit in Kdenlive" sits on the edit (desktop). Checked by `melt` loading and rendering the project, and by Kdenlive
+  opening it.
+- [ ] Step 3 — `melt` renders the footage (the laptop, or a home PC with `render`: `setup-worker.sh` installs the same
+  build), with HyperFrames on top. The three videos come out frame for frame as Kdenlive shows them.
+- [ ] Step 4 — Back from Kdenlive. The app watches the project, and my save becomes a version: cuts, order, reframe,
+  volume, clips removed or added. Captions and graphics follow the words. Anything it can't map is listed, never
+  dropped silently. A save over a newer Claude version asks which to keep.
+- Later: graphics by hand (HyperFrames Studio or Kdenlive titles), subtitle edits ↔ caption text, OTIO for other
+  editors.
