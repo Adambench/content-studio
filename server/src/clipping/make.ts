@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { and, eq, inArray } from 'drizzle-orm';
 import { MOMENT_KIND_LABELS, clock, type BurnedIn, type FramesCheck, type MusicCheck } from '../../../shared/clipping';
-import { TIGHTEN_PRESETS, clipStarts, editDuration, normalizeEdit, smoothJumps, speechRangesFromTranscript, tightenClips, type EditClip } from '../../../shared/edit';
+import { TIGHTEN_PRESETS, clipStarts, editDuration, fillerRangesFromTranscript, normalizeEdit, smoothJumps, speechRangesFromTranscript, tightenClips, type EditClip } from '../../../shared/edit';
 import { emptyDraft, normalizeDraft, type Transcript } from '../../../shared/types';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
@@ -29,6 +29,7 @@ import { createPiece, getBranch, getPiece, getWorkspace, saveVersion } from '../
 import { applyLook, lookTag, pickLook } from '../studio/clip-looks';
 import { isLectureCampaign, speakerTag } from '../islamic/lectures';
 import { sentenceBounds } from './bounds';
+import { addListenerCutaway } from './cutaway';
 import { fillHook, whoTag } from './framing';
 import { createEdit, saveEditVersion, startingSpec } from '../studio/edits';
 import { refineWords, snapCuts, voiceEnvelope } from '../studio/clean-cuts';
@@ -401,7 +402,8 @@ export async function makeClip({ momentId }: { momentId: string }) {
       base.focusY = main.y;
     }
     if (whole) base.fit = 'whole';
-    let clips = tightenClips([base], { [media.id]: speechRangesFromTranscript(transcript, true) }, TIGHTEN_PRESETS.tight);
+    // Every filler out, only dead air cut: cuts the ear doesn't hear (each lands in a real pause, below).
+    let clips = tightenClips([base], { [media.id]: speechRangesFromTranscript(transcript, true) }, TIGHTEN_PRESETS.clip, { [media.id]: fillerRangesFromTranscript(transcript) });
     if (!clips.length) clips = [base];
     clips = snapCuts(clips, media.id, envelope, words);
     // No frames of another shot at a cut (the source cuts just before or after it).
@@ -440,7 +442,18 @@ export async function makeClip({ momentId }: { momentId: string }) {
     const second = clipStarts(next).find((t) => t >= after - 0.01 && t <= 6) ?? after;
     const who = !whole && !speaker && speakers && m.speaker ? whoTag(next, media.id, speakers, m.speaker, clipInfo, 0.65, second) : null;
     if (who) next.overlays.push(who);
-    saveEditVersion(edit.id, { author: 'claude', message: `${keep ? 'Made again' : 'Clip'} of ${at}: tightened, hook card, captions${who ? `, ${m.speaker?.name} named` : ''}${lookTag(look)}`, spec: next });
+    // Once in the clip, who he's talking to: the source's own shot of them listening, over his voice (when it has one).
+    step('Looking for a shot of who’s listening');
+    const cutaway = whole
+      ? null
+      : await addListenerCutaway({ spec: next, sourceFile: file, at: { start: m.start, end: m.end }, transcript: await readSourceTranscript(s), workspaceId: ws.id, pieceId, hookEnd, dir: join(dir, 'cutaway') }).catch(
+          (err: Error) => (console.warn(`[clip] cutaway for ${momentId}: ${err.message}`), null),
+        );
+    saveEditVersion(edit.id, {
+      author: 'claude',
+      message: `${keep ? 'Made again' : 'Clip'} of ${at}: tightened, hook card, captions${who ? `, ${m.speaker?.name} named` : ''}${cutaway ? ', a cutaway to who’s listening' : ''}${lookTag(look)}`,
+      spec: cutaway?.spec ?? next,
+    });
 
     // 8. Checked against the lessons from my comments (a broken one: Claude fixes it first), then rendered; finishing
     // moves it to Review.

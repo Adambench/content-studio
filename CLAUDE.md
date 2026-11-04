@@ -58,6 +58,8 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   folders by a hook; claude.ai connectors off. Background prompts don't load skills:
   paste playbook files with `playbook(...)`, first in the system prompt.
 - Scenes (`shared/scene.ts`) are data: never let a scene carry script, `url()` or `random()`.
+- **Only Instagram for now** (2026-11-03): `ACTIVE_PLATFORMS` (`shared/publish.ts`) hides TikTok, YouTube and X in the UI
+  and review; their code stays. Campaign rules naming another platform don't apply to an Instagram clip (`ruleScope`).
 - Publishing adapters keep resume state in `posts.remote` via `ctx.save` so retries never post twice. Tokens stay
   server-side (`publicAccount` strips them). `CS_PLATFORM_API=http://127.0.0.1:9911` routes platform calls to a stand-in.
 - Signed-in windows (`readPage`, `lib/desktop.ts`): one read at a time, ≥ 5 s apart, daily cap, never click/post/submit.

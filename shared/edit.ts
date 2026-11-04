@@ -1046,9 +1046,12 @@ export type TightenOptions = {
   /** Alternate a slight zoom between consecutive cuts of the same shot, so jump cuts feel intentional. */
   punchIn: boolean;
 };
-export const TIGHTEN_PRESETS: Record<'natural' | 'tight', TightenOptions> = {
+export const TIGHTEN_PRESETS: Record<'natural' | 'tight' | 'clip', TightenOptions> = {
   natural: { maxPause: 0.7, removeFillers: false, punchIn: false },
   tight: { maxPause: 0.35, removeFillers: true, punchIn: true },
+  // A clip from a podcast: every "um" and "uh" out, but the speaker's own rhythm kept: only dead air (over 0.6 s) is
+  // cut, down to a breath. Cutting every pause over 0.35 s made a cut every 3 s and speech that never breathes.
+  clip: { maxPause: 0.6, removeFillers: true, punchIn: true },
 };
 
 /** Speech ranges in a source (seconds), from transcript words. Fillers count as silence when asked. */
@@ -1059,11 +1062,20 @@ export function speechRangesFromTranscript(t: Transcript, removeFillers: boolean
     .map((w) => [w.start, w.end] as [number, number]);
 }
 
+/** Where the filler words ("um", "uh") are in a source (seconds). */
+export function fillerRangesFromTranscript(t: Transcript): [number, number][] {
+  return t.segments
+    .flatMap((s) => s.words ?? [])
+    .filter((w) => isFiller(w.word))
+    .map((w) => [w.start, w.end] as [number, number]);
+}
+
 /**
  * Split clips around the pauses between speech. `speech` maps each media id to its speech ranges in source time
- * (null = unknown, the clip is kept as it is). Each kept piece gets a little air before and after.
+ * (null = unknown, the clip is kept as it is). Each kept piece gets a little air before and after. `fillers` (when
+ * fillers are removed): a gap with a filler in it is always cut, however short, and the air never reaches into it.
  */
-export function tightenClips(clips: EditClip[], speech: Record<string, [number, number][] | null>, opts: TightenOptions): EditClip[] {
+export function tightenClips(clips: EditClip[], speech: Record<string, [number, number][] | null>, opts: TightenOptions, fillers: Record<string, [number, number][]> = {}): EditClip[] {
   const lead = 0.08;
   const tail = 0.14;
   const out: EditClip[] = [];
@@ -1075,14 +1087,22 @@ export function tightenClips(clips: EditClip[], speech: Record<string, [number, 
     }
     const inside = ranges.filter(([s, e]) => e > clip.in && s < clip.out).sort((a, b) => a[0] - b[0]);
     if (!inside.length) continue; // nothing said in this clip: drop it
+    const ums = opts.removeFillers ? (fillers[clip.mediaId] ?? []) : [];
     const keep: [number, number][] = [];
+    let lastEnd = -Infinity;
     for (const [s, e] of inside) {
-      const start = Math.max(clip.in, s - lead);
+      // The filler between the last word kept and this one, if any.
+      const um = ums.filter(([a, b]) => (a + b) / 2 > lastEnd && (a + b) / 2 < s);
+      const start = Math.max(clip.in, s - lead, ...um.map(([, b]) => b));
       const end = Math.min(clip.out, e + tail);
       const last = keep[keep.length - 1];
-      // Padded pieces closer than the allowed pause (or overlapping) stay one piece.
-      if (last && start - last[1] <= Math.max(0, opts.maxPause - lead - tail)) last[1] = Math.max(last[1], end);
-      else keep.push([start, end]);
+      // Padded pieces closer than the allowed pause (or overlapping) stay one piece, unless a filler sits between.
+      if (last && !um.length && start - last[1] <= Math.max(0, opts.maxPause - lead - tail)) last[1] = Math.max(last[1], end);
+      else {
+        if (last && um.length) last[1] = Math.min(last[1], Math.max(lastEnd, um[0][0]));
+        keep.push([start, end]);
+      }
+      lastEnd = e;
     }
     keep
       .filter(([s, e]) => e - s >= 0.2)

@@ -1,4 +1,4 @@
-import { editDuration, normalizeEdit, smoothJumps, speechRangesFromTranscript, tightenClips, type TightenOptions } from '../../../shared/edit';
+import { editDuration, fillerRangesFromTranscript, normalizeEdit, smoothJumps, speechRangesFromTranscript, tightenClips, type TightenOptions } from '../../../shared/edit';
 import { detectSpeech } from '../lib/ffmpeg';
 import { badRequest } from '../lib/http';
 import { mediaPath } from '../services/media';
@@ -18,6 +18,7 @@ export async function tightenEdit(editId: string, opts: TightenOptions, by: Auth
   const rows = specMedia(spec);
   const transcripts = await specTranscripts(spec, rows);
   const speech: Record<string, [number, number][] | null> = {};
+  const fillers: Record<string, [number, number][]> = {};
   const voices = new Map<string, { env: Envelope; words: TranscriptWord[] }>();
   for (const id of new Set(spec.clips.map((c) => c.mediaId))) {
     const m = rows.find((r) => r.id === id);
@@ -29,9 +30,10 @@ export async function tightenEdit(editId: string, opts: TightenOptions, by: Auth
       const fitted = env ? refineWords(t, env) : t;
       if (env) voices.set(id, { env, words: fitted.segments.flatMap((s) => s.words ?? []) });
       speech[id] = speechRangesFromTranscript(fitted, opts.removeFillers);
+      fillers[id] = fillerRangesFromTranscript(fitted);
     } else speech[id] = await detectSpeech(mediaPath(m), 0, (m.durationMs ?? 0) / 1000 || 3600).catch(() => null);
   }
-  let clips = tightenClips(spec.clips, speech, opts);
+  let clips = tightenClips(spec.clips, speech, opts, fillers);
   for (const [id, v] of voices) clips = snapCuts(clips, id, v.env, v.words);
   clips = smoothJumps(clips);
   if (!clips.length) throw badRequest('Couldn’t find any speech to keep, so nothing was cut.');
