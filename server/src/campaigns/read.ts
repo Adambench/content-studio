@@ -127,10 +127,11 @@ const SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['text', 'kind', 'check'],
+        required: ['text', 'kind', 'check', 'platforms'],
         properties: {
           text: { type: 'string' },
           kind: { type: 'string', enum: RULE_KINDS },
+          platforms: { type: 'array', items: { type: 'string', enum: CAMPAIGN_PLATFORMS }, description: 'The platforms the rule is only about ("tag @a on YouTube": youtube); empty when it applies everywhere' },
           check: {
             anyOf: [
               { type: 'null' },
@@ -174,7 +175,8 @@ function cleanChecklist(items: RuleItem[]): RuleItem[] {
       let check = r.check && CHECK_TYPES.includes(r.check.type) ? r.check : null;
       if (check && (check.type === 'maxSeconds' || check.type === 'minSeconds')) check = num(Number(check.value)) ? { type: check.type, value: Number(check.value) } : null;
       if (check && check.type === 'platform' && !CAMPAIGN_PLATFORMS.includes(String(check.value) as CampaignPlatform)) check = null;
-      return { text: r.text.trim().slice(0, 300), kind: r.kind, check };
+      const platforms = [...new Set((r.platforms ?? []).filter((p) => CAMPAIGN_PLATFORMS.includes(p)))];
+      return { text: r.text.trim().slice(0, 300), kind: r.kind, check, ...(platforms.length ? { platforms } : {}) };
     })
     .slice(0, 40);
 }

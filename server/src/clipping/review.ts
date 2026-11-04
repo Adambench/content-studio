@@ -5,7 +5,7 @@ import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { checkRules, type ClipFacts, type ReviewClip } from '../../../shared/clipping';
 import type { ApprovePlan } from '../../../shared/dashboard';
 import { normalizeEdit } from '../../../shared/edit';
-import { PUBLISH_PLATFORMS, type PublishPlatform, type TikTokPrivacy } from '../../../shared/publish';
+import { isActivePlatform, PUBLISH_PLATFORMS, type PublishPlatform, type TikTokPrivacy } from '../../../shared/publish';
 import { REVIEW_STAGE, normalizeDraft, type DraftContent, type WorkspaceColor } from '../../../shared/types';
 import { getCampaignRow, getSource, toMoment } from '../campaigns/campaigns';
 import { db, now, schema } from '../db';
@@ -46,7 +46,7 @@ function buildClip(piece: typeof schema.pieces.$inferSelect): ReviewClip {
 
   // Where it can go: the campaign's platforms (its "only on" rules first), else anywhere the page posts.
   const only = campaign?.checklist.flatMap((r) => (r.check?.type === 'platform' ? [String(r.check.value)] : [])) ?? [];
-  const allowed = (only.length ? only : campaign?.platforms.length ? campaign.platforms : PUBLISH_PLATFORMS).filter((p): p is PublishPlatform => (PUBLISH_PLATFORMS as readonly string[]).includes(p));
+  const allowed = (only.length ? only : campaign?.platforms.length ? campaign.platforms : PUBLISH_PLATFORMS).filter((p): p is PublishPlatform => isActivePlatform(p));
   const accounts = listAccounts(ws.id).filter((a) => allowed.includes(a.platform));
   const targets = accounts.length ? [...new Set(accounts.map((a) => a.platform))] : allowed;
   const copy = Object.fromEntries(targets.map((p) => [p, platformText(draft, p)])) as Partial<Record<PublishPlatform, string>>;

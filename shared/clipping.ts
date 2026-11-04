@@ -1,7 +1,7 @@
 // Clipping: moments found in a campaign's source videos, the clips made from them and their review. Shared by the
 // server and the web app.
 
-import type { CampaignPlatform, HalalVerdict, RuleItem } from './campaigns';
+import { ruleApplies, ruleScope, type CampaignPlatform, type HalalVerdict, type RuleItem } from './campaigns';
 import type { PublishPlatform } from './publish';
 import type { WorkspaceColor } from './types';
 
@@ -152,7 +152,8 @@ const has = (text: string, value: string) => text.toLowerCase().includes(value.t
 export function checkRules(checklist: RuleItem[], clip: ClipFacts): RuleResult[] {
   // Several platform rules mean "only these".
   const allowed = new Set(checklist.flatMap((r) => (r.check?.type === 'platform' ? [String(r.check.value).trim()] : [])));
-  return checklist.map((rule): RuleResult => {
+  // A rule about another platform ("tag @a on YouTube") isn't shown or checked for a clip that doesn't go there.
+  return checklist.filter((rule) => ruleApplies(rule, clip.platforms)).map((rule): RuleResult => {
     const c = rule.check;
     if (!c) return { rule, status: 'manual', detail: '' };
     const n = Number(c.value);
@@ -169,7 +170,8 @@ export function checkRules(checklist: RuleItem[], clip: ClipFacts): RuleResult[]
       case 'text': {
         const want = c.type === 'mention' ? `@${value.replace(/^@/, '')}` : c.type === 'hashtag' ? `#${value.replace(/^#/, '')}` : value;
         if (!clip.platforms.length) return { rule, status: 'manual', detail: `No account to post on yet: put ${want} in its captions` };
-        const missing = clip.platforms.filter((p) => !has(clip.copy[p] ?? '', want));
+        const scope = ruleScope(rule);
+        const missing = clip.platforms.filter((p) => (!scope.length || scope.includes(p)) && !has(clip.copy[p] ?? '', want));
         return missing.length ? { rule, status: 'fail', detail: `${want} missing on ${missing.join(', ')}` } : { rule, status: 'pass', detail: `${want} in every caption` };
       }
       case 'platform': {

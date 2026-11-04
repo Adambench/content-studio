@@ -2,6 +2,7 @@ import { BadgeDollarSign, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { isMarket, MARKET_INFO, type Campaign, type CampaignPlatform } from '@shared/campaigns';
+import { isActivePlatform } from '@shared/publish';
 import { AddCampaignDialog } from '@/components/campaigns/AddCampaignDialog';
 import { BudgetBar, CampaignPicture, deadlineText, HalalBadge, PageChips, rateText, StatusBadge } from '@/components/campaigns/common';
 import { PageHeader } from '@/components/PageHeader';
@@ -17,7 +18,7 @@ export function PlatformIcons({ platforms }: { platforms: CampaignPlatform[] }) 
   return (
     <span className="flex items-center gap-1">
       {platforms
-        .filter((p): p is Exclude<CampaignPlatform, 'x'> => p !== 'x')
+        .filter((p): p is Exclude<CampaignPlatform, 'x'> => isActivePlatform(p))
         .map((p) => (
           <PlatformIcon key={p} platform={p} className="size-3.5" />
         ))}

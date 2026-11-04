@@ -1,7 +1,7 @@
 import { inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { CHECK_TYPES, isMarket, MARKET_INFO, MARKETS, parseCampaignLink, RULE_KINDS, SUBMISSION_STATUSES } from '../../../shared/campaigns';
+import { CAMPAIGN_PLATFORMS, CHECK_TYPES, isMarket, MARKET_INFO, MARKETS, parseCampaignLink, RULE_KINDS, SUBMISSION_STATUSES } from '../../../shared/campaigns';
 import { db, newId, schema } from '../db';
 import { badRequest } from '../lib/http';
 import { enqueue, hasPendingJob } from '../jobs/queue';
@@ -18,6 +18,7 @@ const ruleSchema = z.object({
   text: z.string().trim().min(1).max(300),
   kind: z.enum(RULE_KINDS),
   check: z.object({ type: z.enum(CHECK_TYPES), value: z.union([z.string().max(200), z.number()]) }).nullable(),
+  platforms: z.array(z.enum(CAMPAIGN_PLATFORMS)).max(4).optional(),
   by: z.literal('you').optional(),
 });
 

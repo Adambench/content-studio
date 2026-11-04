@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { CAMPAIGN_PLATFORM_LABELS, isMarket, MARKET_INFO, money, type CampaignDetail } from '@shared/campaigns';
+import { isActivePlatform } from '@shared/publish';
 import { BudgetBar, CampaignPicture, deadlineText, HalalBadge, PageChips, PagePicker, rateText, StatusBadge } from '@/components/campaigns/common';
 import { RulesCard } from '@/components/campaigns/RulesCard';
 import { MomentsCard } from '@/components/campaigns/MomentsCard';
@@ -74,9 +75,11 @@ function ConfirmCard({ c, workspaces }: { c: CampaignDetail; workspaces: Workspa
   const [busy, setBusy] = useState(false);
   const rejected = c.halalVerdict === 'reject';
   const market = isMarket(c.origin) ? MARKET_INFO[c.origin] : null;
-  const maxPay = Math.max(0, ...c.payouts.map((p) => p.maxPayout ?? 0));
+  // Only the platforms in use show (Instagram for now).
+  const payouts = c.payouts.filter((p) => isActivePlatform(p.platform));
+  const maxPay = Math.max(0, ...payouts.map((p) => p.maxPayout ?? 0));
   const pay = [rateText(c.ratePer1k), maxPay ? `up to ${money(maxPay)} a clip` : null].filter(Boolean).join(' · ');
-  const meta = [c.brand, market?.label, c.platforms.map((p) => CAMPAIGN_PLATFORM_LABELS[p]).join(', ')].filter(Boolean).join(' · ');
+  const meta = [c.brand, market?.label, c.platforms.filter(isActivePlatform).map((p) => CAMPAIGN_PLATFORM_LABELS[p]).join(', ')].filter(Boolean).join(' · ');
 
   async function confirm() {
     setBusy(true);
@@ -145,6 +148,8 @@ function OverviewCard({ c, workspaces }: { c: CampaignDetail; workspaces: Worksp
   useEffect(() => setPages(c.pageIds), [c.pageIds]);
   useEffect(() => setDeadline(c.deadline ? new Date(c.deadline).toLocaleDateString('sv') : ''), [c.deadline]);
   const live = c.status === 'active' || c.status === 'paused' || c.status === 'ended';
+  // Only the platforms in use show (Instagram for now).
+  const payouts = c.payouts.filter((p) => isActivePlatform(p.platform));
 
   async function save(body: Record<string, unknown>) {
     try {
@@ -164,7 +169,7 @@ function OverviewCard({ c, workspaces }: { c: CampaignDetail; workspaces: Worksp
       </CardHeader>
       <CardContent className="space-y-5">
         {c.status !== 'to_confirm' && <CampaignPicture link={c.link} className="max-w-xs" />}
-        {c.payouts.length > 0 && (
+        {payouts.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted-foreground">
@@ -176,7 +181,7 @@ function OverviewCard({ c, workspaces }: { c: CampaignDetail; workspaces: Worksp
                 </tr>
               </thead>
               <tbody className="tabular-nums">
-                {c.payouts.map((p) => (
+                {payouts.map((p) => (
                   <tr key={p.platform} className="border-t">
                     <td className="py-1.5 pr-3">
                       <span className="inline-flex items-center gap-1.5">

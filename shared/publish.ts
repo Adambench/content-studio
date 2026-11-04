@@ -4,6 +4,13 @@ import type { DraftContent } from './types';
 export const PUBLISH_PLATFORMS = ['tiktok', 'instagram', 'youtube'] as const;
 export type PublishPlatform = (typeof PUBLISH_PLATFORMS)[number];
 
+/**
+ * The platforms in use. Only Instagram for now (2026-11-03): TikTok, YouTube and X stay in the code but are hidden
+ * everywhere (accounts, settings, captions, review, campaigns) and never posted to. Add them back here to bring them back.
+ */
+export const ACTIVE_PLATFORMS: readonly PublishPlatform[] = ['instagram'];
+export const isActivePlatform = (p: string): boolean => (ACTIVE_PLATFORMS as readonly string[]).includes(p);
+
 export const PUBLISH_PLATFORM_LABELS: Record<PublishPlatform, string> = {
   tiktok: 'TikTok',
   instagram: 'Instagram',

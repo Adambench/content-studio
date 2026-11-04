@@ -3,7 +3,7 @@ import { AlertCircle, CalendarClock, Info, ListOrdered, Send, TriangleAlert } fr
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
-import { PUBLISH_LIMITS, TIKTOK_PRIVACY_LABELS, type PostCopy, type PostFormat, type PostOptions, type PublishPlatform } from '@shared/publish';
+import { isActivePlatform, PUBLISH_LIMITS, TIKTOK_PRIVACY_LABELS, type PostCopy, type PostFormat, type PostOptions, type PublishPlatform } from '@shared/publish';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -84,7 +84,8 @@ function Schedule({ wid, pieceId, initialAt, onDone }: { wid: string; pieceId: s
 
   const selected = (mediaIds ?? []).map((id) => choices.find((m) => m.id === id)).filter((m): m is Media => !!m);
   const format: PostFormat = selected[0]?.kind === 'image' ? 'photo' : 'video';
-  const all = accounts.data ?? [];
+  // Only accounts on the platforms in use (Instagram for now).
+  const all = (accounts.data ?? []).filter((a) => isActivePlatform(a.platform));
   const usable = (a: Account) => a.status === 'connected' && !(format === 'photo' && a.platform === 'youtube');
 
   // Defaults once things load: the newest finished video, every account that can take it.
@@ -234,7 +235,7 @@ function Schedule({ wid, pieceId, initialAt, onDone }: { wid: string; pieceId: s
             <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
               No accounts connected to this workspace yet.{' '}
               <Link to={`/w/${wid}/accounts`} className="text-brand underline-offset-4 hover:underline" onClick={onDone}>
-                Connect TikTok, Instagram or YouTube
+                Connect an account
               </Link>
             </p>
           )}

@@ -1,7 +1,7 @@
 import { CheckCircle2, CircleAlert, Copy, ExternalLink, Search, Send, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { CATCH_UP_CHOICES, PUBLISH_PLATFORMS, type PublishPlatform } from '@shared/publish';
+import { ACTIVE_PLATFORMS, CATCH_UP_CHOICES, type PublishPlatform } from '@shared/publish';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -72,7 +72,7 @@ export function PublishingCard() {
         {s ? (
           <>
             <PublicAddress setup={s} />
-            {PUBLISH_PLATFORMS.map((p) => (
+            {ACTIVE_PLATFORMS.map((p) => (
               <PlatformApp key={p} platform={p} setup={s} />
             ))}
             <CatchUp setup={s} />

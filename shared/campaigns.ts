@@ -82,7 +82,32 @@ export const RULE_KIND_LABELS: Record<RuleKind, string> = { required: 'Must', fo
 export const CHECK_TYPES = ['maxSeconds', 'minSeconds', 'mention', 'hashtag', 'text', 'platform', 'watermark'] as const;
 export type CheckType = (typeof CHECK_TYPES)[number];
 export type RuleCheck = { type: CheckType; value: string | number };
-export type RuleItem = { text: string; kind: RuleKind; check: RuleCheck | null; by?: 'you' };
+/** `platforms`: the platforms the rule is about ("tag @x on YouTube"); none = every platform. */
+export type RuleItem = { text: string; kind: RuleKind; check: RuleCheck | null; platforms?: CampaignPlatform[]; by?: 'you' };
+
+/** Platform names a rule may be worded with ("on YouTube", "IG", "Reels"). */
+const PLATFORM_WORDS: [CampaignPlatform, RegExp][] = [
+  ['youtube', /\b(youtube|yt)\b/i],
+  ['instagram', /\b(instagram|insta|ig|reels?)\b/i],
+  ['tiktok', /\b(tiktok|tik tok|tt)\b/i],
+  ['x', /\b(twitter|on x)\b/i],
+];
+
+/**
+ * The platforms a rule is about: the ones it was read with, else the ones its words name ("Must tag @a on Youtube"),
+ * else none (it applies everywhere). A rule naming the platforms a clip may go to (`platform` check) is about all.
+ */
+export function ruleScope(rule: RuleItem): CampaignPlatform[] {
+  if (rule.check?.type === 'platform') return [];
+  if (rule.platforms?.length) return rule.platforms;
+  return PLATFORM_WORDS.filter(([, re]) => re.test(rule.text)).map(([p]) => p);
+}
+
+/** Whether a rule applies to a clip going to `platforms` (none known yet: every rule does). */
+export const ruleApplies = (rule: RuleItem, platforms: readonly string[]) => {
+  const scope = ruleScope(rule);
+  return !scope.length || !platforms.length || scope.some((p) => platforms.includes(p));
+};
 
 /** Where a source video comes from. `link` is any other address (a direct file). */
 export const SOURCE_KINDS = ['youtube', 'twitch', 'kick', 'drive', 'file', 'link'] as const;

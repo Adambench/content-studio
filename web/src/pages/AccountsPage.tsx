@@ -2,7 +2,7 @@ import { Plus, RefreshCw, Settings, Unplug, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
-import { PUBLISH_PLATFORMS, type PublishPlatform, type QueueSlot } from '@shared/publish';
+import { ACTIVE_PLATFORMS, type PublishPlatform, type QueueSlot } from '@shared/publish';
 import { PageHeader } from '@/components/PageHeader';
 import { AccountAvatar, accountName, DAY_NAMES, firstDayOfWeek, PlatformIcon, platformLabel } from '@/components/publish/common';
 import { useWorkspaceContext } from '@/components/WorkspaceLayout';
@@ -40,7 +40,7 @@ export function AccountsPage() {
   const accounts = useAccounts(workspace.id);
   const setup = usePublishingSetup();
   const [busy, setBusy] = useState<PublishPlatform | null>(null);
-  const configured = PUBLISH_PLATFORMS.filter((p) => setup.data?.platforms[p].configured);
+  const configured = ACTIVE_PLATFORMS.filter((p) => setup.data?.platforms[p].configured);
 
   async function connect(platform: PublishPlatform) {
     setBusy(platform);
@@ -58,10 +58,10 @@ export function AccountsPage() {
       <PageHeader title="Accounts" description={`Where ${workspace.name} posts, and when`} />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-6">
-          {setup.data && configured.length < PUBLISH_PLATFORMS.length && (
+          {setup.data && configured.length < ACTIVE_PLATFORMS.length && (
             <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand/30 bg-brand-soft px-4 py-3 text-sm">
               <span className="mr-auto">
-                {configured.length ? `Add your ${PUBLISH_PLATFORMS.filter((p) => !configured.includes(p)).map(platformLabel).join(' and ')} developer app` : 'First, add your developer apps for TikTok, Instagram and YouTube'} in Settings → Publishing (one-time setup).
+                {configured.length ? `Add your ${ACTIVE_PLATFORMS.filter((p) => !configured.includes(p)).map(platformLabel).join(' and ')} developer app` : `First, add your ${ACTIVE_PLATFORMS.map(platformLabel).join(' and ')} developer app`} in Settings → Publishing (one-time setup).
               </span>
               <Button size="sm" variant="secondary" asChild>
                 <Link to="/settings#publishing">
@@ -77,7 +77,7 @@ export function AccountsPage() {
               <CardDescription>You sign in on the platform’s own page; Content Studio never sees your password. Connect as many accounts as you like.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              {PUBLISH_PLATFORMS.map((p) => (
+              {ACTIVE_PLATFORMS.map((p) => (
                 <Button key={p} variant="outline" disabled={!setup.data?.platforms[p].configured || !!busy} onClick={() => connect(p)}>
                   {busy === p ? <Spinner /> : <PlatformIcon platform={p} />} {platformLabel(p)}
                 </Button>

@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import type { ReviewClip } from '@shared/clipping';
 import { LIMITS, PLATFORM_LABELS, REVIEW_STAGE, type DraftContent, type Platform } from '@shared/types';
+import { ACTIVE_PLATFORMS, isActivePlatform } from '@shared/publish';
 import { MediaCard } from '@/components/MediaCard';
 import { MediaDialog } from '@/components/MediaDialog';
 import { DirectionPanel } from '@/components/package/DirectionPanel';
@@ -493,9 +494,10 @@ function BranchEditor({ piece, branch }: { piece: PieceDetail; branch: Branch })
 
       <section id="platform-copy" className="scroll-mt-4 space-y-2" aria-label="Captions">
         <h2 className="text-sm font-medium">Captions</h2>
-        <Tabs defaultValue="tiktok">
-          <TabsList className="w-full justify-start overflow-x-auto [scrollbar-width:none]">
-            {(['tiktok', 'instagram', 'youtube', 'x'] as const).map((p) => (
+        <Tabs defaultValue={ACTIVE_PLATFORMS[0]}>
+          {/* Only the platforms in use (Instagram for now): the others' tabs and fields are hidden. */}
+          <TabsList className={cn('w-full justify-start overflow-x-auto [scrollbar-width:none]', ACTIVE_PLATFORMS.length < 2 && 'hidden')}>
+            {(['tiktok', 'instagram', 'youtube', 'x'] as const).filter(isActivePlatform).map((p) => (
               <TabsTrigger key={p} value={p} className="flex-none">
                 {PLATFORM_LABELS[p]}
               </TabsTrigger>
