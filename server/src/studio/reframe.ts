@@ -252,6 +252,17 @@ export function applyFocusSpans(clips: EditClip[], mediaId: string, spans: Focus
   return out;
 }
 
+/** Clips of one video with stretches of it taken out (seconds of the video): what's left either side stays. */
+export function withoutRanges(clips: EditClip[], mediaId: string, ranges: { start: number; end: number }[]): EditClip[] {
+  if (!ranges.length) return clips;
+  return clips.flatMap((c) => {
+    if (c.mediaId !== mediaId) return [c];
+    let parts: [number, number][] = [[c.in, c.out]];
+    for (const r of ranges) parts = parts.flatMap(([a, b]) => (r.end <= a || r.start >= b ? [[a, b] as [number, number]] : ([[a, Math.min(b, r.start)], [Math.max(a, r.end), b]] as [number, number][]).filter(([x, y]) => y - x >= 0.3)));
+    return parts.map(([a, b], i) => ({ ...c, id: i ? newEditId() : c.id, in: r3(a), out: r3(b), ...(i && { transition: null }) }));
+  });
+}
+
 /**
  * A clip that runs across a cut in the source (made longer by hand) split there, the part after it framed on its own
  * shot: one framing held through a camera change lands on the wrong spot. The part before keeps its framing.

@@ -107,6 +107,7 @@ orange. No watermark yet (clipping campaigns often forbid one). The mascot SVGs 
 | SFX | Allowed: whooshes, pops, clicks, impacts, dings, risers; nothing tonal-melodic |
 | Source audio | Music in source footage removed (Demucs voice stem) or the clip dropped |
 | Content | Music promotions hidden; nothing haram promoted (gambling, alcohol/drugs/smoking, dating, immodest imagery, interest-based finance). Briefs screened when added, moments by transcript and frames |
+| Women on camera | Never (2026-11-04), however dressed. Podcast and interview clips show only the show's own cameras: the guest's inserted photos, home videos and B-roll are cut out (the frame check names those shots, `leftOut`) |
 
 ### Clipping (2026-10-15)
 

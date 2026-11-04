@@ -8,7 +8,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { and, eq, inArray } from 'drizzle-orm';
-import { MOMENT_KIND_LABELS, clock, type BurnedIn, type FramesCheck, type MusicCheck } from '../../../shared/clipping';
+import { MOMENT_KIND_LABELS, clock, type BurnedIn, type FramesCheck, type LeftOut, type MusicCheck } from '../../../shared/clipping';
 import { TIGHTEN_PRESETS, clipStarts, editDuration, fillerRangesFromTranscript, normalizeEdit, smoothJumps, speechRangesFromTranscript, tightenClips, type EditClip } from '../../../shared/edit';
 import { emptyDraft, normalizeDraft, type Transcript } from '../../../shared/types';
 import { askStructured } from '../claude/oneshot';
@@ -33,7 +33,7 @@ import { addListenerCutaway } from './cutaway';
 import { fillHook, whoTag } from './framing';
 import { createEdit, saveEditVersion, startingSpec } from '../studio/edits';
 import { refineWords, snapCuts, voiceEnvelope } from '../studio/clean-cuts';
-import { applyFocusSpans, focusSpans, scanSpeakers, trimSlivers, type SpeakerScan } from '../studio/reframe';
+import { applyFocusSpans, focusSpans, scanSpeakers, trimSlivers, withoutRanges, type SpeakerScan } from '../studio/reframe';
 import { cancelRender, queueRender, renderingHere } from '../studio/render';
 import { getMoment, momentExists, updateMoment } from './moments';
 import { runTool } from '../compute/run';
@@ -101,10 +101,14 @@ export async function musicCheck(voice: string, rest: string, words: { start: nu
 const FRAMES_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['verdict', 'reasons', 'burnedIn'],
+  required: ['verdict', 'reasons', 'leaveOut', 'burnedIn'],
   properties: {
     verdict: { type: 'string', enum: ['ok', 'flag', 'reject'] },
     reasons: { type: 'array', items: { type: 'string' } },
+    leaveOut: {
+      type: 'array',
+      items: { type: 'object', additionalProperties: false, required: ['frame', 'why'], properties: { frame: { type: 'integer' }, why: { type: 'string' } } },
+    },
     burnedIn: {
       type: 'array',
       items: {
@@ -130,15 +134,18 @@ export async function framesCheck(
   shown?: (t: number) => { x0: number; x1: number } | null,
 ): Promise<FramesCheck> {
   const inside = (shots ?? []).map((sh) => ({ a: Math.max(range.start, sh.start), b: Math.min(range.end, sh.end) })).filter((sh) => sh.b - sh.a >= 0.08);
-  let times = inside.length ? inside.map((sh) => (sh.a + sh.b) / 2) : [0.15, 0.5, 0.85].map((f) => range.start + f * (range.end - range.start));
-  if (times.length > 12) times = Array.from({ length: 12 }, (_, i) => times[Math.round((i * (times.length - 1)) / 11)]);
-  const files = await extractFrames(video, times, (i) => join(dir, `frame${i}.jpg`), times.length > 6 ? 512 : 768, shown ? times.map(shown) : undefined);
+  // One frame per shot (up to 16), each standing for its shot; without a shot scan, three across the clip.
+  let picked = inside.length ? inside : [0.15, 0.5, 0.85].map((f) => ({ a: range.start + (f - 0.15) * (range.end - range.start), b: range.start + (f + 0.15) * (range.end - range.start) }));
+  if (picked.length > 16) picked = Array.from({ length: 16 }, (_, i) => picked[Math.round((i * (picked.length - 1)) / 15)]);
+  const times = picked.map((sh) => (sh.a + sh.b) / 2);
+  const files = await extractFrames(video, times, (i) => join(dir, `frame${i}.jpg`), times.length > 6 ? 448 : 768, shown ? times.map(shown) : undefined);
   const images = await Promise.all(files.map(async (f) => ({ data: (await readFile(f)).toString('base64'), mediaType: 'image/jpeg' as const })));
-  const out = await askStructured<FramesCheck>({
+  const out = await askStructured<FramesCheck & { leaveOut?: { frame: number; why: string }[] }>({
     task: 'clips',
     system: [
       playbook('halal'),
       'You look at frames of a short clip cut from a podcast, stream or interview (one from each of its shots, in order), for a creator who keeps every post halal by the rules above. Judge only what is visible in the frames, every one of them, the background too (a drink on the table, a bottle on a shelf, a brand on a shirt): `reject` when one clearly shows something never promoted or shown (a drink of alcohol, gambling on screen, smoking or vaping, immodest dress or imagery, a haram product as the point); `flag` when something visible is a gray area, or a frame is too dark or blurred to judge; `ok` when nothing visible applies, with no reasons.',
+      'Separately, `leaveOut`: the frames (numbered from 1) whose shot must not be in the clip at all, each with why: any woman visible, however she is dressed (the creator never shows women on camera); anything from the list above; and in a podcast or interview, footage that isn’t the show’s own cameras (the guest’s photos or home videos, inserted B-roll, screen recordings, clips from elsewhere). Those shots are cut out and the rest of the clip stays, so use `reject` only when it is most of the clip. Empty when every frame can stay.',
       'Sound and music are checked separately: never mention them. Don’t flag what you can’t see (“can’t rule out” is not a reason). One short line per reason, naming the frame and what is in it.',
       'Separately, `burnedIn`: text or logos the source laid over its picture near the top or bottom edge that name another brand: a sponsor’s or an advertiser’s logo or name, a ticker, a promo banner (not the show’s or channel’s own name, not a name tag of who is speaking, not things in the room like a can on the table or a logo on a shirt). For each: what it says, the edge it sits on, and `depth`, how far in from that edge its far side reaches as a fraction of the frame’s height (0.12 = within the last eighth). Generous rather than tight. Empty when there are none.',
     ]
@@ -153,7 +160,27 @@ export async function framesCheck(
     .filter((b) => (b.edge === 'top' || b.edge === 'bottom') && b.depth > 0 && b.depth <= 0.35)
     .map((b) => ({ what: b.what.trim().slice(0, 80), edge: b.edge, depth: Math.round(Math.min(0.35, b.depth + 0.02) * 1000) / 1000 }))
     .slice(0, 4);
-  return { verdict: ['ok', 'flag', 'reject'].includes(out.verdict) ? out.verdict : 'flag', reasons: (out.reasons ?? []).map((r) => r.trim()).filter(Boolean).slice(0, 5), ...(burnedIn.length && { burnedIn }) };
+  // A frame left out takes its shot with it, and the shots between two left-out frames that weren't looked at too.
+  const out_ = new Set((out.leaveOut ?? []).map((l) => l.frame - 1).filter((i) => i >= 0 && i < picked.length));
+  const leftOut: LeftOut[] = [];
+  for (const i of [...out_].sort((x, y) => x - y)) {
+    const why = (out.leaveOut ?? []).find((l) => l.frame - 1 === i)?.why.trim().slice(0, 160) || 'can’t be shown';
+    const prev = leftOut[leftOut.length - 1];
+    const a = picked[i].a;
+    if (prev && out_.has(i - 1)) prev.end = picked[i].b;
+    else leftOut.push({ start: Math.round(a * 100) / 100, end: Math.round(picked[i].b * 100) / 100, why });
+  }
+  for (const l of leftOut) {
+    // Every scanned shot inside a left-out stretch goes too (only every few were looked at).
+    const within = inside.filter((sh) => sh.a >= l.start - 0.01 && sh.b <= l.end + 0.01);
+    if (within.length) l.end = Math.max(l.end, ...within.map((sh) => sh.b));
+  }
+  return {
+    verdict: ['ok', 'flag', 'reject'].includes(out.verdict) ? out.verdict : 'flag',
+    reasons: (out.reasons ?? []).map((r) => r.trim()).filter(Boolean).slice(0, 5),
+    ...(burnedIn.length && { burnedIn }),
+    ...(leftOut.length && { leftOut }),
+  };
 }
 
 /**
@@ -322,6 +349,14 @@ export async function makeClip({ momentId }: { momentId: string }) {
       updateMoment(momentId, { status: 'dropped', frames, music, detail: `Dropped by the halal check: ${frames.reasons[0] ?? 'something on screen'}`.slice(0, 300) });
       return;
     }
+    // Shots that can't be shown (a woman, an insert that isn't the show's own camera) are cut out of the clip; when
+    // that leaves too little of it, the clip is dropped.
+    const leftOut = (frames.leftOut ?? []).map((l) => ({ ...l, start: Math.max(rel.start, l.start), end: Math.min(rel.end, l.end) })).filter((l) => l.end > l.start);
+    const kept = rel.end - rel.start - leftOut.reduce((n, l) => n + l.end - l.start, 0);
+    if (leftOut.length && kept < Math.max(12, 0.6 * (rel.end - rel.start))) {
+      updateMoment(momentId, { status: 'dropped', frames, music, detail: `Dropped: too much of it can’t be shown (${leftOut[0].why})`.slice(0, 300) });
+      return;
+    }
 
     // The finished cut: the picture with only the voice.
     const clip = join(dir, 'clip.mp4');
@@ -343,6 +378,7 @@ export async function makeClip({ momentId }: { momentId: string }) {
       `${MOMENT_KIND_LABELS[m.kind]} · standalone score ${m.score}/10${m.why ? `\n${m.why}` : ''}`,
       m.halalFlags.length && `Halal flags:\n${m.halalFlags.map((f) => `- ${f}`).join('\n')}`,
       frames.verdict === 'flag' && `On screen (check it):\n${frames.reasons.map((f) => `- ${f}`).join('\n')}`,
+      leftOut.length && `Left out (it can’t be shown): ${leftOut.map((l) => `${l.why} (${l.start.toFixed(1)}–${l.end.toFixed(1)} s of the cut)`).join('; ')}. Check the story still reads across the gap.`,
       frames.burnedIn?.length && `Another brand on the source’s picture (${frames.burnedIn.map((b) => b.what).join(', ')}): framed out of the clip where the picture allows; check it doesn’t show.`,
       music.verdict === 'removed' && 'Background music was removed: only the voice is kept.',
       music.verdict === 'unverified' && 'There was sound behind the voice and it’s been removed, but the speech never pauses long enough to check: listen for any music left.',
@@ -408,6 +444,7 @@ export async function makeClip({ momentId }: { momentId: string }) {
     clips = snapCuts(clips, media.id, envelope, words);
     // No frames of another shot at a cut (the source cuts just before or after it).
     if (speakers) clips = trimSlivers(clips, media.id, speakers.shots, words);
+    clips = withoutRanges(clips, media.id, leftOut);
     clips = applyFocusSpans(clips, media.id, spans);
     if (whole) clips = fillHook(clips, speakers);
     const look = pickLook(ws.id);

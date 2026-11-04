@@ -100,7 +100,7 @@ while index < last:
                 crop = cv2.resize(region, (24, 16)).astype(np.float32)
                 crop = (crop - crop.mean()) / (crop.std() + 1e-3)
         faces.append({"x": (x + w / 2) / size[0], "y": (y + h / 2) / size[1], "h": h / size[1], "crop": crop})
-    samples.append({"t": t, "frame": frame_no, "diff": diff, "hist": hdist, "faces": faces})
+    samples.append({"t": t, "frame": frame_no, "diff": diff, "hist": hdist, "hh": hist, "faces": faces})
 
 end_time = last_t + 1 / fps
 
@@ -110,10 +110,23 @@ threshold = max(18.0, usual * 5)
 cuts = [i for i, s in enumerate(samples) if i > 0 and (s["diff"] >= threshold or s["hist"] >= 0.5)]
 bounds = [0] + cuts + [len(samples)]
 spans = [(bounds[i], bounds[i + 1]) for i in range(len(bounds) - 1) if bounds[i + 1] > bounds[i]]
-# Flashes and fast motion make runs of tiny "shots": fold anything under half a second into the one before.
+# Flashes and fast motion make runs of tiny "shots": anything under half a second joins the shot it looks like. A flash
+# goes with the one before; the first moments of a new scene that slides in (a second cut follows it a moment later)
+# go with the one after, so the new scene starts where the picture first changed.
+def like(i, j):
+    return cv2.compareHist(samples[i]["hh"], samples[j]["hh"], cv2.HISTCMP_BHATTACHARYYA)
+
+
 merged = []
-for a, b in spans:
-    if merged and (samples[b - 1]["t"] - samples[a]["t"] < 0.5):
+forward = None
+for k, (a, b) in enumerate(spans):
+    if forward is not None:
+        a, forward = forward, None
+    short = samples[b - 1]["t"] - samples[a]["t"] < 0.5
+    if short and k + 1 < len(spans) and (not merged or like(b - 1, b) < like(a, a - 1)):
+        forward = a
+        continue
+    if short and merged:
         merged[-1] = (merged[-1][0], b)
     else:
         merged.append((a, b))

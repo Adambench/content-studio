@@ -82,7 +82,9 @@ export type MomentSpeaker = { name: string; about: string; known: boolean };
  * logo, an advertiser's name, a ticker): `depth` is how far in from that edge it reaches (a fraction of the height).
  */
 export type BurnedIn = { what: string; edge: 'top' | 'bottom'; depth: number };
-export type FramesCheck = { verdict: HalalVerdict; reasons: string[]; burnedIn?: BurnedIn[] };
+/** A stretch of the cut (seconds of it) left out of the clip: what it shows can't be shown (a woman, an insert, …). */
+export type LeftOut = { start: number; end: number; why: string };
+export type FramesCheck = { verdict: HalalVerdict; reasons: string[]; burnedIn?: BurnedIn[]; leftOut?: LeftOut[] };
 
 export type Moment = {
   id: string;

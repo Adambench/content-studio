@@ -37,6 +37,9 @@ break, a reaction to a song).
 - alcohol, drugs (including cannabis), smoking and vaping
 - dating apps and services, and flirting or sexual content
 - immodest imagery: revealing clothes, suggestive poses or dancing
+- women on camera (the creator's rule, 2026-11-04): no shot in a clip shows a woman, however she is dressed. In a
+  podcast or interview, a clip shows only the show's own cameras: the guest's photos, home videos, inserted B-roll or
+  screen recordings are cut out of it, not shown
 - interest-based finance: loans, credit cards and buy-now-pay-later with interest, margin trading, interest-paying
   savings pitched as the product
 - music: promoting songs, artists, albums, music apps or music campaigns
