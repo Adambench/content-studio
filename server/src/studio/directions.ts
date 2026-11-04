@@ -1,5 +1,5 @@
 // Creative directions (personal-brand and business pages): before a video's edit is built, Claude pitches 2–3 ways it
-// could look and feel (hook, structure, look, moves from the arsenal, pacing). One Sonnet call, in the background
+// could look and feel (hook, structure, look, moves from the arsenal, pacing). One Opus call, in the background
 // (`direction.pitch`). The creator picks one or mixes them; the pick goes to the video's chat to write the script and
 // build the edit. Clipping pages don't use this: their clips get a look from studio/clip-looks.ts.
 
@@ -136,7 +136,7 @@ export async function pitchDirections({ pieceId }: { pieceId: string }) {
       system: [playbook('content-model', 'hooks', 'retention', 'editing', 'packaging', 'sound-design', 'halal'), lessonsText(ws.id), INSTRUCTIONS].filter(Boolean).join('\n\n'),
       prompt,
       schema: DIRECTION_SCHEMA,
-      model: 'sonnet',
+      model: 'opus',
     });
     const ready = new Set(readyArsenal().map((a) => a.id));
     const options = (out.directions ?? [])

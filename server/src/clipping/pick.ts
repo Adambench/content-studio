@@ -209,7 +209,7 @@ export async function pickMoments({ sourceId }: { sourceId: string }) {
     system: [playbook('clipping', 'hooks', 'retention', 'editing', 'halal'), lessonsText(pages.length === 1 ? pages[0].id : null), INSTRUCTIONS].filter(Boolean).join('\n\n'),
     prompt,
     schema: schemaFor(pages.map((p) => p.id)),
-    model: 'sonnet',
+    model: 'opus',
   });
 
   const words = transcriptWords(t);

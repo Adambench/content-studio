@@ -95,7 +95,7 @@ export async function writeUgcScript({ campaignId, workspaceId, angle }: { campa
   ]
     .filter(Boolean)
     .join('\n\n');
-  const out = await askStructured<Written>({ task: 'ugc', system: [playbook('content-model', 'hooks', 'retention', 'packaging', 'halal'), lessonsText(workspaceId), INSTRUCTIONS].filter(Boolean).join('\n\n'), prompt, schema: SCHEMA, model: 'sonnet' });
+  const out = await askStructured<Written>({ task: 'ugc', system: [playbook('content-model', 'hooks', 'retention', 'packaging', 'halal'), lessonsText(workspaceId), INSTRUCTIONS].filter(Boolean).join('\n\n'), prompt, schema: SCHEMA, model: 'opus' });
 
   const notes = [
     `UGC for “${c.title}”${c.link ? ` (${c.link})` : ''}.`,

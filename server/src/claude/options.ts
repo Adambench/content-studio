@@ -18,5 +18,5 @@ export function baseOptions(): Options {
 }
 
 export function resolveModel(model?: string | null) {
-  return model || getSetting('defaultModel') || 'sonnet';
+  return model || getSetting('defaultModel') || 'opus';
 }

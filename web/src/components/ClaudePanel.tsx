@@ -39,7 +39,7 @@ export function ClaudePanel({ wid, piece, onClose }: { wid: string; piece?: { id
   const messages = useMessages(threadId);
 
   const [model, setModel] = useState<string>('');
-  const effectiveModel = model || thread?.model || settings.data?.defaultModel || 'sonnet';
+  const effectiveModel = model || thread?.model || settings.data?.defaultModel || 'opus';
   const [input, setInput] = useState('');
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState('');

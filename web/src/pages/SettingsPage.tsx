@@ -79,7 +79,7 @@ export function SettingsPage() {
               )}
               <div className="space-y-2">
                 <Label>Default model</Label>
-                <Select value={s?.defaultModel ?? 'sonnet'} onValueChange={(v) => patch({ defaultModel: v })}>
+                <Select value={s?.defaultModel ?? 'opus'} onValueChange={(v) => patch({ defaultModel: v })}>
                   <SelectTrigger className="w-full sm:w-96">
                     <SelectValue />
                   </SelectTrigger>
@@ -113,7 +113,7 @@ export function SettingsPage() {
 
           <ConnectedSitesCard />
 
-          {s && <WeeklyReviewCard setting={s.weeklyReview} model={CLAUDE_MODELS.find((m) => m.id === s.defaultModel)?.label ?? 'Sonnet'} onChange={(weeklyReview) => patch({ weeklyReview })} />}
+          {s && <WeeklyReviewCard setting={s.weeklyReview} model={CLAUDE_MODELS.find((m) => m.id === (s.defaultModel ?? 'opus'))?.label ?? 'Opus'} onChange={(weeklyReview) => patch({ weeklyReview })} />}
 
           {isApp ? <ThisPhoneCard /> : <NotificationsCard pushDevices={st?.pushDevices ?? 0} vapidPublicKey={s?.vapidPublicKey} />}
 

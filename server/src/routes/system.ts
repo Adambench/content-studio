@@ -41,7 +41,7 @@ export async function systemRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/settings', async () => ({
-    defaultModel: getSetting('defaultModel') ?? 'sonnet',
+    defaultModel: getSetting('defaultModel') ?? 'opus',
     whisperModel: getSetting('whisperModel') ?? 'small',
     lastWorkspaceId: getSetting('lastWorkspaceId') ?? null,
     claudeUsage: getSetting('claudeUsage') ?? null,

@@ -123,7 +123,7 @@ export async function checkVersion(versionId: string, opts: { afterFix?: boolean
       system: [playbook('content-model', 'hooks', 'retention', 'editing', 'halal'), lessonsText(edit.workspaceId, { ids: true }) || 'No lessons from the creator’s comments yet: `lessons` is empty.', INSTRUCTIONS].filter(Boolean).join('\n\n'),
       prompt: storyboard(spec, words, items),
       schema: SCHEMA,
-      model: 'sonnet',
+      model: 'opus',
     });
     for (const c of ['hook', 'payoff'] as const) {
       const i = items.find((x) => x.criterion === c)!;

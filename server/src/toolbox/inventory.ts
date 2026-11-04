@@ -167,8 +167,8 @@ async function models(): Promise<Row[]> {
   };
 
   return [
-    claude('opus', 'Claude Opus', 'The most capable Claude: pick it for a chat that needs it.'),
-    claude('sonnet', 'Claude Sonnet', 'Chat, and the quality check before a render.'),
+    claude('opus', 'Claude Opus', 'The most capable Claude: editing (picking clips, the check before a render, directions) and the chat.'),
+    claude('sonnet', 'Claude Sonnet', 'Pick it for a chat that should go easier on the usage.'),
     claude('haiku', 'Claude Haiku', 'Fast and light: background jobs.'),
     ...localRows,
     row('model', `whisper-${getSetting('whisperModel') ?? 'small'}`, {

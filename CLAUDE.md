@@ -30,7 +30,7 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   never applies. Voiceover plays only `tts` or `capture` media.
 - **No Anthropic API key, ever.** Claude runs via `@anthropic-ai/claude-agent-sdk` on the Pro login
   (`claude/options.ts` strips `ANTHROPIC_API_KEY`). Few LLM calls: mechanical work is Whisper/FFmpeg; background jobs
-  use Haiku; they wait (not fail) while 5-hour usage ≥ 80 % (`waitForUsage(task)`).
+  use Haiku, but editing (picking clips, frame checks, directions, the check before a render, the chat) uses Opus, the best model; they wait (not fail) while 5-hour usage ≥ 80 % (`waitForUsage(task)`).
 - **Every model call names its task** (`shared/ai.ts`): `askStructured({ task, … })` and the chat go to Claude or the
   self-hosted model (Ollama on a home PC) by `ai/route.ts` (Settings → Models: per task, *local only*, auto at a usage
   limit). A new AI call gets a task; the local chat (`ai/local-agent.ts`) calls the same studio tools, so a tool works

@@ -1,6 +1,6 @@
 // Making a clip from a moment (the `clip.make` job): cut it from the source with margins, keep only the voice
 // (Demucs; checked in the pauses when there was music behind it, or the clip is dropped), look at three frames for
-// anything haram (Haiku), transcribe the voice, find the speaker's face, then put it on the page's board: a piece in
+// anything haram (Opus), transcribe the voice, find the speaker's face, then put it on the page's board: a piece in
 // Making with Claude's captions, an edit in the page's look (tightened, captions, hook card, a few sound effects),
 // and a render. The render finishing moves the card to Review (studio/render.ts).
 import { execFile as execFileCb } from 'node:child_process';
@@ -117,7 +117,7 @@ const FRAMES_SCHEMA = {
 };
 
 /**
- * Frames to Haiku, against the halal rules: one from every shot of the clip (a shot of a drink for a few frames counts
+ * Frames to Opus, against the halal rules: one from every shot of the clip (a shot of a drink for a few frames counts
  * as much as a long one), or three across it without a shot scan. Up to 12.
  */
 export async function framesCheck(
@@ -146,7 +146,7 @@ export async function framesCheck(
     prompt: `${files.length} frames, in order, at ${times.map((t) => `${(t - range.start).toFixed(1)} s`).join(', ')} of the clip${shown ? ', each cut to the part of the picture the vertical clip shows' : ''}.`,
     images,
     schema: FRAMES_SCHEMA,
-    model: 'haiku',
+    model: 'opus',
   });
   const burnedIn = (out.burnedIn ?? [])
     .filter((b) => (b.edge === 'top' || b.edge === 'bottom') && b.depth > 0 && b.depth <= 0.35)

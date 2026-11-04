@@ -227,7 +227,7 @@ export function registerHandlers() {
   // A format video's voice (Kokoro, then Whisper for the captions): a minute or so of CPU.
   registerJob('format.build', buildFormat, 1);
   onJobFailed('format.build', onFormatBuildFailed);
-  // A UGC script from a campaign's brief: one Sonnet call (waits while the 5-hour usage is high).
+  // A UGC script from a campaign's brief: one Opus call (waits while the 5-hour usage is high).
   registerJob('ugc.script', writeUgcScript, 1);
   onJobFailed('ugc.script', onUgcScriptFailed);
   // Publishing is network-bound, so it doesn't wait behind renders; two at once keeps cross-posts close together.
@@ -285,7 +285,7 @@ export function registerHandlers() {
   // The finder: a run per clipping page, one at a time (it only starts the jobs above).
   registerJob('finder.run', runFinder, 1);
   onJobFailed('finder.run', onFinderFailed);
-  // Creative directions for a video (one Sonnet call).
+  // Creative directions for a video (one Opus call).
   registerJob('direction.pitch', pitchDirections, 1);
   onJobFailed('direction.pitch', onPitchFailed);
   // Ideas: a saved post's details (yt-dlp, Whisper, no Claude); Claude's help on a card and on a locked-in idea
