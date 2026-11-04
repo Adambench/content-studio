@@ -7,7 +7,6 @@ import type { CampaignPlatform } from '../../../shared/campaigns';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
 import { lessonsText } from '../knowledge/lessons';
-import { waitForUsage } from '../claude/usage';
 import { db, schema } from '../db';
 import { emit } from '../lib/events';
 import { notify } from '../lib/push';
@@ -65,7 +64,7 @@ const INSTRUCTIONS = `You write UGC videos: short vertical videos a creator film
 
 /** The `ugc.script` job. */
 export async function writeUgcScript({ campaignId, workspaceId, angle }: { campaignId: string; workspaceId: string; angle?: string }) {
-  await waitForUsage('ugc');
+  // Asked for by my click or in the chat: right away, never waiting for Claude's usage to come down.
   const c = getCampaignRow(campaignId);
   if (c.halalVerdict === 'reject') throw new JobError('This campaign was rejected by the halal screen.', { retry: false });
   const ws = getWorkspace(workspaceId);
@@ -95,7 +94,7 @@ export async function writeUgcScript({ campaignId, workspaceId, angle }: { campa
   ]
     .filter(Boolean)
     .join('\n\n');
-  const out = await askStructured<Written>({ task: 'ugc', system: [playbook('content-model', 'hooks', 'retention', 'packaging', 'halal'), lessonsText(workspaceId), INSTRUCTIONS].filter(Boolean).join('\n\n'), prompt, schema: SCHEMA, model: 'opus' });
+  const out = await askStructured<Written>({ task: 'ugc', system: [playbook('content-model', 'hooks', 'retention', 'packaging', 'halal'), lessonsText(workspaceId), INSTRUCTIONS].filter(Boolean).join('\n\n'), prompt, schema: SCHEMA, model: 'opus', now: true });
 
   const notes = [
     `UGC for “${c.title}”${c.link ? ` (${c.link})` : ''}.`,

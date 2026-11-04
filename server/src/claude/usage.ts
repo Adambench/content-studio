@@ -28,7 +28,8 @@ export function recordUsage(info: SDKRateLimitInfo): ClaudeUsage {
 /**
  * Throw a waiting JobError while the 5-hour usage is above ~80 %, so the job tries again a minute after the window
  * resets; the chat stays usable meanwhile. A reading from a window that has already reset doesn't count. A task the
- * self-hosted model answers now (`ai/route.ts`) never waits.
+ * self-hosted model answers now (`ai/route.ts`) never waits. Only for background work: what I clicked for and wait on
+ * doesn't call it (it asks with `now: true`).
  */
 export async function waitForUsage(task: AiTask) {
   if ((await routeFor(task)).provider === 'local') return;

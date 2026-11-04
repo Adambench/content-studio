@@ -270,7 +270,7 @@ function AssistBlock({ wid, node, tree }: { wid: string; node: IdeaNode; tree: T
           </Button>
         ))}
       </div>
-      {running && <p className="text-xs text-muted-foreground">Claude is thinking… (it waits if your usage is high)</p>}
+      {running && <p className="text-xs text-muted-foreground">Claude is thinking…</p>}
       {a?.status === 'error' && <p className="text-xs text-destructive">{a.error || 'Claude couldn’t answer.'}</p>}
       {a?.status === 'done' && (
         <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
@@ -281,7 +281,7 @@ function AssistBlock({ wid, node, tree }: { wid: string; node: IdeaNode; tree: T
               return (
                 <li key={i} className="rounded-md bg-background/60 p-2.5">
                   <p className="text-sm font-medium">{it.title}</p>
-                  <p className="mt-0.5 text-sm text-muted-foreground">{it.detail}</p>
+                  <p className="mt-0.5 text-sm whitespace-pre-wrap text-muted-foreground">{it.detail}</p>
                   <div className="mt-1.5 flex gap-1">
                     <Button size="xs" variant="ghost" disabled={added} onClick={() => void addChildren(wid, node.id, [{ title: it.title, body: it.detail }], 'claude')}>
                       <Plus /> {added ? 'Added' : node.kind === 'series' && a.kind === 'episodes' ? 'Add episode' : 'Sub-idea'}

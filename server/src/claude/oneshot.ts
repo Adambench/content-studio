@@ -20,14 +20,15 @@ async function* withImages(text: string, images: PromptImage[]): AsyncGenerator<
   };
 }
 
-type StructuredInput = { system: string; prompt: string; schema: Record<string, unknown>; model?: string; images?: PromptImage[]; signal?: AbortSignal };
+type StructuredInput = { system: string; prompt: string; schema: Record<string, unknown>; model?: string; images?: PromptImage[]; signal?: AbortSignal; now?: boolean };
 
 /**
  * JSON matching `schema`, with no tools, from whoever answers `task` now (Claude or the self-hosted model,
- * `ai/route.ts`). Used by background jobs. `images` go before the prompt. `model` is the Claude model.
+ * `ai/route.ts`). Used by background jobs. `images` go before the prompt. `model` is the Claude model. `now`: I clicked
+ * for it and am waiting, so it doesn't stop at the background share of Claude's usage (`RouteOpts`).
  */
 export async function askStructured<T>(input: StructuredInput & { task: AiTask }): Promise<T> {
-  if ((await routeFor(input.task)).provider === 'local') return localStructured<T>(input);
+  if ((await routeFor(input.task, { now: input.now })).provider === 'local') return localStructured<T>(input);
   try {
     return await askClaude<T>(input);
   } catch (err) {

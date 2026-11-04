@@ -9,8 +9,14 @@ export const aiRouting = (): AiRouting => normalizeRouting(getSetting('aiRouting
 /** Background jobs leave the last ~20 % of Claude's 5-hour window for the chat. */
 export const BACKGROUND_FIVE_HOUR = 0.8;
 
+/**
+ * `now`: work I clicked for and am waiting on (help on an Ideas card, locking an idea in, directions, a UGC script).
+ * Like the chat it uses Claude up to the chat's limit instead of stopping at the background share.
+ */
+export type RouteOpts = { now?: boolean };
+
 /** Why Claude shouldn't take more work now, or null when it has room. */
-export function claudeBusy(task: AiTask, r = aiRouting()): string | null {
+export function claudeBusy(task: AiTask, r = aiRouting(), { now: clicked = false }: RouteOpts = {}): string | null {
   const now = Date.now();
   if ((getSetting('claudeLimitedUntil') ?? 0) > now) return 'Claude refused for usage';
   const usage = getSetting('claudeUsage');
@@ -19,18 +25,18 @@ export function claudeBusy(task: AiTask, r = aiRouting()): string | null {
   const week = live(usage?.sevenDay);
   if (week >= r.weeklyAt) return `Claude’s weekly usage is at ${Math.round(week * 100)} %`;
   const five = live(usage?.fiveHour);
-  const fiveAt = task === 'chat' ? r.fiveHourAt : Math.min(r.fiveHourAt, BACKGROUND_FIVE_HOUR);
+  const fiveAt = task === 'chat' || clicked ? r.fiveHourAt : Math.min(r.fiveHourAt, BACKGROUND_FIVE_HOUR);
   if (five >= fiveAt) return `Claude’s 5-hour usage is at ${Math.round(five * 100)} %`;
   return null;
 }
 
-export async function routeFor(task: AiTask): Promise<AiRouteNow> {
+export async function routeFor(task: AiTask, opts: RouteOpts = {}): Promise<AiRouteNow> {
   const r = aiRouting();
   if (r.localOnly) return { provider: 'local', reason: 'Local only is on' };
   const mode = r.tasks[task];
   if (mode === 'claude') return { provider: 'claude', reason: 'Set to Claude' };
   if (mode === 'local') return { provider: 'local', reason: 'Set to local' };
-  const busy = claudeBusy(task, r);
+  const busy = claudeBusy(task, r, opts);
   if (!busy) return { provider: 'claude', reason: 'Claude has room' };
   if (await localReady()) return { provider: 'local', reason: busy };
   return { provider: 'claude', reason: `${busy}, and the local model isn’t ready` };

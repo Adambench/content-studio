@@ -10,7 +10,6 @@ import { KIND_INFO } from '../../../shared/types';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
 import { lessonsText } from '../knowledge/lessons';
-import { waitForUsage } from '../claude/usage';
 import { db, schema } from '../db';
 import { emit } from '../lib/events';
 import { enqueue, hasPendingJob, JobError } from '../jobs/queue';
@@ -86,7 +85,7 @@ export async function pitchDirections({ pieceId }: { pieceId: string }) {
   }
   const state = normalizeDirections(piece.directions);
   if (!state || state.status !== 'pitching') return;
-  await waitForUsage('directions');
+  // Pitched on my click: right away, never waiting for Claude's usage to come down.
   const ws = getWorkspace(piece.workspaceId);
   const detail = getPieceDetail(pieceId);
   const branch = detail.branches.find((b) => b.id === detail.activeBranchId) ?? detail.branches[0];
@@ -137,6 +136,7 @@ export async function pitchDirections({ pieceId }: { pieceId: string }) {
       prompt,
       schema: DIRECTION_SCHEMA,
       model: 'opus',
+      now: true,
     });
     const ready = new Set(readyArsenal().map((a) => a.id));
     const options = (out.directions ?? [])

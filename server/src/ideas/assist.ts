@@ -1,6 +1,7 @@
 // Claude on the Ideas canvas, only ever on my click: help on one card (expand it, angles in, a series' next episodes,
 // a challenge), shown in its panel for me to add or ignore (my notes are never changed by it); and, when I lock an
-// idea in, the video's hooks, angle and outline as a new version of its draft (`ideas.flesh`). One call each.
+// idea in, the video's hooks, angle and outline as a new version of its draft (`ideas.flesh`). One call each, right
+// away: I'm waiting for it, so it never waits for Claude's usage to come down (`now: true`).
 import { readFile } from 'node:fs/promises';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { ASSIST_INFO, type AssistKind, type IdeaAssist } from '../../../shared/ideas';
@@ -9,7 +10,6 @@ import { askStructured, type PromptImage } from '../claude/oneshot';
 import { resolveModel } from '../claude/options';
 import { playbook } from '../claude/plugin';
 import { lessonsText } from '../knowledge/lessons';
-import { waitForUsage } from '../claude/usage';
 import { db, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest } from '../lib/http';
@@ -143,7 +143,6 @@ export function requestAssist(id: string, kind: AssistKind) {
 
 export async function runAssist({ ideaId, kind }: { ideaId: string; kind: AssistKind }) {
   const row = getIdea(ideaId);
-  await waitForUsage('ideas');
   const out = await askStructured<{ summary: string; items: { title: string; detail: string }[] }>({
     task: 'ideas',
     system: [
@@ -155,6 +154,7 @@ export async function runAssist({ ideaId, kind }: { ideaId: string; kind: Assist
     schema: ASSIST_SCHEMA,
     images: await pictures(row),
     model: resolveModel(),
+    now: true,
   });
   setAssist(ideaId, { kind, status: 'done', summary: out.summary.trim(), items: out.items.map((i) => ({ title: i.title.trim().slice(0, 200), detail: i.detail.trim() })), error: '', at: now() });
 }
@@ -186,7 +186,6 @@ export async function fleshOut({ ideaId, pieceId }: { ideaId: string; pieceId: s
   const row = getIdea(ideaId);
   const piece = getPiece(pieceId);
   if (!piece.activeBranchId) return;
-  await waitForUsage('ideas');
   const out = await askStructured<{ title: string; hooks: string[]; angle: string; outline: string }>({
     task: 'ideas',
     system: [
@@ -200,6 +199,7 @@ export async function fleshOut({ ideaId, pieceId }: { ideaId: string; pieceId: s
     schema: FLESH_SCHEMA,
     images: await pictures(row),
     model: resolveModel(),
+    now: true,
   });
   const branch = db.select().from(schema.branches).where(eq(schema.branches.id, piece.activeBranchId)).get();
   const draft = normalizeDraft(branch?.working);
