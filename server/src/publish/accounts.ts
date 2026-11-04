@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import { PUBLISH_PLATFORM_LABELS, type AccountSettings, type PublishPlatform, type QueueSlot } from '../../../shared/publish';
+import { DEFAULT_QUEUE_TIMES, PUBLISH_PLATFORM_LABELS, type AccountSettings, type PublishPlatform, type QueueSlot } from '../../../shared/publish';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, notFound } from '../lib/http';
@@ -11,7 +11,7 @@ import { platformUrl, sleep, type Profile, type TokenSet } from './platforms/htt
 import { publicUrl, redirectUri, requireApp } from './setup';
 
 // A new account's queue: one slot a day, at a typical evening time. Edit it on the Accounts page.
-const DEFAULT_SLOTS: QueueSlot[] = [{ time: '18:00', days: [0, 1, 2, 3, 4, 5, 6] }];
+const DEFAULT_SLOTS: QueueSlot[] = DEFAULT_QUEUE_TIMES.map((time) => ({ time, days: [0, 1, 2, 3, 4, 5, 6] }));
 
 export function getAccount(id: string) {
   const row = db.select().from(schema.accounts).where(eq(schema.accounts.id, id)).get();

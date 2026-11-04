@@ -3,6 +3,7 @@
 // time of the page's accounts on the platforms the campaign pays for. Rejecting keeps the reason for the next pick.
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { checkRules, type ClipFacts, type ReviewClip } from '../../../shared/clipping';
+import type { ApprovePlan } from '../../../shared/dashboard';
 import { normalizeEdit } from '../../../shared/edit';
 import { PUBLISH_PLATFORMS, type PublishPlatform, type TikTokPrivacy } from '../../../shared/publish';
 import { REVIEW_STAGE, normalizeDraft, type DraftContent, type WorkspaceColor } from '../../../shared/types';
@@ -11,9 +12,10 @@ import { db, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, HttpError, notFound } from '../lib/http';
 import { accountLabel, listAccounts } from '../publish/accounts';
-import { createPosts, planPosts } from '../publish/posts';
+import { createPosts, deletePost, planPosts } from '../publish/posts';
 import { getPiece, getWorkspace } from '../services/pieces';
 import { findEditForPiece } from '../studio/edits';
+import { markReviewed } from '../studio/notes';
 import { discardClip } from './make';
 import { updateMoment } from './moments';
 
@@ -103,14 +105,54 @@ function moveTo(piece: typeof schema.pieces.$inferSelect, stage: string) {
   emit({ type: 'changed', entity: 'pieces', workspaceId: piece.workspaceId, id: piece.id });
 }
 
+/** A video can be approved until it's scheduled (from Ready again, it retries the queue). */
+function approvable(piece: typeof schema.pieces.$inferSelect) {
+  const ids = getWorkspace(piece.workspaceId).stages.map((s) => s.id);
+  const cut = ids.indexOf('scheduled');
+  return piece.stage !== 'scheduled' && piece.stage !== 'posted' && (cut < 0 || ids.indexOf(piece.stage) < cut);
+}
+
+/** The schedule an approval makes: the render to each usable account, at its next good time (now when just late). */
+function queueInput(clip: ReviewClip, tiktokPrivacy?: TikTokPrivacy) {
+  return {
+    format: 'video' as const,
+    mediaIds: [clip.render!.mediaId],
+    targets: clip.accounts
+      .filter((a) => !a.reconnect)
+      .map((a) => ({ accountId: a.id, options: a.platform === 'tiktok' && a.tiktokMode === 'direct' ? { tiktokPrivacy } : {} })),
+    when: { mode: 'queue' as const, asap: true },
+  };
+}
+
+/** Where and when approving would post it, shown on the button before the click. Saves nothing. */
+export function approvePlan(pieceId: string): ApprovePlan {
+  const clip = buildClip(getPiece(pieceId));
+  const reconnect = clip.accounts.filter((a) => a.reconnect).map((a) => ({ accountId: a.id, platform: a.platform, label: a.label, at: null, problem: 'Reconnect it first (Accounts)' }));
+  if (!clip.render || !clip.accounts.some((a) => !a.reconnect)) return { targets: reconnect, missingPlatforms: clip.missingPlatforms };
+  try {
+    // Who sees it on TikTok is asked on the button; any answer gives the same time.
+    const plan = planPosts(pieceId, queueInput(clip, 'PUBLIC_TO_EVERYONE'));
+    return {
+      targets: [
+        ...plan.targets.map((t) => ({ accountId: t.accountId, platform: t.platform, label: accountLabel(t.account), at: t.scheduledAt, problem: t.problems.find((p) => p.level === 'error')?.message ?? null })),
+        ...reconnect,
+      ],
+      missingPlatforms: clip.missingPlatforms,
+    };
+  } catch (err) {
+    return { targets: reconnect, missingPlatforms: clip.missingPlatforms, error: (err as Error).message };
+  }
+}
+
 /**
- * My yes: the card goes to Ready, then to the next free queue time of each of the page's accounts the clip may go
- * to (the same as "Next queue time" in the schedule dialog). TikTok posting directly needs me to say who sees it.
- * When there's nowhere to queue it, it waits in Ready and the answer says why.
+ * My yes: I watched it and it's fine (Claude's fixed comments close with it), the card goes to Ready, then to each
+ * of the page's accounts the clip may go to at its next good time (shared/publish.ts POSTING: right away when a
+ * queue time just went by, never more than two a day). TikTok posting directly needs me to say who sees it. When
+ * there's nowhere to queue it, it waits in Ready and the answer says why. `from` is where it was, for Undo.
  */
 export function approveClip(pieceId: string, opts: { tiktokPrivacy?: TikTokPrivacy } = {}) {
   const piece = getPiece(pieceId);
-  if (piece.stage !== REVIEW_STAGE) throw new HttpError(409, 'It isn’t waiting for review any more.');
+  if (!approvable(piece)) throw new HttpError(409, 'It’s scheduled already.');
   const clip = buildClip(piece);
   if (!clip.render) throw badRequest('Wait for its render to finish.');
   const failing = clip.rules.find((r) => r.status === 'fail');
@@ -119,21 +161,18 @@ export function approveClip(pieceId: string, opts: { tiktokPrivacy?: TikTokPriva
   const ready = ws.stages.some((s) => s.id === 'ready') ? 'ready' : piece.stage;
   const usable = clip.accounts.filter((a) => !a.reconnect);
   if (usable.some((a) => a.platform === 'tiktok' && a.tiktokMode === 'direct') && !opts.tiktokPrivacy) throw badRequest('Choose who can see it on TikTok.');
-  // My yes means I watched it and it's fine (shared/review.ts).
-  db.update(schema.pieces).set({ reviewedMediaId: clip.render.mediaId }).where(eq(schema.pieces.id, piece.id)).run();
+  // My yes means I watched it and it's fine (shared/review.ts); refused while a comment is open.
+  markReviewed(piece.id, true);
   moveTo(piece, ready);
+  const from = piece.stage;
+  type Scheduled = { platform: PublishPlatform; label: string; at: number };
   if (!usable.length) {
     const missing = clip.missingPlatforms.length ? ` on ${clip.missingPlatforms.join(', ')}` : '';
-    return { scheduled: [] as { platform: PublishPlatform; label: string; at: number }[], note: `Approved: it’s in Ready. ${ws.name} has no connected account${missing} to queue it on yet.` };
+    return { from, scheduled: [] as Scheduled[], note: `Approved: it’s in Ready. ${ws.name} has no connected account${missing} to queue it on yet.` };
   }
   // Each account on its own merits: one that can't take it (Instagram without the public address, say) doesn't hold
   // the others back.
-  const input = {
-    format: 'video' as const,
-    mediaIds: [clip.render.mediaId],
-    targets: usable.map((a) => ({ accountId: a.id, options: a.platform === 'tiktok' && a.tiktokMode === 'direct' ? { tiktokPrivacy: opts.tiktokPrivacy } : {} })),
-    when: { mode: 'queue' as const },
-  };
+  const input = queueInput(clip, opts.tiktokPrivacy);
   const skipped: string[] = [];
   let targets = input.targets;
   try {
@@ -143,13 +182,25 @@ export function approveClip(pieceId: string, opts: { tiktokPrivacy?: TikTokPriva
       if (error) skipped.push(`${accountLabel(t.account)}: ${error.message}`);
     }
     targets = input.targets.filter((t) => plan.targets.some((p) => p.accountId === t.accountId && !p.problems.some((x) => x.level === 'error')));
-    if (!targets.length) return { scheduled: [], note: `Approved, but not queued. ${skipped.join(' ')} It waits in Ready.` };
+    if (!targets.length) return { from, scheduled: [] as Scheduled[], note: `Approved, but not queued. ${skipped.join(' ')} It waits in Ready.` };
     const ids = createPosts(pieceId, { ...input, targets });
     const posts = db.select().from(schema.posts).where(inArray(schema.posts.id, ids)).all();
-    return { scheduled: posts.map((p) => ({ platform: p.platform, label: p.accountLabel, at: p.scheduledAt })), note: skipped.length ? `Not queued on ${skipped.join(' ')}` : null };
+    return { from, scheduled: posts.map((p): Scheduled => ({ platform: p.platform, label: p.accountLabel, at: p.scheduledAt })), note: skipped.length ? `Not queued on ${skipped.join(' ')}` : null };
   } catch (err) {
-    return { scheduled: [], note: `Approved, but not queued: ${(err as Error).message} It waits in Ready.` };
+    return { from, scheduled: [] as Scheduled[], note: `Approved, but not queued: ${(err as Error).message} It waits in Ready.` };
   }
+}
+
+/** Undo my yes: its posts that haven't started going out go, it's unwatched again and back where it was. */
+export function undoApprove(pieceId: string, stage: string) {
+  const piece = getPiece(pieceId);
+  if (!getWorkspace(piece.workspaceId).stages.some((s) => s.id === stage)) throw badRequest('That column isn’t on this page’s board.');
+  const posts = db.select().from(schema.posts).where(eq(schema.posts.pieceId, pieceId)).all();
+  if (posts.some((p) => p.status === 'publishing' || p.status === 'published')) throw new HttpError(409, 'It’s already going out: stop it from its post.');
+  for (const p of posts) deletePost(p.id);
+  markReviewed(pieceId, false);
+  moveTo(getPiece(pieceId), stage);
+  return { ok: true };
 }
 
 /**

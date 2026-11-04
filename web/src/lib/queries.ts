@@ -17,6 +17,7 @@ import type { VideoNote } from '@shared/notes';
 import type { NotebookNote } from '@shared/notebook';
 import type { SubmissionsSyncState } from './types';
 import type { ReviewClip } from '@shared/clipping';
+import type { ApprovePlan } from '@shared/dashboard';
 import type { SitesStatus } from '@shared/sites';
 import type {
   Account,
@@ -203,6 +204,9 @@ export const usePackage = (pieceId: string) => useQuery({ queryKey: [...keys.rev
 
 /** Clips waiting in Review across every page, oldest first. */
 export const useReview = () => useQuery({ queryKey: keys.review, queryFn: () => api<ReviewClip[]>('/review') });
+/** Where approving a video would post it and when (a minute's worth of "right away"). */
+export const useApprovePlan = (pieceId: string, enabled = true) =>
+  useQuery({ queryKey: [...keys.review, pieceId, 'plan'], queryFn: () => api<ApprovePlan>(`/review/${pieceId}/plan`), enabled: !!pieceId && enabled, refetchInterval: 60_000 });
 
 /** Settings → Connected sites: the desktop app's signed-in windows. */
 export const useSites = () => useQuery({ queryKey: keys.sites, queryFn: () => api<SitesStatus>('/sites') });
@@ -231,6 +235,11 @@ export function useToday() {
 }
 
 export const useUpcomingPosts = (wid: string) => useQuery({ queryKey: keys.upcoming(wid), queryFn: () => api<Post[]>(`/workspaces/${wid}/posts/upcoming`), enabled: !!wid });
+/** Every video waiting for my eyes, across the pages, in the dashboard's order. */
+export function useYourTurn() {
+  const today = useToday();
+  return (today.data?.pages ?? []).flatMap((p) => p.yourTurn.filter((v) => v.state !== 'ready').map((v) => ({ pieceId: v.id, workspaceId: p.id })));
+}
 export const usePiecePosts = (pieceId: string) => useQuery({ queryKey: keys.piecePosts(pieceId), queryFn: () => api<Post[]>(`/pieces/${pieceId}/posts`) });
 
 export const useAnalytics = (wid: string, days: number, campaignId = '') =>

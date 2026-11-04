@@ -157,6 +157,7 @@ page's text pasted in (*Read from pasted text*, or `POST /api/campaigns/:id/read
 | TikTok | Send to inbox by default (works unaudited); Post directly after the audit with TikTok's required UI |
 | YouTube | Uploaded at the scheduled time (not `publishAt`); unaudited uploads come back private |
 | Retries | 5 attempts (30 s → 32 min), each resuming from `posts.remote`; post up to 3 h late after sleep, else missed |
+| Queue | Approving a video schedules it (2026-11-03): each account's queue times, at most 2 a day, 3 h apart; a queue time missed by < 3 h with nothing out since means right away; a full day moves it to the next. New accounts: 12:30 and 19:30 (`POSTING`, shared/publish.ts) |
 
 Platform limits: Instagram needs a Business/Creator account and media at a public HTTPS URL, ~50–100 API posts/24 h.
 TikTok unaudited = private only (inbox works). YouTube unaudited = private; consent screen must be *In production* or
@@ -167,6 +168,16 @@ refresh tokens die in 7 days; no image posts. X: pay-per-use.
 “× typical” = views after 24 h over the median of the account's posts from the last 90 days. Best times only for
 groups of 2+. The weekly review (one Sonnet call per workspace) may rewrite the voice memory (with Undo, only if
 unchanged meanwhile); queue times and ideas only on my click. Numbers stay mechanical; Claude only interprets.
+
+### Review loop and dashboard (2026-11-03)
+
+Every finished video goes round: my review (*To watch*, or *Check again* after Claude's changes) → my comments make it
+*With Claude* (I say "fix my comments" in Claude Code; it fixes, re-renders, records the lesson) → back to me → *Approve
+& schedule* (the queue rule above; Undo in the toast) → Scheduled → Posted. One decision card on the video's page shows
+the step and holds the buttons; approving is refused while a comment is open. The dashboard (Today) has the totals on
+top (my turn, with Claude, going out today, 7-day views) and one column per page: posting goal (posts a week, mine or
+the kind's: personal 3, Islamic 7, clipping 14), this week and today against it, 7-day views and followers, what needs
+me there, my turn, Claude's turn, going out, posted lately.
 
 ### Android (2026-10-15)
 

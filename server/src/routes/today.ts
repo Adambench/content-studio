@@ -9,6 +9,10 @@ import { latestBriefs } from '../research/research';
 import { db, schema } from '../db';
 import { getSetting } from '../lib/settings';
 import { todayPosts } from '../publish/posts';
+import { pageColumns, setPageGoal } from '../services/dashboard';
+import { reviewStates } from '../studio/notes';
+import { GOAL_CHOICES } from '../../../shared/dashboard';
+import { getWorkspace } from '../services/pieces';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -35,6 +39,14 @@ const JOB_LABELS: Record<string, string> = {
  * Claude usage.
  */
 export async function todayRoutes(app: FastifyInstance) {
+  /** A page's goal: posts a week (the dashboard's column header). */
+  app.put<{ Params: { id: string } }>('/api/workspaces/:id/goal', async (req) => {
+    const { perWeek } = z.object({ perWeek: z.number().int().refine((n) => GOAL_CHOICES.includes(n)) }).parse(req.body);
+    getWorkspace(req.params.id);
+    setPageGoal(req.params.id, perWeek);
+    return { perWeek };
+  });
+
   app.get('/api/today', async (req) => {
     // The day as the asking device sees it (its local midnight); the server's own day otherwise.
     const q = z.object({ from: z.coerce.number().int().optional(), to: z.coerce.number().int().optional() }).parse(req.query);
@@ -50,7 +62,7 @@ export async function todayRoutes(app: FastifyInstance) {
     const reviewing = workspaces.filter((w) => w.stages.some((s) => s.id === REVIEW_STAGE)).map((w) => w.id);
     const reviewPieces = reviewing.length
       ? db
-          .select({ id: schema.pieces.id, workspaceId: schema.pieces.workspaceId, title: schema.pieces.title, updatedAt: schema.pieces.updatedAt })
+          .select({ id: schema.pieces.id, workspaceId: schema.pieces.workspaceId, title: schema.pieces.title, updatedAt: schema.pieces.updatedAt, stage: schema.pieces.stage, reviewedMediaId: schema.pieces.reviewedMediaId })
           .from(schema.pieces)
           .where(and(eq(schema.pieces.stage, REVIEW_STAGE), inArray(schema.pieces.workspaceId, reviewing)))
           .orderBy(asc(schema.pieces.updatedAt))
@@ -66,7 +78,9 @@ export async function todayRoutes(app: FastifyInstance) {
           .orderBy(asc(schema.media.createdAt))
           .all()
       : [];
-    const review = reviewPieces.map((p) => {
+    // Ones with my comments open are Claude's to fix, not mine to watch.
+    const reviewed = reviewStates(reviewPieces);
+    const review = reviewPieces.filter((p) => reviewed.get(p.id)?.state !== 'improve').map(({ stage: _s, reviewedMediaId: _r, ...p }) => {
       const own = pieceMedia.filter((m) => m.pieceId === p.id);
       const render = own.filter((m) => m.source === 'render').at(-1);
       const thumb = (render?.hasThumb ? render : undefined) ?? own.find((m) => m.hasThumb);
@@ -204,7 +218,16 @@ export async function todayRoutes(app: FastifyInstance) {
       .all();
 
     const posts = todayPosts(from, to);
+    // One column per page; campaigns that need a look go into the columns of the pages they're for.
+    const pages = pageColumns(workspaces, from, to);
+    for (const c of active) {
+      const r = campaignResults(c.id);
+      const warn = c.accepting === false ? `${c.title}: its page says it isn’t accepting clips, pause it` : r.budgetLow ? `${c.title}: budget running low` : null;
+      if (!warn) continue;
+      for (const page of pages.filter((p) => c.pageIds.includes(p.id))) page.attention.push({ id: `campaign-${c.id}`, tone: 'amber', text: warn, to: `/campaigns/${c.id}` });
+    }
     return {
+      pages,
       from,
       to,
       workspaces: workspaces.map((w) => {

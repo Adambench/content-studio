@@ -15,7 +15,7 @@ export function PiecePosts({ wid, pieceId, onSchedule }: { wid: string; pieceId:
   if (!list.length) return null;
 
   return (
-    <section className="mx-auto max-w-3xl space-y-3 px-4 pb-6 md:px-6" aria-label="Posts">
+    <section id="posts" className="mx-auto max-w-3xl scroll-mt-4 space-y-3 px-4 pb-6 md:px-6" aria-label="Posts">
       <div className="flex items-center gap-2 border-t pt-6">
         <h2 className="mr-auto text-sm font-medium">
           Posts <span className="text-muted-foreground tabular-nums">{list.length}</span>

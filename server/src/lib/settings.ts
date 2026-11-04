@@ -52,6 +52,8 @@ type SettingsShape = {
   campaignLeads: import('../../../shared/finder').CampaignLeads;
   /** The skills' source repos as the scout last read them from GitHub (licence, stars, last push). */
   toolboxRepos: Record<string, import('../toolbox/inventory').RepoInfo>;
+  /** Posts a week each page aims for (by workspace id), shown on the dashboard. */
+  postingGoals: Record<string, number>;
   /** The Toolbox's weekly scout: its last run. */
   toolScout: import('../../../shared/toolbox').ScoutRun;
 };

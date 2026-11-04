@@ -1,4 +1,4 @@
-import { BookOpen, CalendarDays, Clapperboard, Lightbulb, MoreHorizontal, Mic, Search, Settings, Sparkles, Sun, Wrench } from 'lucide-react';
+import { BookOpen, CalendarDays, Clapperboard, Lightbulb, MoreHorizontal, Mic, LayoutDashboard, Search, Settings, Sparkles, Wrench } from 'lucide-react';
 import { NavLink, Outlet, useMatch } from 'react-router';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -32,10 +32,12 @@ function SideLink({ to, icon: Icon, children }: { to: string; icon: NavItem['ico
   );
 }
 
-/** What waits for me across every workspace: clips to review, posts that failed or missed their time, campaigns to confirm, clips to submit. */
+/** What waits for me across every workspace: videos to watch, posts that failed or missed their time, campaigns to confirm, clips to submit. */
 function TodayBadge({ className }: { className?: string }) {
   const today = useToday();
-  const n = (today.data?.review.length ?? 0) + (today.data?.attention.length ?? 0) + (today.data?.campaigns?.toConfirm.length ?? 0) + (today.data?.submissions?.length ?? 0);
+  const d = today.data;
+  const toWatch = d?.pages ? d.pages.reduce((n, p) => n + p.yourTurn.length, 0) : (d?.review.length ?? 0);
+  const n = toWatch + (d?.attention.length ?? 0) + (d?.campaigns?.toConfirm.length ?? 0) + (d?.submissions?.length ?? 0);
   if (!n) return null;
   return (
     <Badge className={cn('h-4 min-w-4 bg-brand px-1 text-[10px] text-white tabular-nums', className)} aria-label={`${n} thing${n === 1 ? '' : 's'} waiting for you`}>
@@ -96,8 +98,8 @@ export function AppShell() {
       {/* Desktop sidebar */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
         <nav className="flex flex-col gap-0.5 px-2 pt-2" aria-label="Home">
-          <SideLink to="/today" icon={Sun}>
-            Today
+          <SideLink to="/today" icon={LayoutDashboard}>
+            Dashboard
             <TodayBadge className="ml-auto" />
           </SideLink>
           <button
@@ -222,7 +224,7 @@ function MobileNav({ wid, kind, ideas }: { wid: string; kind: Workspace['kind'];
   return (
     <nav className="pb-safe grid grid-cols-5 border-t bg-sidebar md:hidden" aria-label="Main">
       <NavLink to="/today" className={({ isActive }) => cn(item, 'relative h-14', isActive && active)}>
-        <Sun className="size-5" /> Today
+        <LayoutDashboard className="size-5" /> Home
         <TodayBadge className="absolute top-2 left-1/2 ml-1.5" />
       </NavLink>
       {ideas ? (

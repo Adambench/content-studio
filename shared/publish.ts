@@ -189,6 +189,16 @@ export function postProblems(input: {
   return out;
 }
 
+/**
+ * How the queue spaces an account's posts (my rule, 2026-11-03): never more than two a day, at least three hours
+ * apart so they go out at regular times, at the account's queue times (the hours its viewers watch to the end). A
+ * queue time that went by without a post less than three hours ago is still a good time: an approved video posts
+ * right away instead of waiting for the next one. A full day moves it to the next.
+ */
+export const POSTING = { perDay: 2, gapMs: 3 * 3600_000, lateMs: 3 * 3600_000 } as const;
+/** New accounts' queue times: lunch and the evening, seven hours apart. */
+export const DEFAULT_QUEUE_TIMES = ['12:30', '19:30'];
+
 /** Next times a queue's slots come round after `after` (ms), in this machine's time zone, soonest first. */
 export function upcomingSlotTimes(slots: QueueSlot[], after: number, days = 60): number[] {
   const times: number[] = [];

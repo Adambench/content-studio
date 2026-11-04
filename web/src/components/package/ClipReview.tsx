@@ -1,22 +1,30 @@
-import { AlertTriangle, BadgeDollarSign, Check, Loader2, Pencil, ThumbsDown, ThumbsUp, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, CalendarClock, Check, CheckCircle2, Copy, Loader2, MessageSquareText, Pencil, RotateCcw, TvMinimalPlay, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { MOMENT_KIND_LABELS, REJECT_REASONS, clock, type ReviewClip, type RuleResult } from '@shared/clipping';
 import { PUBLISH_PLATFORM_LABELS, TIKTOK_PRIVACY_LABELS, type PublishPlatform, type TikTokPrivacy } from '@shared/publish';
 import { RULE_KIND_LABELS } from '@shared/campaigns';
-import { PlatformIcon, formatWhen } from '@/components/publish/common';
+import { FLOW_STEPS, type ApprovePlan, type FlowStep } from '@shared/dashboard';
+import { reviewState } from '@shared/review';
+import { REVIEW_STAGE } from '@shared/types';
+import { PlatformIcon, StatusIcon, accountName, statusText } from '@/components/publish/common';
+import { useWorkspaceContext } from '@/components/WorkspaceLayout';
 import { WorkspaceDot } from '@/components/WorkspaceDot';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Kbd } from '@/components/ui/kbd';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { api, errorMessage, mediaFileUrl, mediaThumbUrl } from '@/lib/api';
-import { keys, queryClient } from '@/lib/queries';
+import { copyFixLine, flowStep, whenText } from '@/lib/dashboard';
+import { compact } from '@/lib/format';
+import { keys, queryClient, useApprovePlan, useNotes, usePiecePosts } from '@/lib/queries';
+import type { PieceDetail } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 function Note({ children, tone = 'amber' }: { children: React.ReactNode; tone?: 'amber' | 'red' }) {
@@ -143,8 +151,63 @@ function RejectDialog({ clip, open, onOpenChange, onDone }: { clip: ReviewClip; 
   );
 }
 
-/** A clip's (or campaign video's) review: where it came from, the checks, the campaign's rules, where it goes, approve or reject. */
-export function ClipReview({ clip, onDone }: { clip: ReviewClip; onDone: () => void }) {
+/** The loop as five steps, the current one lit: always fits, however narrow the column. */
+function FlowBar({ step }: { step: FlowStep }) {
+  const at = FLOW_STEPS.findIndex((s) => s.id === step);
+  return (
+    <ol className="grid grid-cols-5 gap-1" aria-label="Where this video is">
+      {FLOW_STEPS.map((s, i) => (
+        <li key={s.id} aria-current={i === at ? 'step' : undefined} className="min-w-0 space-y-1">
+          <div className={cn('h-1 rounded-full', i === at ? 'bg-brand' : i < at ? 'bg-muted-foreground/50' : 'bg-muted')} />
+          <p className={cn('truncate text-[10px] leading-tight', i === at ? 'font-medium text-brand' : i < at ? 'text-muted-foreground' : 'text-muted-foreground/50')}>{s.label}</p>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** Where approving puts it: each account and when. */
+function PlanLine({ plan }: { plan: ApprovePlan | undefined }) {
+  if (!plan) return <p className="text-xs text-muted-foreground">Working out when it goes out…</p>;
+  const ok = plan.targets.filter((t) => t.at !== null && !t.problem);
+  const bad = plan.targets.filter((t) => t.at === null || t.problem);
+  return (
+    <div className="space-y-1 text-xs">
+      {ok.length > 0 && (
+        <ul className="space-y-0.5">
+          {ok.map((t) => (
+            <li key={t.accountId} className="flex items-center gap-1.5">
+              <PlatformIcon platform={t.platform} className="size-3.5" />
+              <span className="min-w-0 truncate">{t.label}</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="font-medium">{whenText(t.at!)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {bad.map((t) => (
+        <p key={t.accountId} className="flex items-start gap-1.5 text-amber-300">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> {t.label}: {t.problem ?? 'no free time'}
+        </p>
+      ))}
+      {!plan.targets.length && <p className="text-muted-foreground">No account connected for this page yet: approving puts it in Ready.</p>}
+      {plan.error && <p className="text-amber-300">{plan.error}</p>}
+      {plan.missingPlatforms.length > 0 && plan.targets.length > 0 && <p className="text-muted-foreground">No account on {plan.missingPlatforms.map((p) => PUBLISH_PLATFORM_LABELS[p]).join(', ')}.</p>}
+      {ok.length > 0 && <p className="text-muted-foreground">At its account’s next good time: at most 2 a day, 3 h apart, right away when a posting time just went by.</p>}
+    </div>
+  );
+}
+
+/**
+ * The video's one decision card: where it is in the loop (my review → Claude's fixes → approved → scheduled →
+ * posted), what to do now and the button for it. Under it what to check before saying yes (the moment, flags,
+ * campaign rules) and the captions.
+ */
+export function ClipReview({ clip, piece, onDone, onSchedule }: { clip: ReviewClip; piece: Pick<PieceDetail, 'id' | 'workspaceId' | 'reviewedMediaId'>; onDone: () => void; onSchedule: () => void }) {
+  const navigate = useNavigate();
+  const { workspace } = useWorkspaceContext();
+  const notes = useNotes(clip.pieceId);
+  const posts = usePiecePosts(clip.pieceId);
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [privacy, setPrivacy] = useState<TikTokPrivacy | ''>('');
   const [busy, setBusy] = useState(false);
@@ -155,23 +218,55 @@ export function ClipReview({ clip, onDone }: { clip: ReviewClip; onDone: () => v
   }, [clip.pieceId]);
 
   const m = clip.moment;
+  const list = notes.data ?? [];
+  const open = list.filter((n) => n.status === 'open').length;
+  const fixed = list.filter((n) => n.status === 'fixed').length;
+  const out = clip.stage === 'scheduled' || clip.stage === 'posted';
+  const rendering = !!clip.rendering && (clip.rendering.status === 'queued' || clip.rendering.status === 'running');
+  const state = reviewState({ renderId: clip.render?.mediaId ?? null, reviewedMediaId: piece.reviewedMediaId, open, comments: list.length, out });
+  const step = flowStep({ stage: clip.stage, state, rendering });
+  const plan = useApprovePlan(clip.pieceId, step === 'review' || step === 'approved');
   const manual = clip.rules.filter((r) => r.status === 'manual');
   const failing = clip.rules.filter((r) => r.status === 'fail');
   const unticked = manual.filter((r) => !ticked.has(r.rule.text)).length;
   const directTikTok = clip.accounts.some((a) => a.platform === 'tiktok' && a.tiktokMode === 'direct' && !a.reconnect);
   const platforms = Object.keys(clip.copy) as PublishPlatform[];
-  const canApprove = !!clip.render && !failing.length && !unticked && (!directTikTok || !!privacy) && !busy;
+  const canApprove = !!clip.render && !open && !failing.length && !unticked && (!directTikTok || !!privacy) && !busy;
+  const inReview = clip.stage === REVIEW_STAGE;
   const at = m ? `${clock(m.start)}–${clock(m.end)}` : null;
   const sourceLink = m && clip.source?.link ? (/youtube\.com\/watch/.test(clip.source.link) ? `${clip.source.link}&t=${Math.floor(m.start)}s` : clip.source.link) : null;
+  // Undo puts it back in Review (or the column before Ready on boards without one).
+  const stageIds = workspace.stages.map((s) => s.id);
+  const backTo = stageIds.includes(REVIEW_STAGE) ? REVIEW_STAGE : (stageIds[Math.max(0, stageIds.indexOf('ready') - 1)] ?? stageIds[0]);
+  const waiting = (posts.data ?? []).filter((p) => p.status === 'scheduled' || p.status === 'failed' || p.status === 'missed');
+  const going = (posts.data ?? []).some((p) => p.status === 'publishing' || p.status === 'published');
 
-  async function approve() {
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: keys.review });
+    queryClient.invalidateQueries({ queryKey: keys.piece(clip.pieceId) });
+    queryClient.invalidateQueries({ queryKey: keys.piecePosts(clip.pieceId) });
+    queryClient.invalidateQueries({ queryKey: keys.today });
+  };
+
+  async function undo(stage: string) {
+    try {
+      await api(`/review/${clip.pieceId}/undo`, { body: { stage } });
+      refresh();
+      toast('Back in your review', { action: { label: 'Open', onClick: () => navigate(`/w/${clip.workspace.id}/p/${clip.pieceId}`) } });
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
+
+  async function approve(next = true) {
     setBusy(true);
     try {
-      const out = await api<{ scheduled: { platform: PublishPlatform; label: string; at: number }[]; note: string | null }>(`/review/${clip.pieceId}/approve`, { body: privacy ? { tiktokPrivacy: privacy } : {} });
-      if (out.scheduled.length) toast.success('Approved and queued', { description: out.scheduled.map((p) => `${p.label}: ${formatWhen(p.at)}`).join(' · ') });
-      else toast(out.note ?? 'Approved');
-      queryClient.invalidateQueries({ queryKey: keys.review });
-      onDone();
+      const res = await api<{ from: string; scheduled: { platform: PublishPlatform; label: string; at: number }[]; note: string | null }>(`/review/${clip.pieceId}/approve`, { body: privacy ? { tiktokPrivacy: privacy } : {} });
+      const undoAction = { label: 'Undo', onClick: () => void undo(res.from) };
+      if (res.scheduled.length) toast.success('Approved and scheduled', { description: res.scheduled.map((p) => `${p.label}: ${whenText(p.at)}`).join(' · '), action: undoAction, duration: 10_000 });
+      else toast(res.note ?? 'Approved', { action: undoAction, duration: 10_000 });
+      refresh();
+      if (next) onDone();
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -179,47 +274,9 @@ export function ClipReview({ clip, onDone }: { clip: ReviewClip; onDone: () => v
     }
   }
 
-  return (
-    <div className="space-y-5">
-      <div className="space-y-1.5">
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5">
-            <WorkspaceDot color={clip.workspace.color} className="size-2" />
-            {clip.workspace.name}
-          </span>
-          {clip.campaign && (
-            <Link to={`/campaigns/${clip.campaign.id}`} className="inline-flex items-center gap-1 hover:text-foreground">
-              <BadgeDollarSign className="size-3.5 text-orange-400" /> {clip.campaign.title}
-            </Link>
-          )}
-          {clip.render?.durationMs && <span className="tabular-nums">{Math.round(clip.render.durationMs / 1000)} s</span>}
-        </p>
-      </div>
-
-      {m && (
-        <div className="space-y-1 text-sm">
-          <p>
-            <Badge variant="secondary" className="mr-1.5 align-middle">
-              {MOMENT_KIND_LABELS[m.kind]} · {m.score}/10
-            </Badge>
-            {m.why}
-          </p>
-          {clip.source && (
-            <p className="text-xs text-muted-foreground">
-              From {sourceLink ? (
-                <a href={sourceLink} target="_blank" rel="noreferrer" className="underline hover:text-foreground">
-                  {clip.source.title || 'the source'} at {at}
-                </a>
-              ) : (
-                `${clip.source.title || 'the source'} at ${at}`
-              )}
-            </p>
-          )}
-        </div>
-      )}
-
+  const checks = (
+    <>
       {m?.music?.verdict === 'unverified' && <Note>There was sound behind the voice and only the voice is kept, but the speech never pauses long enough to check it’s gone: listen for any music left.</Note>}
-      {m?.music?.verdict === 'removed' && <p className="text-xs text-muted-foreground">Background music was removed: only the voice is kept.</p>}
       {m && m.halalFlags.length > 0 && (
         <Note>
           <p className="font-medium">To check</p>
@@ -240,7 +297,6 @@ export function ClipReview({ clip, onDone }: { clip: ReviewClip; onDone: () => v
           </ul>
         </Note>
       )}
-
       {clip.rules.length > 0 && (
         <section className="space-y-1" aria-label="Campaign rules">
           <div className="flex items-center justify-between gap-2">
@@ -271,6 +327,181 @@ export function ClipReview({ clip, onDone }: { clip: ReviewClip; onDone: () => v
           {m && m.checkByEye.length > 0 && <p className="pt-1 text-xs text-muted-foreground">Claude says to look at: {m.checkByEye.join('; ')}</p>}
         </section>
       )}
+      {failing.length > 0 && <Note tone="red">A rule fails: fix it (edit the captions or the video), then approve.</Note>}
+      {directTikTok && (
+        <div className="space-y-1.5">
+          <Label htmlFor="tiktok-privacy">Who can see it on TikTok</Label>
+          <Select value={privacy} onValueChange={(v) => setPrivacy(v as TikTokPrivacy)}>
+            <SelectTrigger id="tiktok-privacy" className="w-full sm:w-72">
+              <SelectValue placeholder="Choose" />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(TIKTOK_PRIVACY_LABELS) as TikTokPrivacy[]).map((p) => (
+                <SelectItem key={p} value={p}>
+                  {TIKTOK_PRIVACY_LABELS[p]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="space-y-3">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <WorkspaceDot color={clip.workspace.color} className="size-2" />
+            {clip.workspace.name}
+          </span>
+          {clip.campaign && (
+            <Link to={`/campaigns/${clip.campaign.id}`} className="inline-flex items-center gap-1 hover:text-foreground">
+              <BadgeDollarSign className="size-3.5 text-orange-400" /> {clip.campaign.title}
+            </Link>
+          )}
+          {clip.render?.durationMs && <span className="tabular-nums">{Math.round(clip.render.durationMs / 1000)} s</span>}
+          {clip.renderVersion && <span className="tabular-nums">v{clip.renderVersion}</span>}
+        </p>
+        <FlowBar step={step} />
+      </div>
+
+      {step === 'review' && (
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <p className="flex items-center gap-2 text-base font-medium">
+              {state === 'recheck' ? <RotateCcw className="size-4 text-brand" /> : <TvMinimalPlay className="size-4 text-sky-400" />}
+              {state === 'recheck' ? 'Your turn: Claude changed it, watch it again' : clip.render ? 'Your turn: watch it' : 'Waiting for its render'}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {state === 'recheck' && fixed > 0 && `Claude answered ${fixed} comment${fixed === 1 ? '' : 's'} (under the video). `}
+              Something to change? Pause and write it in the box under the video (or press <Kbd>C</Kbd>): it goes to Claude and comes back here. All good? Approve it.
+            </p>
+          </div>
+          <div className="space-y-2 rounded-lg border bg-background/40 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="lg" onClick={() => approve()} disabled={!canApprove} className="flex-1 sm:flex-none">
+                {busy ? <Spinner /> : <Check />} Approve & schedule
+              </Button>
+              {inReview && (
+                <Button size="lg" variant="outline" onClick={() => setRejecting(true)} className="flex-1 sm:flex-none">
+                  <X /> Reject
+                </Button>
+              )}
+            </div>
+            {unticked > 0 && <p className="text-xs text-amber-300">To approve, tick the campaign {unticked === 1 ? 'rule' : `${unticked} rules`} below once you’ve checked {unticked === 1 ? 'it' : 'them'} by eye.</p>}
+            {open > 0 && <p className="text-xs text-amber-300">Close or delete the open comments first.</p>}
+            {directTikTok && !privacy && <p className="text-xs text-muted-foreground">Choose who can see it on TikTok to approve.</p>}
+            <PlanLine plan={plan.data} />
+            {inReview && <p className="text-xs text-muted-foreground">Reject only when the clip can’t be saved: {m ? 'it’s deleted and the next picks avoid it' : 'it goes back a column'}.</p>}
+          </div>
+          {checks}
+        </div>
+      )}
+
+      {step === 'claude' && (
+        <div className="space-y-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3">
+          {rendering && !open ? (
+            <p className="flex items-center gap-2 text-base font-medium">
+              <Loader2 className="size-4 animate-spin text-brand" /> Claude’s changes are rendering
+              {clip.rendering?.status === 'running' && <span className="text-sm font-normal text-muted-foreground tabular-nums">{Math.round(clip.rendering.progress * 100)}%</span>}
+            </p>
+          ) : (
+            <p className="flex items-center gap-2 text-base font-medium">
+              <MessageSquareText className="size-4 text-amber-400" /> With Claude: {open} comment{open === 1 ? '' : 's'} to fix
+            </p>
+          )}
+          <p className="text-sm text-muted-foreground">
+            {rendering && !open
+              ? 'It comes back to you as “Check again” once the new version is ready.'
+              : 'In Claude Code, say “fix my comments”. Claude fixes them, renders a new version and it comes back to you as “Check again”.'}
+          </p>
+          {open > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="secondary" onClick={copyFixLine}>
+                <Copy /> Copy “fix my comments”
+              </Button>
+              <span className="text-xs text-muted-foreground">Changed your mind on one? Close it in the list, then approve.</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {step === 'approved' && (
+        <div className="space-y-3 rounded-lg border border-emerald-400/30 bg-emerald-400/5 p-3">
+          <p className="flex items-center gap-2 text-base font-medium">
+            <CalendarClock className="size-4 text-emerald-400" /> Approved, not scheduled yet
+          </p>
+          <PlanLine plan={plan.data} />
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => approve(false)} disabled={busy || !plan.data?.targets.some((t) => t.at !== null && !t.problem)}>
+              {busy ? <Spinner /> : <CalendarClock />} Schedule at the next good time
+            </Button>
+            <Button size="sm" variant="outline" onClick={onSchedule}>
+              Pick a time
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => undo(backTo)}>
+              Back to review
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {(step === 'scheduled' || step === 'posted') && (
+        <div className="space-y-2 rounded-lg border bg-background/40 p-3">
+          <p className="flex items-center gap-2 text-base font-medium">
+            {step === 'posted' ? <CheckCircle2 className="size-4 text-emerald-400" /> : <CalendarClock className="size-4 text-brand" />}
+            {step === 'posted' ? 'Posted' : 'Scheduled'}
+          </p>
+          <ul className="space-y-1 text-sm">
+            {(posts.data ?? []).map((p) => (
+              <li key={p.id} className="flex items-center gap-1.5">
+                <PlatformIcon platform={p.platform} className="size-3.5" />
+                <span className="min-w-0 truncate">{accountName(p.account, p.accountLabel)}</span>
+                <span className="text-muted-foreground">·</span>
+                <StatusIcon post={p} className="size-3" />
+                <span className="text-muted-foreground">{p.status === 'scheduled' ? whenText(p.scheduledAt) : p.status === 'published' && p.stats?.views != null ? `${compact(p.stats.views)} views` : statusText(p)}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap gap-2">
+            {step === 'scheduled' && (
+              <Button size="sm" variant="outline" onClick={() => document.getElementById('posts')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                Change time
+              </Button>
+            )}
+            {step === 'scheduled' && !going && waiting.length > 0 && (
+              <Button size="sm" variant="ghost" onClick={() => undo(backTo)}>
+                Undo approval
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {m && (
+        <div className="space-y-1 text-sm">
+          <p>
+            <Badge variant="secondary" className="mr-1.5 align-middle">
+              {MOMENT_KIND_LABELS[m.kind]} · {m.score}/10
+            </Badge>
+            {m.why}
+          </p>
+          {clip.source && (
+            <p className="text-xs text-muted-foreground">
+              From {sourceLink ? (
+                <a href={sourceLink} target="_blank" rel="noreferrer" className="underline hover:text-foreground">
+                  {clip.source.title || 'the source'} at {at}
+                </a>
+              ) : (
+                `${clip.source.title || 'the source'} at ${at}`
+              )}
+            </p>
+          )}
+          {m.music?.verdict === 'removed' && <p className="text-xs text-muted-foreground">Background music was removed: only the voice is kept.</p>}
+        </div>
+      )}
 
       {platforms.length > 0 && (
         <section className="space-y-2" aria-label="Captions">
@@ -285,55 +516,6 @@ export function ClipReview({ clip, onDone }: { clip: ReviewClip; onDone: () => v
           ))}
         </section>
       )}
-
-      <section className="space-y-2" aria-label="Where it goes">
-        <h3 className="text-sm font-medium">Where it goes</h3>
-        {clip.accounts.length ? (
-          <ul className="space-y-1 text-sm">
-            {clip.accounts.map((a) => (
-              <li key={a.id} className="flex items-center gap-2">
-                <PlatformIcon platform={a.platform} className="size-3.5" />
-                <span className="min-w-0 truncate">{a.label}</span>
-                {a.reconnect && <span className="text-xs text-destructive">Reconnect first</span>}
-                {a.platform === 'tiktok' && a.tiktokMode === 'inbox' && <span className="text-xs text-muted-foreground">to your TikTok inbox</span>}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">No account connected for this yet: approving puts it in Ready.</p>
-        )}
-        {clip.accounts.length > 0 && <p className="text-xs text-muted-foreground">At each account’s next free queue time.</p>}
-        {clip.missingPlatforms.length > 0 && clip.accounts.length > 0 && <p className="text-xs text-muted-foreground">No account on {clip.missingPlatforms.map((p) => PUBLISH_PLATFORM_LABELS[p]).join(', ')}.</p>}
-        {directTikTok && (
-          <div className="space-y-1.5 pt-1">
-            <Label htmlFor="tiktok-privacy">Who can see it on TikTok</Label>
-            <Select value={privacy} onValueChange={(v) => setPrivacy(v as TikTokPrivacy)}>
-              <SelectTrigger id="tiktok-privacy" className="w-full sm:w-72">
-                <SelectValue placeholder="Choose" />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(TIKTOK_PRIVACY_LABELS) as TikTokPrivacy[]).map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {TIKTOK_PRIVACY_LABELS[p]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-      </section>
-
-      {failing.length > 0 && <Note tone="red">A rule fails: fix it (edit the captions or the video), then approve.</Note>}
-
-      <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
-        <Button onClick={approve} disabled={!canApprove} className="flex-1 sm:flex-none">
-          {busy ? <Spinner /> : <ThumbsUp />} {clip.accounts.some((a) => !a.reconnect) ? 'Approve & queue' : 'Approve'}
-        </Button>
-        <Button variant="outline" onClick={() => setRejecting(true)} className="flex-1 sm:flex-none">
-          <ThumbsDown /> Reject
-        </Button>
-        {unticked > 0 && <p className="w-full text-xs text-muted-foreground">Tick the {unticked === 1 ? 'rule' : `${unticked} rules`} you checked by eye to approve.</p>}
-      </div>
       <RejectDialog clip={clip} open={rejecting} onOpenChange={setRejecting} onDone={onDone} />
     </div>
   );

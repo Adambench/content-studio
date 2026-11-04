@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarClock, ChevronRight, Clapperboard, GitBranchPlus, History, Inbox, Lightbulb, MoreHorizontal, Pencil, Save, Sparkles, ThumbsUp, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, CalendarClock, ChevronRight, Clapperboard, Copy, GitBranchPlus, History, Inbox, Lightbulb, MoreHorizontal, Pencil, Save, Sparkles, ThumbsUp, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
@@ -34,7 +34,8 @@ import { useNativePick, useUpload } from '@/hooks/useUpload';
 import { api, errorMessage } from '@/lib/api';
 import { onLiveEvent } from '@/lib/live';
 import { boardLabel } from '@/lib/nav';
-import { keys, queryClient, useMedia, usePackage, usePiece, useReview, useTags } from '@/lib/queries';
+import { copyFixLine } from '@/lib/dashboard';
+import { keys, queryClient, useMedia, useNotes, usePackage, usePiece, useYourTurn, useTags } from '@/lib/queries';
 import type { Branch, PieceDetail } from '@/lib/types';
 import { openClaude } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
@@ -72,11 +73,14 @@ export function PiecePage() {
 /** The next thing this video needs, as the header's main button. */
 function useNextAction(piece: PieceDetail, summary: ReviewClip | undefined, schedule: () => void) {
   const navigate = useNavigate();
+  const notes = useNotes(piece.id);
+  const open = (notes.data ?? []).filter((n) => n.status === 'open').length;
   const footage = piece.media.some((m) => m.source !== 'render');
   const done = piece.stage === 'scheduled' || piece.stage === 'posted';
-  if (summary?.stage === REVIEW_STAGE && summary.render)
-    return { label: 'Approve or reject', icon: ThumbsUp, run: () => document.getElementById('review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) };
-  if (summary?.render && !done) return { label: 'Schedule', icon: CalendarClock, run: schedule };
+  // The decision card says what's next (approve, wait for Claude, schedule) and holds the buttons.
+  if (summary?.render && !done && open) return { label: 'Copy “fix my comments”', icon: Copy, run: copyFixLine };
+  if (summary?.render && !done) return { label: 'Approve', icon: ThumbsUp, run: () => document.getElementById('review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) };
+  if (summary?.render && done) return { label: 'Schedule', icon: CalendarClock, run: schedule };
   if (summary?.rendering) return null;
   if (footage) return { label: 'Edit the video', icon: Clapperboard, run: () => navigate(`/w/${piece.workspaceId}/p/${piece.id}/edit`) };
   if (piece.stage === 'idea' || piece.stage === 'script')
@@ -93,7 +97,7 @@ function Editor({ piece }: { piece: PieceDetail }) {
   const navigate = useNavigate();
   const tags = useTags(workspace.id);
   const summary = usePackage(piece.id);
-  const queue = useReview();
+  const queue = useYourTurn();
   const branch = piece.branches.find((b) => b.id === piece.activeBranchId) ?? piece.branches[0];
   // The player, for the comments beside it to jump to their moment.
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
@@ -125,12 +129,12 @@ function Editor({ piece }: { piece: PieceDetail }) {
     toast.success(files === 'keep' && footageCount ? 'Deleted; its footage is in the Inbox' : 'Deleted');
   }
 
-  // Clips waiting in Review: step through them without going back to the board.
-  const reviewing = summary.data?.stage === REVIEW_STAGE;
-  const waiting = queue.data ?? [];
+  // Videos waiting for my eyes on any page (not the ones with Claude): step through them without going back.
+  const reviewing = !!summary.data && (summary.data.stage === REVIEW_STAGE || !!summary.data.render || !!summary.data.rendering);
+  const waiting = queue;
   const at = waiting.findIndex((c) => c.pieceId === piece.id);
-  const after = reviewing && at >= 0 ? (waiting[at + 1] ?? waiting[at - 1]) : waiting.find((c) => c.pieceId !== piece.id);
-  const openClip = (c: { pieceId: string; workspace: { id: string } } | undefined) => c && navigate(`/w/${c.workspace.id}/p/${c.pieceId}`);
+  const after = at >= 0 ? (waiting[at + 1] ?? waiting[at - 1]) : waiting.find((c) => c.pieceId !== piece.id);
+  const openClip = (c: { pieceId: string; workspaceId: string } | undefined) => c && navigate(`/w/${c.workspaceId}/p/${c.pieceId}`);
   const isClip = !!(summary.data?.moment || summary.data?.campaign);
 
   return (
@@ -155,7 +159,7 @@ function Editor({ piece }: { piece: PieceDetail }) {
               <next.icon /> <span className="hidden sm:inline">{next.label}</span>
             </Button>
           )}
-          {summary.data?.render && next?.label !== 'Schedule' && !reviewing && (
+          {summary.data?.render && !next && (
             <Button size="sm" variant="outline" onClick={() => setScheduling(true)}>
               <CalendarClock /> <span className="hidden sm:inline">Schedule</span>
             </Button>
@@ -191,7 +195,7 @@ function Editor({ piece }: { piece: PieceDetail }) {
           <StageStepper stages={workspace.stages} current={piece.stage} onChange={(stage) => patchPiece({ stage })} className="flex-1" />
           {after && (
             <Button size="sm" variant="ghost" className="h-7 shrink-0 text-xs" onClick={() => openClip(after)}>
-              Next to review <ChevronRight />
+              Next to watch{waiting.length > (at >= 0 ? 1 : 0) ? ` (${waiting.length - (at >= 0 ? 1 : 0)})` : ''} <ChevronRight />
             </Button>
           )}
         </div>
@@ -203,12 +207,12 @@ function Editor({ piece }: { piece: PieceDetail }) {
             <VideoPanel piece={piece} summary={summary.data} video={video} onVideo={setVideo} />
           </div>
           <div className="min-w-0 space-y-8">
-            {summary.data?.render && <NoteList pieceId={piece.id} video={video} mediaId={summary.data.render.mediaId} version={summary.data.renderVersion} />}
             {reviewing && summary.data && (
               <section id="review" className="scroll-mt-4 rounded-xl border bg-card p-4" aria-label="Review">
-                <ClipReview clip={summary.data} onDone={() => (after ? openClip(after) : navigate(`/w/${workspace.id}/board`))} />
+                <ClipReview clip={summary.data} piece={piece} onSchedule={() => setScheduling(true)} onDone={() => (after ? openClip(after) : navigate('/today'))} />
               </section>
             )}
+            {summary.data?.render && <NoteList pieceId={piece.id} video={video} mediaId={summary.data.render.mediaId} version={summary.data.renderVersion} />}
             {workspace.kind !== 'clipping' && <DirectionPanel piece={piece} />}
             <section className="space-y-3" aria-label="Idea and script">
               <TagInput value={piece.tags} onChange={(t) => patchPiece({ tags: t })} suggestions={tags.data} />

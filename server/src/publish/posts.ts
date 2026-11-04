@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, lt, or } from 'drizzle-orm';
 import { z } from 'zod';
-import { copyFromDraft, postProblems, upcomingSlotTimes, type PostFormat, type PostOptions, type PostProblem } from '../../../shared/publish';
+import { copyFromDraft, POSTING, postProblems, upcomingSlotTimes, type PostFormat, type PostOptions, type PostProblem } from '../../../shared/publish';
 import { normalizeDraft } from '../../../shared/types';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
@@ -41,8 +41,8 @@ export const scheduleSchema = z.object({
   when: z.discriminatedUnion('mode', [
     z.object({ mode: z.literal('now'), staggerMinutes: z.number().int().min(0).max(24 * 60).default(0) }),
     z.object({ mode: z.literal('at'), at: z.number().int(), staggerMinutes: z.number().int().min(0).max(24 * 60).default(0) }),
-    // Each account's next free queue slot.
-    z.object({ mode: z.literal('queue') }),
+    // Each account's next free queue slot; `asap`: right away when a queue time just went by without a post.
+    z.object({ mode: z.literal('queue'), asap: z.boolean().optional() }),
   ]),
 });
 export type ScheduleInput = z.infer<typeof scheduleSchema>;
@@ -61,19 +61,32 @@ export function setPost(p: Pick<PostRow, 'id' | 'workspaceId' | 'pieceId'>, valu
 /** Posts can be changed until they start going out, and again if they fail or miss their time. */
 export const editable = (p: Pick<PostRow, 'status'>) => p.status === 'scheduled' || p.status === 'failed' || p.status === 'missed';
 
-/** Times an account already has a post going out, so the queue doesn't double-book a slot. */
+/** When an account's posts went out or will (the last two days on), so the queue keeps its spacing and daily cap. */
 function takenTimes(accountId: string) {
+  const since = now() - 2 * 24 * 3600_000;
   return db
-    .select({ at: schema.posts.scheduledAt })
+    .select({ at: schema.posts.scheduledAt, publishedAt: schema.posts.publishedAt })
     .from(schema.posts)
-    .where(and(eq(schema.posts.accountId, accountId), inArray(schema.posts.status, ['scheduled', 'publishing']), gte(schema.posts.scheduledAt, now() - 60_000)))
+    .where(and(eq(schema.posts.accountId, accountId), inArray(schema.posts.status, ['scheduled', 'publishing', 'published']), or(gte(schema.posts.scheduledAt, since), gte(schema.posts.publishedAt, since))))
     .all()
-    .map((r) => r.at);
+    .map((r) => r.publishedAt ?? r.at);
 }
 
-export function nextFreeSlot(account: AccountRow, after: number, alsoTaken: number[] = []) {
+const localDate = (ms: number) => new Date(ms).toDateString();
+
+/**
+ * The account's next good time (shared/publish.ts POSTING): a queue time with room that day and no post within the
+ * gap. With `asap`, a queue time that went by without a post a little while ago means now (a minute from now).
+ */
+export function nextFreeSlot(account: AccountRow, after: number, alsoTaken: number[] = [], opts: { asap?: boolean } = {}) {
   const taken = [...takenTimes(account.id), ...alsoTaken];
-  return upcomingSlotTimes(account.slots, after).find((t) => !taken.some((x) => Math.abs(x - t) < 60_000)) ?? null;
+  const fits = (t: number) => taken.filter((x) => localDate(x) === localDate(t)).length < POSTING.perDay && !taken.some((x) => Math.abs(x - t) < POSTING.gapMs);
+  if (opts.asap) {
+    const soon = after + 60_000;
+    const missed = upcomingSlotTimes(account.slots, after - POSTING.lateMs, 1).some((t) => t <= after && localDate(t) === localDate(after));
+    if (missed && fits(soon)) return soon;
+  }
+  return upcomingSlotTimes(account.slots, after).find(fits) ?? null;
 }
 
 /**
@@ -99,7 +112,7 @@ export function planPosts(pieceId: string, input: ScheduleInput) {
     const problems: PostProblem[] = [];
     let at: number | null;
     if (input.when.mode === 'queue') {
-      at = nextFreeSlot(account, now(), queued[account.id]);
+      at = nextFreeSlot(account, now(), queued[account.id], { asap: input.when.asap });
       if (at === null) problems.push({ level: 'error', message: `${accountLabel(account)} has no free queue times — set them on the Accounts page.` });
       else (queued[account.id] ??= []).push(at);
     } else at = base + i * input.when.staggerMinutes * 60_000;

@@ -1,4 +1,5 @@
 import type { Campaign, CampaignOrigin, CampaignResults, Submission } from '@shared/campaigns';
+import type { PageColumn } from '@shared/dashboard';
 import type { DayPart, PostStats, ReviewBody, ReviewStatus, WeeklyReviewSetting } from '@shared/analytics';
 import type { EditSpec, EditTemplate } from '@shared/edit';
 import type { MascotId } from '@shared/mascots';
@@ -382,6 +383,8 @@ export type SubmissionsSyncState = {
 export type TodayData = {
   from: number;
   to: number;
+  /** One column per page (missing from servers before the dashboard). */
+  pages?: PageColumn[];
   workspaces: {
     id: string;
     name: string;

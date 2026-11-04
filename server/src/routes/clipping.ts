@@ -5,7 +5,7 @@ import { queueScan, readSourceTranscript } from '../campaigns/sources';
 import { badRequest, HttpError } from '../lib/http';
 import { hasPendingJob } from '../jobs/queue';
 import { getMoment, queueMake, updateMoment } from '../clipping/moments';
-import { approveClip, rejectClip, reviewClip, reviewQueue } from '../clipping/review';
+import { approveClip, approvePlan, rejectClip, reviewClip, reviewQueue, undoApprove } from '../clipping/review';
 
 const idParam = z.object({ id: z.string().min(1) });
 
@@ -63,6 +63,14 @@ export async function clippingRoutes(app: FastifyInstance) {
     const { id } = idParam.parse(req.params);
     const body = z.object({ tiktokPrivacy: z.enum(['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY']).optional() }).parse(req.body ?? {});
     return approveClip(id, body);
+  });
+
+  app.get('/api/review/:id/plan', async (req) => approvePlan(idParam.parse(req.params).id));
+
+  app.post('/api/review/:id/undo', async (req) => {
+    const { id } = idParam.parse(req.params);
+    const { stage } = z.object({ stage: z.string().min(1).max(40) }).parse(req.body);
+    return undoApprove(id, stage);
   });
 
   app.post('/api/review/:id/reject', async (req) => {
