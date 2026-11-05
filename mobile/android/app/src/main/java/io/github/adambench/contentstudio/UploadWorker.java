@@ -76,9 +76,9 @@ public class UploadWorker extends Worker {
         try {
             Pairing pairing = Pairing.read(getApplicationContext());
             if (pairing == null) throw new Permanent("Pair the app with your computer, then try again.", true);
-            if ("text".equals(item.optString("kind"))) sendText(pairing, item);
-            else if ("saved".equals(item.optString("kind"))) sendSaved(pairing, item);
-            else sendFile(pairing, item);
+            // Typed ideas and saved posts went with Ideas (2026-11-05): only files are sent now.
+            if (!"file".equals(item.optString("kind", "file"))) throw new Permanent("Ideas and saved posts are no longer in the app.", false);
+            sendFile(pairing, item);
             queue.markState(id, "done", null);
             return Result.success();
         } catch (Permanent e) {
@@ -90,23 +90,6 @@ public class UploadWorker extends Worker {
             Log.i(TAG, "Will retry " + id + ": " + e.getMessage());
             queue.markState(id, "waiting", null);
             return Result.retry();
-        }
-    }
-
-    private void sendText(Pairing pairing, JSONObject item) throws Exception {
-        JSONObject body = new JSONObject().put("text", item.getString("text"));
-        try (Response res = call(pairing, "POST", "/api/workspaces/" + item.getString("workspaceId") + "/capture", RequestBody.create(body.toString(), JSON))) {
-            check(res);
-        }
-    }
-
-    /** A share for the Saved pile, or a note for it: the card's id makes sending it again harmless. */
-    private void sendSaved(Pairing pairing, JSONObject item) throws Exception {
-        JSONObject body = new JSONObject().put("id", item.getString("ideaId"));
-        if (item.has("text")) body.put("text", item.getString("text"));
-        if (item.has("note")) body.put("note", item.getString("note"));
-        try (Response res = call(pairing, "POST", "/api/workspaces/" + item.getString("workspaceId") + "/ideas/saved", RequestBody.create(body.toString(), JSON))) {
-            check(res);
         }
     }
 

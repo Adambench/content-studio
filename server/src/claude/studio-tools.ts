@@ -48,7 +48,6 @@ import { libraryScene, SCENE_LIBRARY, SCENE_PRESETS, sceneMaxSeconds, sceneSecon
 import { MAX_AYAT } from '../../../shared/quran';
 import { lookupAyat, TRANSLATION } from '../islamic/quran';
 import { CHARACTERS, normalizeRecipe, RECIPE_INFO, recipeNeedsBuild, VOICES } from '../../../shared/recipe';
-import { ttsInstalled } from '../services/tts';
 import { clipToolsInstalled } from '../services/cliptools';
 import { enqueue, hasPendingJob } from '../jobs/queue';
 import { tightenEdit } from '../studio/tighten';
@@ -58,9 +57,7 @@ import { matteReady, queueEffect } from '../studio/effects';
 import { ARSENAL_KINDS, type ArsenalKind } from '../../../shared/arsenal';
 import { BROLL_LAYOUT_INFO, BROLL_LAYOUTS, CLIP_MOTION_INFO, CLIP_MOTIONS, FILTER_LOOK_INFO, FILTER_LOOKS, OVERLAY_ANIMATION_INFO, OVERLAY_ANIMATIONS, TEXTURE_INFO } from '../../../shared/looks';
 import { BUNDLED_FONTS } from '../../../shared/fonts';
-import { GEN_ASPECTS, GEN_PURPOSE_INFO, GEN_PURPOSES, NO_LIVING_BEINGS } from '../../../shared/generate';
 import { workerFor } from '../compute/workers';
-import { generationSettings, queueGeneration } from '../studio/generate';
 import { fail, ok, safe, ToolError } from './tool-helpers';
 import { KNOWLEDGE_TOPICS, RULE_TITLE_MAX } from '../../../shared/knowledge';
 
@@ -162,16 +159,12 @@ export function studioToolLabel(name: string, input: Record<string, any>): strin
       return 'Looked at a motion graphic';
     case 'get_quran':
       return `Looked up ${typeof input.ref === 'string' ? input.ref : 'an ayah'} in the Quran`;
-    case 'write_format_video':
-      return input.kind ? `Wrote a ${RECIPE_INFO[input.kind as keyof typeof RECIPE_INFO]?.label.toLowerCase() ?? 'format'} video` : 'Wrote a format video';
     case 'list_assets':
       return 'Browsed brand assets';
     case 'apply_effect':
       return 'Started an effect on the person';
     case 'get_arsenal':
       return 'Looked through the toolbox of video moves';
-    case 'generate_media':
-      return input.kind === 'video' ? 'Queued a generated clip for tonight' : 'Started a generated picture';
     default:
       return null;
   }
@@ -367,8 +360,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         const vo = next.audio.voiceover;
         if (vo && vo.mediaId !== spec.audio.voiceover?.mediaId) {
           const m = db.select().from(schema.media).where(and(eq(schema.media.id, vo.mediaId), eq(schema.media.workspaceId, workspaceId))).get();
-          if (!m || m.kind !== 'audio' || m.assetType || (m.source !== 'capture' && m.source !== 'tts')) throw new ToolError('The voiceover must be one of the creator’s recordings (get_edit lists them).');
-          if (m.source === 'tts' && ownVoiceOnly()) throw new ToolError(OWN_VOICE);
+          if (!m || m.kind !== 'audio' || m.assetType || !['capture', 'share', 'upload'].includes(m.source)) throw new ToolError('The voiceover must be one of the creator’s recordings (get_edit lists them).');
         }
         // A cut never lands inside a word (half a word is the worst-sounding cut there is).
         let moved: string[] = [];
@@ -585,58 +577,6 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
     ),
 
     tool(
-      'write_format_video',
-      'Make a piece’s video from words instead of footage, or rewrite one: story (a story read over background footage, its title on a post card), ' +
-        'chat (a text conversation that plays out message by message, each read aloud) or dialogue (two drawn characters talking, mouths moving with their voices). ' +
-        'The voices are made on this computer (local work, like a render) and the video is laid out around them; the creator previews, renders and posts it. ' +
-        'Write for the ear: short sentences, a hook in the first line, a payoff at the end, 20–60 s spoken (about 2.7 words a second). Never music. ' +
-        `Voices: ${VOICES.map((v) => `${v.id} (${v.who})`).join(', ')}. Characters: ${CHARACTERS.map((c) => `${c.id} (${c.hint})`).join(', ')}.`,
-      {
-        pieceId: z.string(),
-        kind: z.enum(['story', 'chat', 'dialogue']),
-        story: z.object({ title: z.string().describe('The hook, read first and shown on the post card'), text: z.string(), author: z.string().optional().describe('Shown on the card as who posted it'), voice: z.string().optional() }).optional(),
-        chat: z
-          .object({
-            contact: z.string().describe('The other person, as their name shows at the top'),
-            messages: z.array(z.object({ from: z.enum(['them', 'me']), text: z.string() })).min(2).max(60),
-            voices: z.object({ them: z.string(), me: z.string() }).optional(),
-          })
-          .optional(),
-        dialogue: z
-          .object({
-            cast: z.array(z.object({ name: z.string(), look: z.enum(CHARACTERS.map((c) => c.id) as [string, ...string[]]), voice: z.string() })).length(2),
-            lines: z.array(z.object({ who: z.union([z.literal(0), z.literal(1)]), text: z.string() })).min(2).max(80),
-          })
-          .optional(),
-        speed: z.number().min(0.8).max(1.3).optional().describe('Reading speed, 1.05 by default'),
-        backgrounds: z.array(z.string()).max(10).optional().describe('Library videos to play muted underneath (gameplay the creator recorded); leave out to keep what’s there'),
-      },
-      safe(async ({ pieceId, kind, story, chat, dialogue, speed, backgrounds }) => {
-        if (ownVoiceOnly()) throw new ToolError(OWN_VOICE);
-        const words = kind === 'story' ? story : kind === 'chat' ? chat : dialogue;
-        if (!words) throw new ToolError(`Pass the ${kind} object with the words.`);
-        const edit = editFor(pieceId) ?? createEdit(pieceId, 'claude');
-        const spec = normalizeEdit(edit.working);
-        const before = spec.recipe?.kind === kind ? spec.recipe : null;
-        const recipe = normalizeRecipe({
-          ...(before ?? {}),
-          kind,
-          ...words,
-          ...(speed !== undefined && { speed }),
-          backgrounds: backgrounds ?? spec.recipe?.backgrounds ?? [],
-          builtFrom: before?.builtFrom ?? null,
-        });
-        if (!recipe) throw new ToolError('That recipe couldn’t be read.');
-        const { version } = saveEditVersion(edit.id, { author: 'claude', message: `Wrote the ${RECIPE_INFO[kind].label.toLowerCase()} video`, spec: { ...spec, recipe } });
-        const saved = normalizeEdit(version.spec).recipe!;
-        if (!recipeNeedsBuild(saved)) return ok(`Saved v${version.number}; the voice is already up to date.`);
-        if (!ttsInstalled()) return ok(`Saved v${version.number}. The voices need the clip tools (Settings → Clip tools) before the video can be made — tell the creator.`);
-        if (!hasPendingJob('format.build', 'editId', edit.id)) enqueue('format.build', { editId: edit.id, by: 'claude' }, { maxAttempts: 1 });
-        return ok(`Saved v${version.number}. Making the voice now (about half the spoken length); the edit is laid out when it's done — check it with get_edit, then the creator can preview and render.`);
-      }),
-    ),
-
-    tool(
       'check_edit',
       'The quality check of a piece’s video edit as it is now (saved as a version first): a score out of 100 for the hook, promise → payoff, pacing, motion, sound on motion, captions and the first frame, with what was measured and the fixes. ' +
         `Below ${QUALITY_BAR} it gets fixed before it renders. Takes up to half a minute.`,
@@ -806,45 +746,6 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         updateNote(noteId, { reply, status: fixed === false ? 'open' : 'fixed' });
         const what = learned ? ` Lesson “${learned.title}” (${learned.taught?.count ?? 1}×).` : '';
         return ok(fixed === false ? `Answered; it stays open.${what}` : `Marked fixed.${what}`);
-      }),
-    ),
-
-    tool(
-      'generate_media',
-      'Make a picture or a ~5 s video clip on the creator’s home PC (FLUX.1-schnell for pictures, a few minutes each; Wan 2.1 for clips, made overnight). ' +
-        `For b-roll that shows what is said when there is no footage of it, a calm background, or a cover. Halal rule, always: describe places, objects, food, nature, buildings, light, weather, textures or screens only — ${NO_LIVING_BEINGS} ` +
-        'Every result is checked and made again if a person or animal appears. Describe one concrete shot in plain words (subject, setting, light, angle), not a story. ' +
-        'With pieceId and place it goes into that video’s edit as b-roll by itself when it is ready (a new version); otherwise it lands in the piece’s files. Runs in the background: don’t wait for it or start it twice.',
-      {
-        prompt: z.string().min(3).max(600).describe('One concrete shot, e.g. "a laptop on a wooden desk by a window at dawn, steam rising from a cup of tea"'),
-        kind: z.enum(['image', 'video']).describe('image: ready in minutes; video: made tonight'),
-        purpose: z.enum(GEN_PURPOSES).optional().describe(GEN_PURPOSES.map((p) => `${p}: ${GEN_PURPOSE_INFO[p].hint}`).join('; ')),
-        aspect: z.enum(GEN_ASPECTS).optional().describe('Default 9:16'),
-        pieceId: z.string().optional().describe('The video it is for'),
-        place: z
-          .object({ start: z.number().min(0), end: z.number().min(0.3), layout: z.enum(BROLL_LAYOUTS).optional() })
-          .optional()
-          .describe('Put it into the edit as b-roll from start to end (seconds on the timeline); needs pieceId'),
-      },
-      safe(async ({ prompt, kind, purpose, aspect, pieceId, place }) => {
-        if (pieceId) ownPiece(pieceId);
-        if (place && !pieceId) throw new ToolError('place needs pieceId.');
-        if (place && place.end <= place.start) throw new ToolError('place.end must be after place.start.');
-        if (place && !editFor(pieceId!)) throw new ToolError('This piece has no edit yet: start one first, or leave place out.');
-        queueGeneration({
-          workspaceId,
-          by: 'claude',
-          kind,
-          prompt,
-          purpose: purpose ?? 'broll',
-          aspect: aspect ?? '9:16',
-          pieceId: pieceId ?? null,
-          place: place ? { start: place.start, end: place.end, layout: place.layout ?? 'full' } : null,
-        });
-        const s = generationSettings();
-        const when = kind === 'video' ? `It will be made tonight (between ${s.videoFrom}:00 and ${s.videoTo}:00).` : 'It takes a few minutes.';
-        const pc = workerFor(kind) ? '' : ' No home PC with this is online right now: it waits until one is.';
-        return ok(`Queued. ${when}${pc} ${place ? 'It goes into the edit by itself when it is ready.' : 'It lands in the piece’s files.'}`);
       }),
     ),
 

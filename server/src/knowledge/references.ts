@@ -26,7 +26,7 @@ import { emit } from '../lib/events';
 import { extractFrames, probe } from '../lib/ffmpeg';
 import { badRequest, notFound } from '../lib/http';
 import { enqueue, JobError } from '../jobs/queue';
-import { downloadPost, postOf, whisper } from '../research/analyse';
+import { downloadPost, postOf, whisper } from './fetch';
 import { clipToolsInstalled } from '../services/cliptools';
 import { getWorkspace } from '../services/pieces';
 import { specMedia, specTranscripts } from '../studio/edits';
@@ -108,27 +108,12 @@ export function queueReference(input: { url: string; workspaceId?: string | null
   return getReference(id);
 }
 
-/** After an error: measure again if it never was, else only read it again. */
+/** After an error: measure it again. What I like about it is mine to write (no Claude read since Phase 14). */
 export function retryReference(id: string) {
   const r = getRow(id);
   if (r.status !== 'error') return getReference(id);
-  if (r.measures) {
-    update(id, { status: 'drafting', step: 'Waiting to read it', error: null });
-    enqueue('reference.lessons', { referenceId: id }, { maxAttempts: 2 });
-  } else {
-    update(id, { status: 'queued', step: 'Waiting to start', error: null });
-    enqueue('reference.measure', { referenceId: id }, { maxAttempts: 2 });
-  }
-  return getReference(id);
-}
-
-/** Read it again (my marks stay with the ingredients of the same name). */
-export function rereadReference(id: string) {
-  const r = getRow(id);
-  if (!r.measures) throw badRequest('It hasn’t been measured yet.');
-  if (r.status === 'measuring' || r.status === 'drafting' || r.status === 'queued') return getReference(id);
-  update(id, { status: 'drafting', step: 'Waiting to read it', error: null });
-  enqueue('reference.lessons', { referenceId: id }, { maxAttempts: 2 });
+  update(id, { status: 'queued', step: 'Waiting to start', error: null });
+  enqueue('reference.measure', { referenceId: id }, { maxAttempts: 2 });
   return getReference(id);
 }
 
@@ -240,8 +225,7 @@ export async function measureReference({ referenceId, measureOnly }: { reference
     step('Measuring the sound');
     const measures = measure({ seconds, width: p.width ?? 0, height: p.height ?? 0, diffs, cuts, rest, mix, voice, words });
     const lines = (transcript?.segments ?? []).map((s) => ({ at: Math.round(s.start * 10) / 10, text: s.text.trim() })).filter((l) => l.text);
-    update(referenceId, { measures, lines, measuredAt: now(), status: 'drafting', step: 'Waiting to read it', error: null });
-    if (!measureOnly) enqueue('reference.lessons', { referenceId }, { maxAttempts: 2 });
+    update(referenceId, { measures, lines, measuredAt: now(), status: 'done', step: '', error: null });
   } finally {
     await rm(work, { recursive: true, force: true });
   }
@@ -332,67 +316,6 @@ function measuredText(m: ReferenceMeasures) {
 const pageLine = (w: { name: string; kind: keyof typeof KIND_INFO; niche: string }) => `${w.name} (${KIND_INFO[w.kind].label.toLowerCase()})${w.niche ? ` — ${w.niche}` : ''}`;
 
 /** The read job (`reference.lessons`, its old name): one model call, how it's built and its ingredients for my marks. */
-export async function readReference({ referenceId }: { referenceId: string }) {
-  const r = getRow(referenceId);
-  if (!r.measures) throw new JobError('It hasn’t been measured.', { retry: false });
-  await waitForUsage('lessons');
-  update(referenceId, { status: 'drafting', step: 'Reading how it’s made' });
-  const m = r.measures;
-  const ws = r.workspaceId ? getWorkspace(r.workspaceId) : null;
-  const pages = ws ? `The page ${pageLine(ws)}.` : `Every page: ${db.select().from(schema.workspaces).all().map(pageLine).join('; ') || '(none yet)'}.`;
-  const images: PromptImage[] = [];
-  for (const name of ['first', 'sheet'] as const) {
-    const file = join(dirOf(referenceId), `${name}.jpg`);
-    if (existsSync(file)) images.push({ data: (await readFile(file)).toString('base64'), mediaType: 'image/jpeg' });
-  }
-  const n = SHEET.cols * SHEET.rows;
-  const sheetTimes = Array.from({ length: n }, (_, i) => Math.round((((i + 0.5) * m.seconds) / n) * 10) / 10);
-  const out = await askStructured<ReadOut>({
-    task: 'lessons',
-    system: [playbook('halal'), INSTRUCTIONS].filter(Boolean).join('\n\n'),
-    prompt: [
-      `# Inspiration for\n${pages}`,
-      `# The video\n${[r.platform, r.channel && `by ${r.channel}`, r.views !== null && `${r.views.toLocaleString('en-GB')} views`].filter(Boolean).join(' · ')}${r.title ? `\nTitle or caption: “${r.title.slice(0, 400)}”` : ''}${r.note ? `\nWhat the creator says moved them: “${r.note.slice(0, 600)}”` : ''}`,
-      `# Measured\n${measuredText(m)}`,
-      `# What's said\n${r.lines.length ? r.lines.map((l) => `[${l.at} s] ${l.text}`).join('\n').slice(0, 8000) : '(nothing)'}`,
-      `# The pictures\n${images.length === 2 ? `The first frame, then the contact sheet: 12 frames left to right, top to bottom, at ${sheetTimes.join(', ')} s.` : '(none)'}`,
-    ].join('\n\n'),
-    schema: READ_SCHEMA,
-    images,
-    model: resolveModel(),
-  });
-  const inRange = (t: unknown) => (typeof t === 'number' && t >= 0 && t <= m.seconds ? Math.round(t * 10) / 10 : null);
-  const read: ReferenceRead = {
-    summary: out.summary?.trim() ?? '',
-    why: out.why?.trim() ?? '',
-    shape: (out.shape ?? [])
-      .map((x) => ({ at: inRange(x.at), what: (x.what ?? '').trim() }))
-      .filter((x): x is { at: number; what: string } => x.at !== null && !!x.what)
-      .sort((a, b) => a.at - b.at),
-    cautions: (out.cautions ?? []).map((c) => c.trim()).filter(Boolean),
-  };
-  // Marks I already made stay with the ingredient of the same name.
-  const before = new Map(getRow(referenceId).ingredients.map((g) => [`${g.aspect}:${g.name.toLowerCase()}`, g]));
-  const ingredients: Ingredient[] = (out.ingredients ?? [])
-    .filter((g) => (INGREDIENT_ASPECTS as readonly string[]).includes(g.aspect) && g.name?.trim() && g.what?.trim())
-    .slice(0, 10)
-    .map((g) => {
-      const old = before.get(`${g.aspect}:${g.name.trim().toLowerCase()}`);
-      return { id: newId().slice(0, 8), aspect: g.aspect, name: g.name.trim().slice(0, 80), what: g.what.trim().slice(0, 600), why: (g.why ?? '').trim().slice(0, 300), at: inRange(g.at), mark: old?.mark ?? null, note: old?.note ?? '' };
-    });
-  update(referenceId, { read, ingredients, status: 'done', step: '', error: null });
-  emit({ type: 'job', jobType: 'reference.lessons', status: 'done', message: 'A reference is read: mark what you want from it on Knowledge' });
-}
-
-export function onReferenceReadFailed({ referenceId }: { referenceId: string }, message: string) {
-  try {
-    update(referenceId, { status: 'error', step: '', error: `Measured, but it couldn’t be read: ${message}`.slice(0, 300) });
-  } catch {
-    /* deleted */
-  }
-}
-
-/** My marks on a reference: what moved me, each ingredient wanted or not, and which page it's for. */
 export function markReference(id: string, input: { note?: string; workspaceId?: string | null; ingredients?: { id: string; mark?: IngredientMark; note?: string }[] }) {
   const r = getRow(id);
   if (input.workspaceId) getWorkspace(input.workspaceId);
@@ -458,80 +381,6 @@ export function saveStyle(workspaceId: string, body: string) {
 }
 
 /** Write the style again from the references and my marks (my click). */
-export function queueStyle(workspaceId: string) {
-  getWorkspace(workspaceId);
-  if (!styleReferences(workspaceId).length) throw badRequest('Add a video that moved you first: the style is written from what you mark on it.');
-  setStyle(workspaceId, { status: 'building', error: null });
-  enqueue('inspiration.build', { workspaceId }, { maxAttempts: 2 });
-  return getStyle(workspaceId);
-}
-
-const STYLE_INSTRUCTIONS = `You write a page's style: what its videos are like, from the videos its creator chose as inspiration and what they marked on each. It's inspiration, never a template or a copy: name the qualities to aim for, concretely enough that someone could make a new video from it on any topic the page covers.
-
-- What the creator marked *want* matters most; their own notes matter even more. Unmarked ingredients were in a video they loved: count them a little. *Not for me* goes under "Leave out", briefly, and nowhere else.
-- Never take a reference's topic, claims or lines as content to make: only how it's built and how it feels.
-- The page's brand guide wins wherever a reference differs (what the voice may say, how sources and Arabic are shown, the palette): the style never contradicts it.
-- Where references differ, give the range ("calm narration, or a scholar's own voice").
-- Say where an idea comes from, briefly: (from @channel).
-- No musical instruments ever; voice-only backgrounds (humming, voices, a nasheed with no instruments) are fine.
-- Markdown: these ## headings, each with 2–5 short bullets: What our videos are · How a video is built · Look and quality · Voice and words · Text on screen · Pace and motion · Sound · Feel · Leave out. At most about 400 words.
-- If the creator edited the current style, keep their wording wherever it still fits.`;
-
-/** The `inspiration.build` job: one model call writes the page's style. */
-export async function buildStyle({ workspaceId }: { workspaceId: string }) {
-  const ws = getWorkspace(workspaceId);
-  const refs = styleReferences(workspaceId);
-  if (!refs.length) {
-    setStyle(workspaceId, { status: 'idle' });
-    return;
-  }
-  await waitForUsage('lessons');
-  const current = db.select().from(schema.pageStyles).where(eq(schema.pageStyles.workspaceId, workspaceId)).get();
-  const markText = (g: Ingredient) => (g.mark === 'want' ? 'WANT' : g.mark === 'skip' ? 'NOT FOR ME' : 'unmarked');
-  const out = await askStructured<{ body: string }>({
-    task: 'lessons',
-    system: [playbook('halal'), STYLE_INSTRUCTIONS].join('\n\n'),
-    prompt: [
-      `# The page\n${pageLine(ws)}${ws.description ? `\n${ws.description.slice(0, 600)}` : ''}${ws.brandGuide ? `\n\nBrand guide (its look and voice are set there; the style adds how the videos are made and feel):\n${ws.brandGuide.slice(0, 2500)}` : ''}`,
-      current?.body && current.body !== current.builtBody ? `# The current style, as the creator edited it\n${current.body}` : '',
-      `# The videos that moved them (${refs.length})`,
-      ...refs.map((r) =>
-        [
-          `## ${r.channel ? `@${r.channel}` : r.url}${r.workspaceId ? '' : ' (for every page)'}`,
-          r.note ? `What moved them: “${r.note}”` : '',
-          r.read?.summary ?? '',
-          r.read?.why ? `Why it works: ${r.read.why}` : '',
-          r.read?.shape?.length ? `Shape: ${r.read.shape.map((x) => `${x.at} s ${x.what}`).join(' → ')}` : '',
-          'Ingredients:',
-          ...r.ingredients.map((g) => `- [${markText(g)}] ${ASPECT_LABELS[g.aspect]}: ${g.name}. ${g.what}${g.note ? ` (their note: “${g.note}”)` : ''}`),
-        ]
-          .filter(Boolean)
-          .join('\n'),
-      ),
-    ]
-      .filter(Boolean)
-      .join('\n\n'),
-    schema: { type: 'object', additionalProperties: false, required: ['body'], properties: { body: { type: 'string', description: 'The style, in markdown' } } },
-    model: resolveModel(),
-  });
-  const body = (out.body ?? '').trim().slice(0, 8000);
-  if (!body) throw new Error('No style came back.');
-  setStyle(workspaceId, { body, builtBody: body, builtAt: now(), builtFrom: fingerprint(refs), references: refs.length, status: 'idle', error: null });
-  emit({ type: 'job', jobType: 'inspiration.build', status: 'done', message: `${ws.name}’s style is written from its references` });
-}
-
-export function onStyleFailed({ workspaceId }: { workspaceId: string }, message: string) {
-  try {
-    setStyle(workspaceId, { status: 'error', error: message.slice(0, 300) });
-  } catch {
-    /* deleted */
-  }
-}
-
-/**
- * For every prompt that makes something for a page: its style, or (before one is written) what I marked wanted and
- * not on its references. Empty when there's nothing.
- */
 export function inspirationText(workspaceId: string) {
   const row = db.select().from(schema.pageStyles).where(eq(schema.pageStyles.workspaceId, workspaceId)).get();
   if (row?.body.trim()) return `The page's style, from the videos that moved its creator (follow it; never copy those videos):\n${row.body.trim()}`;

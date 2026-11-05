@@ -8,7 +8,6 @@ import { MIN_SCORE, MOMENT_KINDS, clock, type MomentCaptions, type MomentKind, t
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
 import { lessonsText } from '../knowledge/lessons';
-import { briefForPrompt } from '../research/brief';
 import { waitForUsage } from '../claude/usage';
 import { emitCampaign, getCampaignRow, getSource, updateSource, type MomentRow } from '../campaigns/campaigns';
 import { readSourceTranscript } from '../campaigns/sources';
@@ -175,11 +174,6 @@ export async function pickMoments({ sourceId }: { sourceId: string }) {
     .filter((r) => r.reason && r.reason !== 'Skipped')
     .slice(0, 20);
 
-  // Each page's latest research brief: what kind of moments are pulling views in its niche.
-  const research = pages.flatMap((p) => {
-    const b = briefForPrompt(p.id);
-    return b ? [`${pages.length > 1 ? `For ${p.name}:\n` : ''}${b}`] : [];
-  });
   const platforms: CampaignPlatform[] = c.platforms.length ? c.platforms : ['tiktok', 'instagram', 'youtube'];
   const lines = toLines(t);
   const prompt = [
@@ -195,9 +189,6 @@ export async function pickMoments({ sourceId }: { sourceId: string }) {
     pages.map((p) => `- ${p.id}: ${p.name}${p.niche ? ` — ${p.niche}` : ''}${p.voiceMemory ? `\n  Voice notes: ${p.voiceMemory.slice(0, 800).replace(/\n/g, ' ')}` : ''}`).join('\n'),
     kept.length && `# Already taken from this source (don’t overlap)\n${kept.map((m) => `- ${m.start.toFixed(1)}–${m.end.toFixed(1)} “${m.title}” (${m.status})`).join('\n')}`,
     rejected.length && `# Clips I rejected before, and why\n${rejected.map((r) => `- “${r.title || r.firstLine.slice(0, 80)}” — ${r.reason ?? 'no reason given'}`).join('\n')}`,
-    s.viral.length > 0 &&
-      `# Stretches other clippers already got big on (their clips of this video, matched to the source by their words)\nLook at these first: if a stretch makes a clip that stands alone and fits the rules, pick it (trim to the best in and out points, make the hook your own), and say in \`why\` that it already worked. Never copy their edit, title or caption.\n${s.viral.map((h) => `- ${h.start.toFixed(1)}–${h.end.toFixed(1)} (${h.views.toLocaleString('en-US')} views): “${h.title.slice(0, 100)}”`).join('\n')}`,
-    research.length && `# What's working in the page's niche now (its research brief)\n${research.join('\n\n')}`,
     `# The source: ${s.title || 'untitled'}${s.creator ? ` (by ${s.creator})` : ''}\nLength ${clock(scan.duration)}${s.link ? ` · ${s.link}` : ''}${scan.whole ? ' · the whole transcript follows' : ` · ${scan.stretches.length} stretches the scan found liveliest follow (loudness, pace${scan.chat ? ', chat' : ''}, the brief’s words); the rest isn’t shown`}`,
     transcriptBlock(lines, scan.stretches),
   ]

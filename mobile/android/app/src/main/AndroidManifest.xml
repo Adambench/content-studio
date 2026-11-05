@@ -4,7 +4,6 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Voice memos (idea capture). -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Notifications from the computer, and the progress of big uploads. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- A long upload keeps going with the app closed (WorkManager's foreground job). -->
@@ -51,7 +50,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Launcher shortcuts and pairing links: contentstudio://capture, contentstudio://pair?… -->
+            <!-- Pairing links: contentstudio://pair?… -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -59,57 +58,22 @@
                 <data android:scheme="contentstudio" />
             </intent-filter>
 
-            <!-- The share sheet: footage and photos go to the library; voice notes become ideas. (Links and text go to
-                 "Save to Ideas", ShareActivity.) -->
+            <!-- The share sheet: clips (video, or a voice memo for a voiceover) go into a video I pick. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="video/*" />
-                <data android:mimeType="image/*" />
                 <data android:mimeType="audio/*" />
             </intent-filter>
-            <!-- Several at once; a mix of photos and videos comes as */*. -->
+            <!-- Several at once; a mix comes as */* (the share screen keeps only the clips). -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="video/*" />
-                <data android:mimeType="image/*" />
                 <data android:mimeType="audio/*" />
                 <data android:mimeType="*/*" />
             </intent-filter>
-
-            <meta-data
-                android:name="android.app.shortcuts"
-                android:resource="@xml/shortcuts" />
         </activity>
-
-        <!-- "Save to Ideas" in the share sheet: no screen, it saves and I'm straight back in the app I shared from. -->
-        <activity
-            android:name=".ShareActivity"
-            android:excludeFromRecents="true"
-            android:exported="true"
-            android:icon="@mipmap/ic_launcher"
-            android:label="@string/share_save_idea"
-            android:noHistory="true"
-            android:taskAffinity=""
-            android:theme="@style/AppTheme.Invisible">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
-                <data android:mimeType="image/*" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.SEND_MULTIPLE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="image/*" />
-            </intent-filter>
-        </activity>
-
-        <!-- "Add a note" typed in the "Saved to …" notification. -->
-        <receiver
-            android:name=".SavedNoteReceiver"
-            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

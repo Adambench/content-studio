@@ -1,7 +1,6 @@
 import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AiTask } from '../../../shared/ai';
-import { localStructured } from '../ai/local';
-import { canFallBack, routeFor } from '../ai/route';
+import { isUsageError, markClaudeLimited } from '../ai/route';
 import { baseOptions, resolveModel } from './options';
 import { claudeFamily, countUse } from '../toolbox/uses';
 import { recordUsage } from './usage';
@@ -23,16 +22,15 @@ async function* withImages(text: string, images: PromptImage[]): AsyncGenerator<
 type StructuredInput = { system: string; prompt: string; schema: Record<string, unknown>; model?: string; images?: PromptImage[]; signal?: AbortSignal; now?: boolean };
 
 /**
- * JSON matching `schema`, with no tools, from whoever answers `task` now (Claude or the self-hosted model,
- * `ai/route.ts`). Used by background jobs. `images` go before the prompt. `model` is the Claude model. `now`: I clicked
- * for it and am waiting, so it doesn't stop at the background share of Claude's usage (`RouteOpts`).
+ * JSON matching `schema`, with no tools, from Claude. Every call names its `task` (shared/ai.ts). `images` go before
+ * the prompt. `model` is the Claude model. `now`: I clicked for it and am waiting (background jobs call waitForUsage
+ * first; this doesn't).
  */
 export async function askStructured<T>(input: StructuredInput & { task: AiTask }): Promise<T> {
-  if ((await routeFor(input.task, { now: input.now })).provider === 'local') return localStructured<T>(input);
   try {
     return await askClaude<T>(input);
   } catch (err) {
-    if (await canFallBack(input.task, err)) return localStructured<T>(input);
+    if (isUsageError(err)) markClaudeLimited();
     throw err;
   }
 }

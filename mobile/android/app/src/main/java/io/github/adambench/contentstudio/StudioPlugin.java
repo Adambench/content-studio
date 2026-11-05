@@ -52,18 +52,13 @@ import org.json.JSONObject;
  * receiving shares, picking and recording files, the background upload queue, Firebase from the server's settings,
  * the QR scanner and the fingerprint lock.
  */
-@CapacitorPlugin(name = "Studio", permissions = { @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO }) })
+@CapacitorPlugin(name = "Studio")
 public class StudioPlugin extends Plugin {
 
     private static final String TAG = "StudioPlugin";
     private static final int ALLOWED_AUTHENTICATORS = BiometricManager.Authenticators.BIOMETRIC_WEAK | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
-    private final Recorder recorder = new Recorder();
-
-    @Nullable
-    private String recordingWorkspace;
-
     @Nullable
     private File cameraDir;
 
@@ -83,18 +78,9 @@ public class StudioPlugin extends Plugin {
     }
 
     @Override
-    protected void handleOnPause() {
-        // Android silences the microphone for apps in the background, so leaving the app ends the memo; it's kept.
-        if (!recorder.isRecording()) return;
-        JSObject event = finishRecording();
-        notifyListeners("recordStopped", event);
-    }
-
-    @Override
     protected void handleOnDestroy() {
         ShareInbox.setListener(null);
         UploadQueue.get(getContext()).setListener(null);
-        recorder.cancel();
     }
 
     // ---------- pairing ----------
@@ -420,53 +406,6 @@ public class StudioPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void enqueueText(PluginCall call) {
-        String workspaceId = call.getString("workspaceId");
-        String text = call.getString("text");
-        if (workspaceId == null || text == null || text.trim().isEmpty()) {
-            call.reject("workspaceId and text are required");
-            return;
-        }
-        try {
-            UploadQueue.get(getContext()).addText(workspaceId, text.trim());
-            call.resolve();
-        } catch (Exception e) {
-            call.reject(e.getMessage(), e);
-        }
-    }
-
-    /** Something for a page's Saved pile, from the app's own share screen (when "Save to Ideas" had nowhere to go yet). */
-    @PluginMethod
-    public void enqueueSaved(PluginCall call) {
-        String workspaceId = call.getString("workspaceId");
-        String id = call.getString("id");
-        String text = call.getString("text");
-        if (workspaceId == null || id == null || text == null || text.trim().isEmpty()) {
-            call.reject("workspaceId, id and text are required");
-            return;
-        }
-        try {
-            UploadQueue.get(getContext()).addSaved(workspaceId, id, text.trim(), null);
-            call.resolve();
-        } catch (Exception e) {
-            call.reject(e.getMessage(), e);
-        }
-    }
-
-    /** The page "Save to Ideas" sends to: the last personal or business page opened. */
-    @PluginMethod
-    public void setShareTarget(PluginCall call) {
-        String workspaceId = call.getString("workspaceId");
-        String name = call.getString("name");
-        if (workspaceId == null || name == null) {
-            call.reject("workspaceId and name are required");
-            return;
-        }
-        SavedShare.setTarget(getContext(), workspaceId, name);
-        call.resolve();
-    }
-
-    @PluginMethod
     public void listUploads(PluginCall call) {
         JSObject result = new JSObject();
         result.put("uploads", UploadQueue.get(getContext()).list());
@@ -491,76 +430,6 @@ public class StudioPlugin extends Plugin {
     public void clearFinished(PluginCall call) {
         UploadQueue.get(getContext()).clearFinished();
         call.resolve();
-    }
-
-    // ---------- voice memos ----------
-
-    @PluginMethod
-    public void startRecording(PluginCall call) {
-        if (call.getString("workspaceId") == null) {
-            call.reject("workspaceId is required");
-            return;
-        }
-        if (getPermissionState("microphone") != PermissionState.GRANTED) requestPermissionForAlias("microphone", call, "microphonePermission");
-        else beginRecording(call);
-    }
-
-    @PermissionCallback
-    private void microphonePermission(PluginCall call) {
-        if (getPermissionState("microphone") == PermissionState.GRANTED) beginRecording(call);
-        else call.reject("Microphone access was blocked. Allow it for Content Studio in Android’s settings.");
-    }
-
-    private void beginRecording(PluginCall call) {
-        try {
-            recorder.start(getContext(), (level, elapsedMs) -> {
-                JSObject event = new JSObject();
-                event.put("level", level);
-                event.put("elapsedMs", elapsedMs);
-                notifyListeners("recordLevel", event);
-            });
-            recordingWorkspace = call.getString("workspaceId");
-            call.resolve();
-        } catch (Exception e) {
-            call.reject("Couldn’t start recording: " + e.getMessage(), e);
-        }
-    }
-
-    /** Stop and queue the memo for the workspace (unless it's too short to be anything). */
-    @PluginMethod
-    public void stopRecording(PluginCall call) {
-        call.resolve(finishRecording());
-    }
-
-    @PluginMethod
-    public void cancelRecording(PluginCall call) {
-        recorder.cancel();
-        recordingWorkspace = null;
-        call.resolve();
-    }
-
-    private JSObject finishRecording() {
-        Recorder.Recording recording = recorder.stop();
-        String workspaceId = recordingWorkspace;
-        recordingWorkspace = null;
-        JSObject result = new JSObject();
-        result.put("durationMs", recording != null ? recording.durationMs : 0);
-        boolean queued = false;
-        if (recording != null && recording.durationMs >= 1000 && workspaceId != null) {
-            try {
-                JSArray files = new JSArray();
-                files.put(LocalFiles.describe(recording.file, "audio/mp4"));
-                UploadQueue.get(getContext()).addFiles(files, workspaceId, null, null, "capture");
-                queued = true;
-            } catch (Exception e) {
-                Log.w(TAG, "Couldn't queue the memo", e);
-            }
-        } else if (recording != null) {
-            //noinspection ResultOfMethodCallIgnored
-            recording.file.delete();
-        }
-        result.put("queued", queued);
-        return result;
     }
 
     // ---------- the lock ----------

@@ -12,7 +12,6 @@ import { db, newId, now, schema } from '../db';
 import { badRequest, HttpError, notFound } from '../lib/http';
 import { adoptFile } from '../services/media';
 import { getPiece, getWorkspace } from '../services/pieces';
-import { saveShared } from '../ideas/ideas';
 
 /*
  * Resumable uploads for the Android app, which sends big videos from a background job that may be stopped and
@@ -139,7 +138,6 @@ export async function uploadRoutes(app: FastifyInstance) {
 
       const media = await adoptFile(row.workspaceId, partPath(row.id), row.name, row.mime, { pieceId: row.pieceId, assetType: row.assetType, source: row.source });
       db.update(schema.uploads).set({ mediaId: media.id, updatedAt: now() }).where(and(eq(schema.uploads.id, row.id), isNull(schema.uploads.mediaId))).run();
-      if (row.source === 'idea') saveShared(row.workspaceId, { id: row.ideaId ?? undefined, mediaId: media.id });
       return { offset: row.size, mediaId: media.id };
     } finally {
       busy.delete(row.id);

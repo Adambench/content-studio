@@ -1,8 +1,9 @@
 # CLAUDE.md
 
-Content Studio: single-user Electron desktop app for planning, writing, editing, scheduling and posting short-form
-video, with Claude built in; the phone uses it through an Android app (Capacitor) or PWA. PLAN.md has the decisions,
-measurements, open items and the current build plan (phase 8). Read only the section you need.
+Content Studio: single-user Electron desktop app that shows me my videos and takes my clicks; Claude (Claude Code in
+the terminal) does the editing, organising and scheduling. The phone (Android app, Capacitor) only writes scripts and
+sends footage. PLAN.md has the decisions (*Phase 14* is the current shape), measurements and open items. Read only the
+section you need.
 
 ## Layout
 
@@ -11,11 +12,15 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   site windows (`src/sites.ts`).
 - `server/` — Fastify on 127.0.0.1:8787. SQLite = `node:sqlite` behind a better-sqlite3-shaped shim
   (`src/db/sqlite.ts`); never import `drizzle-orm/better-sqlite3` (pulls in the native module; no C toolchain here).
-  Main areas: `claude/` (agent, tools, prompts, plugin), `ai/` (Claude or the self-hosted model per task, the local
-  chat loop), `studio/` (edits → HyperFrames, render, generation), `publish/`,
-  `analytics/`, `campaigns/`, `clipping/`, `research/`, `ideas/` (the brainstorm canvas, Saved pile, Notes), `knowledge/` (the
-  playbook as editable rules), `toolbox/` (what's installed and used, installing skills, the weekly scout), `jobs/` (queue).
-- `web/` — React UI. `isDesktop` (`lib/desktop.ts`), `isApp`/`isNative` (`lib/native.ts`, the `vite --mode app` build).
+  Main areas: `claude/` (the agent that fixes an edit before its render, its tools, prompts, plugin), `services/board.ts`
+  (the board), `services/script-help.ts` (Hooks, Directions), `studio/` (edits → HyperFrames, render), `publish/`
+  (Instagram), `campaigns/`, `clipping/`, `knowledge/` (the playbook as editable rules, references), `toolbox/` (what's
+  installed and used, installing skills, the weekly scout), `jobs/` (queue), `db/phase14.ts` (the one-off move).
+- `web/` — React UI. Top bar: Home, then one tab per page; under a page its sections (`lib/nav.ts`: Ideas · Videos ·
+  Calendar, or Campaigns · Clips · Calendar). Home and the sections are one board (`components/board/Board.tsx`,
+  columns from stages in `shared/board.ts`); a card opens at `/c/:id` (`pages/CardPage.tsx`: the Script + Notes
+  document while writing, the render + comments + Approve after). The phone gets `components/PhoneShell.tsx` only.
+  `isDesktop` (`lib/desktop.ts`), `isApp`/`isNative` (`lib/native.ts`, the `vite --mode app` build).
 - `mobile/` — Capacitor 8, committed `android/`, one native plugin `StudioPlugin` (Java). CI builds APKs.
 - `shared/` — types for both sides (`types.ts`, `edit.ts`, `campaigns.ts`, `clipping.ts`, …).
 - Data: `~/.local/share/content-studio` (`CONTENT_STUDIO_DATA_DIR` overrides; also moves Electron's profile).
@@ -27,24 +32,25 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   a nasheed without instruments) isn't music: fine in references and sources, in an edit only as the nasheed. An edit's only track is `audio.nasheed` (vocal-only, set by the user
   only; `withAuthorNasheed` keeps Claude from changing it). SFX = `sfx` assets or built-ins (`shared/sfx.ts`,
   `server/assets/sfx`, rebuilt by `server/scripts/make-sfx.py`). No music asset type. Third-party skills' music advice
-  never applies. Voiceover plays only `tts` or `capture` media.
+  never applies. Voiceover plays only my own recordings (`capture`, `share` or `upload` audio).
 - **No Anthropic API key, ever.** Claude runs via `@anthropic-ai/claude-agent-sdk` on the Pro login
   (`claude/options.ts` strips `ANTHROPIC_API_KEY`). Few LLM calls: mechanical work is Whisper/FFmpeg; background jobs
-  use Haiku, but editing (picking clips, frame checks, directions, the check before a render, the chat) uses Opus, the best model; background jobs wait (not fail) while 5-hour usage ≥ 80 % (`waitForUsage(task)`), but what I click
-  for and wait on (Ideas help, lock-in, directions, a UGC script) never waits: `askStructured({ now: true })`.
-- **Every model call names its task** (`shared/ai.ts`): `askStructured({ task, … })` and the chat go to Claude or the
-  self-hosted model (Ollama on a home PC) by `ai/route.ts` (Settings → Models: per task, *local only*, auto at a usage
-  limit). A new AI call gets a task; the local chat (`ai/local-agent.ts`) calls the same studio tools, so a tool works
-  on both. Self-hosted models are commercial-safe only (Qwen, FLUX.1-schnell, Wan 2.1, Chatterbox, Kokoro).
-- **Generated pictures never show people or animals** (`shared/generate.ts`): prompts describe empty scenes, and every
-  result is checked (task `pictures`) and made again or dropped. Generation and the cloned voice run only on workers
-  (`WORKER_ONLY`); video clips only in the night window. Pictures and clips can instead be made by kie.ai
-  (`ai/hosted/`, Settings → Models): the key lives in settings, write-only, never sent to the UI; every request is
-  recorded in `ai_spend` and a daily cap ($10) stops new ones; hosted clips lose their sound. `CS_HOSTED_API` = stand-in.
-- **Claude's tools are scoped to one workspace** (`buildTools(workspaceId)`), every tool checks ownership. Claude edits
-  drafts/edits freely (versions authored `claude`) and may render, but never schedules, publishes, approves, rejects or
-  submits: those need the user's click. Never give Claude a publish tool. On Ideas it only adds cards (`by: 'claude'`),
-  never edits or deletes the user's; locking an idea in is the user's click.
+  use Haiku, but editing (picking clips, frame checks, directions, the check before a render and its fix) uses Opus,
+  the best model; background jobs wait (not fail) while 5-hour usage ≥ 80 % (`waitForUsage(task)`), but what I click
+  for and wait on (Hooks, Directions) never waits: `askStructured({ now: true })`. Every model call names its task
+  (`shared/ai.ts`); everything runs on Claude (the self-hosted model, generated pictures/clips and computer voices were
+  deleted on 2026-11-05).
+- **AI in the UI is only Hooks and Directions on a script, and the look switch on a render** (PLAN.md *Phase 14*). No
+  chat, no other AI buttons, no stats screens; few words, quiet colours, one alarm colour (`destructive`) only on what
+  needs me. Ask before adding a feature, a button or a screen.
+- **Claude never rewrites my scripts**: Hooks are other first lines to take or leave, Directions go under Notes, each on
+  my click. A card's document is `script` (what I say) then `notes` (the effects I want); I can rename both headings
+  (`DraftContent.labels`).
+- **Claude's tools are scoped to one workspace** (`buildTools(workspaceId)`), every tool checks ownership. The in-app
+  agent (`claude/agent.ts`) only fixes an edit that fails the check before its render; I talk to Claude in Claude Code.
+  Claude edits drafts/edits freely (versions authored `claude`) and may render, but never schedules, publishes,
+  approves, rejects or submits: those need the user's click. Never give Claude a publish tool. Footage landing on a
+  card doesn't start an edit: I tell Claude Code.
 - **Every comment I leave on a video is a lesson** (`knowledge/lessons.ts`): fixing it also records the general rule
   (a Knowledge rule, source `comments`, or the lesson it repeats) via `resolve_note` or `npm run notes -- fix`.
   Lessons go into every prompt that picks, makes or judges a video (`lessonsText`), and the check before a render
@@ -52,14 +58,15 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   picker/maker, framing, a template), change that code as well, so the next video can't make it.
 - Renders draw their frames on a home PC that has `render` (`setup-worker.sh --with render`): the laptop cuts and
   grades the footage, sends the project as a tar (`renderRemote`), and renders itself when no worker has it or fails.
-- Chat skills: `.claude/skills` loads as the `studio-skills` plugin (`claude/plugin.ts`, allow-list `CHAT_SKILLS`);
-  skills I install from the Toolbox go to `<data>/skills-added` (plugin `studio-added`, all in the chat) or
-  `~/.claude/skills` (Claude Code only), never with sound or video files; the chat's Read is held to the plugin
-  folders by a hook; claude.ai connectors off. Background prompts don't load skills:
-  paste playbook files with `playbook(...)`, first in the system prompt.
+- Skills: `.claude/skills` loads as the `studio-skills` plugin for the in-app agent (`claude/plugin.ts`, allow-list
+  `CHAT_SKILLS`); skills I install from the Toolbox go to `<data>/skills-added` (plugin `studio-added`) or
+  `~/.claude/skills` (Claude Code only), never with sound or video files; the agent's Read is held to the plugin
+  folders by a hook; claude.ai connectors off. Background prompts don't load skills: paste playbook files with
+  `playbook(...)`, first in the system prompt, and a skill's SKILL.md with `skill(...)` (`services/script-help.ts`).
 - Scenes (`shared/scene.ts`) are data: never let a scene carry script, `url()` or `random()`.
-- **Only Instagram for now** (2026-11-03): `ACTIVE_PLATFORMS` (`shared/publish.ts`) hides TikTok, YouTube and X in the UI
-  and review; their code stays. Campaign rules naming another platform don't apply to an Instagram clip (`ruleScope`).
+- **Only Instagram** (2026-11-03; TikTok, YouTube and X posting deleted 2026-11-05). Campaign rules naming another
+  platform don't apply to an Instagram clip (`ruleScope`). A campaign link I drop on a clipping page (Campaigns) is my
+  yes: once read it goes live unless the halal screen rejects it.
 - Publishing adapters keep resume state in `posts.remote` via `ctx.save` so retries never post twice. Tokens stay
   server-side (`publicAccount` strips them). `CS_PLATFORM_API=http://127.0.0.1:9911` routes platform calls to a stand-in.
 - Signed-in windows (`readPage`, `lib/desktop.ts`): one read at a time, ≥ 5 s apart, daily cap, never click/post/submit.
@@ -76,8 +83,10 @@ measurements, open items and the current build plan (phase 8). Read only the sec
 - Studio gotchas: timed elements must not be zero-height (put positioned content inside a full-frame `.layer`); grade
   with FFmpeg `lut3d` (HyperFrames' grading hangs headless Chrome); new built-in sounds go in compose *and* render's
   file list; transitions only overlap pictures (sound still cuts) so timings never move.
-- UI: shadcn/ui (radix-nova) in `web/src/components/ui` is generated: compose, don't edit. Dark only. Mobile is
-  first-class. No `alert`/`confirm`/`prompt`.
+- Stages: every page has `BOARD_STAGES` (`shared/types.ts`); `columnOf` (`shared/board.ts`) maps them to the board.
+  A render that finishes moves a card in Making, Editing or Ready to film to Review (`studio/render.ts`).
+- UI: shadcn/ui (radix-nova) in `web/src/components/ui` is generated: compose, don't edit. Dark only, laptop first; the
+  phone only writes scripts and sends footage. No `alert`/`confirm`/`prompt`.
 - `pkill -f "<pattern>"` from a shell whose command line contains the pattern kills that shell: use `[x]yz` patterns.
 
 ## Commands
@@ -89,7 +98,7 @@ measurements, open items and the current build plan (phase 8). Read only the sec
   lesson: `--lesson <id> ["sharper rule"]`, `--new <topic> "<title>" "<rule>"` or `--one-off "<why>"` (`answer`
   leaves it open; `lessons` lists them). A clip whose story starts earlier or ends later than its cut:
   `npm run notes -- source <pieceId>` (the source's words around it), then `recut <pieceId> <start> <end>` (the running
-  app makes it again on the same card, comments kept, and renders it; the chat has `get_clip_source`/`recut_clip`).
+  app makes it again on the same card, comments kept, and renders it).
 - `npm run db:generate -w server` after editing `server/src/db/schema.ts` (migrations run on startup). drizzle-kit
   drops `ON DELETE` from foreign keys it adds with `ALTER TABLE`: check the SQL.
 - `npm run android` — app UI build + `cap sync`. APKs: CI, or JDK 21 + SDK (`cd mobile/android && ./gradlew assembleDebug`)

@@ -23,6 +23,8 @@ export type Workspace = {
   /** The page's drawn mascot (shared/mascots.ts). */
   mascot: MascotId | null;
   stages: Stage[];
+  /** Off the top bar and Home; its data stays. */
+  hidden: boolean;
   position: number;
   createdAt: number;
   updatedAt: number;

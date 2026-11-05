@@ -1,21 +1,14 @@
 // Scheduling and publishing: shapes and rules shared by the server and the web app.
 import type { DraftContent } from './types';
 
-export const PUBLISH_PLATFORMS = ['tiktok', 'instagram', 'youtube'] as const;
+/** Only Instagram (2026-11-03); TikTok, YouTube and X posting were deleted on 2026-11-05 (PLAN.md Phase 14). */
+export const PUBLISH_PLATFORMS = ['instagram'] as const;
 export type PublishPlatform = (typeof PUBLISH_PLATFORMS)[number];
 
-/**
- * The platforms in use. Only Instagram for now (2026-11-03): TikTok, YouTube and X stay in the code but are hidden
- * everywhere (accounts, settings, captions, review, campaigns) and never posted to. Add them back here to bring them back.
- */
-export const ACTIVE_PLATFORMS: readonly PublishPlatform[] = ['instagram'];
+export const ACTIVE_PLATFORMS: readonly PublishPlatform[] = PUBLISH_PLATFORMS;
 export const isActivePlatform = (p: string): boolean => (ACTIVE_PLATFORMS as readonly string[]).includes(p);
 
-export const PUBLISH_PLATFORM_LABELS: Record<PublishPlatform, string> = {
-  tiktok: 'TikTok',
-  instagram: 'Instagram',
-  youtube: 'YouTube',
-};
+export const PUBLISH_PLATFORM_LABELS: Record<PublishPlatform, string> = { instagram: 'Instagram' };
 
 /** `reconnect`: the platform stopped accepting our tokens; posting needs a fresh sign-in. */
 export type AccountStatus = 'connected' | 'reconnect';
@@ -99,17 +92,8 @@ const joinNonEmpty = (parts: string[], sep = '\n\n') => parts.map((p) => p.trim(
 /** The text a post starts with, from the piece's draft. */
 export function copyFromDraft(platform: PublishPlatform, d: DraftContent, format: PostFormat): PostCopy {
   switch (platform) {
-    case 'tiktok':
-      return {
-        caption: joinNonEmpty([d.platforms.tiktok.caption, d.platforms.tiktok.hashtags]),
-        // Photo posts have a separate short title.
-        title: format === 'photo' ? d.hook.trim().slice(0, PUBLISH_LIMITS.tiktok.photoTitle) : '',
-        tags: '',
-      };
     case 'instagram':
       return { caption: joinNonEmpty([d.platforms.instagram.caption, d.platforms.instagram.hashtags]), title: '', tags: '' };
-    case 'youtube':
-      return { caption: d.platforms.youtube.description.trim(), title: (d.platforms.youtube.title || d.hook).trim().slice(0, PUBLISH_LIMITS.youtube.title), tags: d.platforms.youtube.tags.trim() };
   }
 }
 
@@ -147,26 +131,6 @@ export function postProblems(input: {
   if (format === 'video' && (media.length !== 1 || media[0].kind !== 'video')) error('A video post needs exactly one video.');
   if (format === 'photo' && media.some((m) => m.kind !== 'image')) error('A photo post can only contain photos.');
 
-  if (platform === 'tiktok') {
-    const L = PUBLISH_LIMITS.tiktok;
-    if (format === 'video') {
-      if (copy.caption.length > L.caption) error(`TikTok captions can be ${L.caption} characters at most.`);
-      if (media[0] && seconds > L.maxSeconds) error(`TikTok takes videos up to ${L.maxSeconds / 60} minutes through its API.`);
-      if (media[0] && media[0].size > L.maxBytes) error('TikTok takes videos up to 4 GB.');
-    } else {
-      if (copy.title.length > L.photoTitle) error(`TikTok photo titles can be ${L.photoTitle} characters at most.`);
-      if (copy.caption.length > L.photoCaption) error(`TikTok photo descriptions can be ${L.photoCaption} characters at most.`);
-      if (media.length > L.maxPhotos) error(`TikTok photo posts take up to ${L.maxPhotos} photos.`);
-      if (!input.hasPublicUrl) error('TikTok fetches photos from your public address — set it up in Settings → Publishing.');
-      else warn('TikTok photo posts need your public address verified in the TikTok developer portal (Settings → Publishing).');
-    }
-    if (input.tiktokMode === 'direct') {
-      if (!options.tiktokPrivacy) error('Choose who can see it on TikTok.');
-      if (options.discloseContent && !options.yourBrand && !options.brandedContent) error('You need to indicate if your content promotes yourself, a third party, or both.');
-      if (options.discloseContent && options.brandedContent && options.tiktokPrivacy === 'SELF_ONLY') error('Branded content visibility cannot be set to private.');
-    }
-  }
-
   if (platform === 'instagram') {
     const L = PUBLISH_LIMITS.instagram;
     if (!input.hasPublicUrl) error('Instagram fetches media from your public address — set it up in Settings → Publishing.');
@@ -183,16 +147,6 @@ export function postProblems(input: {
     }
   }
 
-  if (platform === 'youtube') {
-    const L = PUBLISH_LIMITS.youtube;
-    if (format !== 'video') error('YouTube only takes videos.');
-    if (!copy.title.trim()) error('YouTube needs a title.');
-    if (copy.title.length > L.title) error(`YouTube titles can be ${L.title} characters at most.`);
-    if (copy.caption.length > L.description) error(`YouTube descriptions can be ${L.description} characters at most.`);
-    if (splitTags(copy.tags).join(',').length > L.tags) error(`YouTube tags can add up to ${L.tags} characters at most.`);
-    if (format === 'video' && seconds > L.shortsSeconds) warn('Longer than 3 minutes, so it will be a regular video rather than a Short.');
-    if (format === 'video' && media[0]?.width && media[0]?.height && media[0].width > media[0].height) warn('Horizontal videos aren’t Shorts.');
-  }
   return out;
 }
 

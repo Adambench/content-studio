@@ -596,11 +596,6 @@ export async function transcribeSource({ sourceId }: { sourceId: string }) {
   // An active campaign's source goes on to be scanned for moments; otherwise it waits, ready, for "Find moments".
   const c = getCampaignRow(s.campaignId);
   if (c.status === 'active' && pagesOf([c.id]).get(c.id)?.length) {
-    // Clips of this video other people got big on: their stretches go to the scan (best effort, never blocks it).
-    updateSource(sourceId, { detail: 'Looking for moments that already went viral' });
-    const { attachViral } = await import('../finder/finder');
-    await attachViral(getSource(sourceId)).catch((err: Error) => console.warn(`[sources] viral search for ${sourceId}: ${err.message}`));
-    if (!exists(sourceId)) return;
     queueScan(sourceId);
   }
   else updateSource(sourceId, { status: 'ready', detail: '' });

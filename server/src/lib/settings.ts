@@ -16,44 +16,20 @@ type SettingsShape = {
   /** Signs the short-lived public links to media that Instagram and TikTok download. */
   publicLinkSecret: string;
   catchUpHours: number;
-  /** TikTok's URL-prefix verification file, served at <publicUrl>/api/public/<name>. */
-  tiktokVerification: { name: string; content: string };
-  /** When Claude's weekly review of each workspace's posts runs. */
-  weeklyReview: import('../../../shared/analytics').WeeklyReviewSetting;
   /** Firebase, for notifications to the Android app: the service-account key and the app's options. */
   fcm: import('./fcm').FcmSetting;
   /** Days after a campaign ends that its downloaded source videos are deleted; 0 keeps them. */
   sourceRetentionDays: number;
-  /** The last read of my submissions pages on the marketplaces. */
-  submissionsSync: import('../campaigns/submissions').SubmissionsSync;
   /** Channels and playlists each campaign lists videos from (by campaign id), so the finder can list them again. */
   sourceListings: Record<string, string[]>;
   /** Videos deleted from each campaign (canonical links, by campaign id), so a fresh listing doesn't add them back. */
   removedSources: Record<string, string[]>;
-  /** The finder's last run on each clipping page (by workspace id). */
-  finderRuns: Record<string, import('../../../shared/finder').FinderRun>;
-  /** Whether each clipping page's finder runs by itself each morning (default on). */
-  finderAuto: Record<string, boolean>;
-  /** Which model answers each AI task (shared/ai.ts). */
-  aiRouting: Partial<import('../../../shared/ai').AiRouting>;
-  /** The self-hosted model server. */
-  localAi: Partial<import('../../../shared/ai').LocalAiConfig>;
-  /** When video clips may be generated (shared/generate.ts). */
-  generation: Partial<import('../../../shared/generate').GenerationSettings>;
-  /** Hosted generation (shared/hosted.ts): backend per kind, prices, daily cap. */
-  hosted: Partial<import('../../../shared/hosted').HostedSettings>;
-  /** The kie.ai API key: write-only, never sent to the UI. */
-  hostedKey: string;
   /** Claude refused for usage: tasks on auto skip it until then (ms). */
   claudeLimitedUntil: number;
-  /** An account's usual views (by platform:account), so posts saved to Ideas from it don't each read its profile. */
-  channelMedians: Record<string, { median: number | null; at: number }>;
-  /** Campaigns found on Content Rewards that aren't added yet. */
-  campaignLeads: import('../../../shared/finder').CampaignLeads;
   /** The skills' source repos as the scout last read them from GitHub (licence, stars, last push). */
   toolboxRepos: Record<string, import('../toolbox/inventory').RepoInfo>;
-  /** Posts a week each page aims for (by workspace id), shown on the dashboard. */
-  postingGoals: Record<string, number>;
+  /** When the one-off move to Phase 14 ran (db/phase14.ts). */
+  phase14: number;
   /** The Toolbox's weekly scout: its last run. */
   toolScout: import('../../../shared/toolbox').ScoutRun;
 };

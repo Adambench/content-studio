@@ -3,11 +3,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { count, max } from 'drizzle-orm';
-import { RECOMMENDED_LOCAL_MODEL } from '../../../shared/ai';
 import type { ComputeTool } from '../../../shared/compute';
-import { normalizeHosted } from '../../../shared/hosted';
 import type { InstalledTool, SkillHome, ToolKind } from '../../../shared/toolbox';
-import { localStatus } from '../ai/local';
 import { resolveModel } from '../claude/options';
 import { addedSkills, CHAT_SKILLS, skillFolders } from '../claude/plugin';
 import { buildTools } from '../claude/tools';
@@ -17,7 +14,6 @@ import { db, schema } from '../db';
 import { findBinary } from '../lib/bin';
 import { getSetting } from '../lib/settings';
 import { clipToolsInstalled } from '../services/cliptools';
-import { ttsInstalled } from '../services/tts';
 import { rendererInstalled } from '../studio/browser';
 import { firstSentence, frontField, frontMatter, SKILL_DIRS, skillLock } from './skills';
 import { claudeFamily, listUses } from './uses';
@@ -85,13 +81,6 @@ function studioTools(): Row[] {
   ];
 }
 
-const LOCAL_LICENCES: [RegExp, string][] = [
-  [/qwen/i, 'Apache-2.0'],
-  [/mistral|mixtral/i, 'Apache-2.0'],
-  [/llama/i, 'Llama licence'],
-  [/gemma/i, 'Gemma terms'],
-];
-
 async function models(): Promise<Row[]> {
   const chatModel = claudeFamily(resolveModel(null));
   const claude = (family: string, label: string, about: string) =>
@@ -118,59 +107,9 @@ async function models(): Promise<Row[]> {
     });
   };
 
-  const local = await localStatus().catch(() => null);
-  const localRows: Row[] = local?.models.length
-    ? local.models.map((m) =>
-        row('model', m.name, {
-          about: `Self-hosted (Ollama), ${m.sizeGb} GB${m.vision ? ', sees pictures' : ''}${m.tools ? ', calls tools' : ''}.`,
-          licence: LOCAL_LICENCES.find(([re]) => re.test(m.name))?.[1] ?? null,
-          source: 'https://ollama.com/library',
-          where: local.worker ?? local.url,
-          status: local.reachable ? (m.name === local.model ? 'ready' : 'off') : 'missing',
-          note: m.name === local.model ? 'The local model every task uses' : 'On the model server, not used',
-        }),
-      )
-    : [
-        row('model', local?.model ?? RECOMMENDED_LOCAL_MODEL, {
-          about: 'Self-hosted text and vision model (Ollama on a home PC): the stand-in when Claude is at a usage limit.',
-          licence: 'Apache-2.0',
-          source: 'https://ollama.com/library/qwen3-vl',
-          where: local?.worker ?? local?.url ?? null,
-          status: 'missing',
-          note: local?.error ?? 'Not reachable',
-        }),
-      ];
-
-  const hosted = normalizeHosted(getSetting('hosted'));
-  const hasKey = !!getSetting('hostedKey');
-  const spend = new Map(
-    db
-      .select({ model: schema.aiSpend.model, n: count(), last: max(schema.aiSpend.createdAt) })
-      .from(schema.aiSpend)
-      .groupBy(schema.aiSpend.model)
-      .all()
-      .map((r) => [r.model, r]),
-  );
-  const kie = (kind: 'image' | 'video', what: string) => {
-    const id = hosted.models[kind].id;
-    return row('model', `kie:${id}`, {
-      label: id,
-      about: `${what}, made by kie.ai (paid, capped at $${hosted.dailyCapUsd} a day).`,
-      licence: 'Paid service',
-      source: 'https://kie.ai',
-      where: 'kie.ai',
-      status: hasKey ? 'ready' : 'missing',
-      note: hasKey ? `${hosted.models[kind].credits} credits${kind === 'video' ? ' a second' : ''}` : 'No key in Settings → Models',
-      uses: spend.get(id)?.n ?? 0,
-      lastUsedAt: spend.get(id)?.last ?? null,
-    });
-  };
-
   return [
-    claude('opus', 'Claude Opus', 'The most capable Claude: editing (picking clips, the check before a render, directions) and the chat.'),
-    claude('sonnet', 'Claude Sonnet', 'Pick it for a chat that should go easier on the usage.'),
+    claude('opus', 'Claude Opus', 'The most capable Claude: editing (picking clips, the check before a render and its fix, directions, hooks).'),
     claude('haiku', 'Claude Haiku', 'Fast and light: background jobs.'),
-    ...localRows,
     row('model', `whisper-${getSetting('whisperModel') ?? 'small'}`, {
       label: `Whisper ${getSetting('whisperModel') ?? 'small'}`,
       about: 'Speech to text with word times (faster-whisper): captions, cuts, transcripts.',
@@ -179,20 +118,6 @@ async function models(): Promise<Row[]> {
       where: [existsSync(config.whisperPython) ? 'This computer' : '', ...on('transcribe').map((w) => w.name)].filter(Boolean).join(', ') || null,
       status: existsSync(config.whisperPython) || on('transcribe').length ? 'ready' : 'missing',
     }),
-    row('model', 'kokoro', {
-      label: 'Kokoro',
-      about: 'Text to speech on this computer: format videos’ narration and characters’ lines.',
-      licence: 'Apache-2.0',
-      source: 'https://huggingface.co/hexgrad/Kokoro-82M',
-      where: 'This computer',
-      status: ttsInstalled() ? 'ready' : 'missing',
-      note: ttsInstalled() ? '' : 'Settings → Clip tools → Install',
-    }),
-    workerModel('flux-schnell', 'FLUX.1-schnell', 'Pictures on a home PC (empty scenes only, every result checked).', 'Apache-2.0', 'https://huggingface.co/black-forest-labs/FLUX.1-schnell', 'image'),
-    workerModel('wan-2.1', 'Wan 2.1', 'Short video clips on a home PC, at night.', 'Apache-2.0', 'https://github.com/Wan-Video/Wan2.1', 'video'),
-    workerModel('chatterbox', 'Chatterbox', 'My cloned voice, from my recording (Settings → My voice).', 'MIT', 'https://github.com/resemble-ai/chatterbox', 'speak'),
-    kie('image', 'Pictures'),
-    kie('video', 'Video clips'),
   ];
 }
 

@@ -118,7 +118,7 @@ export function validateSpec(workspaceId: string, input: EditSpec, strict: boole
   const nasheed = spec.audio.nasheed && byId.get(spec.audio.nasheed.mediaId);
   if (spec.audio.nasheed && (!nasheed || nasheed.workspaceId !== workspaceId || nasheed.assetType !== 'nasheed' || nasheed.kind !== 'audio')) spec.audio.nasheed = null;
   // Narration is speech made here or a voice memo recorded here: never an uploaded track (that's how music would get in).
-  if (spec.audio.voiceover && !check(spec.audio.voiceover.mediaId, 'Voiceover', (m) => m.kind === 'audio' && !m.assetType && (m.source === 'tts' || m.source === 'capture'))) {
+  if (spec.audio.voiceover && !check(spec.audio.voiceover.mediaId, 'Voiceover', (m) => m.kind === 'audio' && !m.assetType && ['capture', 'share', 'upload'].includes(m.source))) {
     spec.audio.voiceover = null;
   }
   // A format's backgrounds are pictures from this library.

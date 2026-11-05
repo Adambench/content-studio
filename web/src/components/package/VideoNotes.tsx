@@ -1,4 +1,4 @@
-import { Check, MessageSquarePlus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react';
+import { Check, Copy, MessageSquarePlus, RotateCcw, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { clock } from '@shared/clipping';
@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { api, errorMessage } from '@/lib/api';
 import { keys, queryClient, useNotes } from '@/lib/queries';
-import { sendToVideoChat } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
 
 const span = (n: Pick<VideoNote, 'at' | 'end'>) => (n.end == null ? clock(n.at) : `${clock(n.at)}–${clock(n.end)}`);
@@ -160,7 +159,7 @@ export function NoteComposer({ pieceId, video, mediaId, version }: { pieceId: st
               <span
                 className={cn(
                   'block h-3 min-w-3 -translate-x-1.5 rounded-full border-2 border-background',
-                  n.status === 'open' ? 'bg-amber-400' : n.status === 'fixed' ? 'bg-emerald-400' : 'bg-muted-foreground/50',
+                  n.status === 'open' ? 'bg-foreground' : 'bg-muted-foreground/50',
                 )}
               />
             </button>
@@ -264,9 +263,9 @@ export function NoteList({
 
   if (!list.length) return null;
   return (
-    <section id="comments" className={cn('scroll-mt-4 space-y-2 rounded-xl border bg-card p-4', className)} aria-label="Comments">
+    <section id="comments" className={cn('scroll-mt-4 space-y-2', className)} aria-label="Comments">
       <div className="flex flex-wrap items-center justify-between gap-x-2">
-        <h2 className="text-sm font-medium">
+        <h2 className="text-[13px] font-semibold tracking-widest text-muted-foreground uppercase">
           Comments
           {open.length ? <span className="font-normal text-muted-foreground"> · {open.length} open</span> : null}
         </h2>
@@ -275,9 +274,12 @@ export function NoteList({
             size="sm"
             variant="ghost"
             className="h-7 text-xs"
-            onClick={() => sendToVideoChat(pieceId, `Fix my ${open.length === 1 ? 'open comment' : `${open.length} open comments`} on this video.`)}
+            onClick={() => {
+              void navigator.clipboard?.writeText('fix my comments').catch(() => {});
+              toast('Copied “fix my comments”: paste it in Claude Code');
+            }}
           >
-            <Sparkles /> Fix with Claude
+            <Copy /> fix my comments
           </Button>
         )}
       </div>
@@ -288,7 +290,7 @@ export function NoteList({
               <button
                 type="button"
                 onClick={() => seekTo(video, n.at)}
-                className={cn('text-xs tabular-nums hover:underline', n.status === 'open' ? 'text-amber-400' : 'text-muted-foreground')}
+                className={cn('text-xs tabular-nums hover:underline', n.status === 'open' ? 'text-foreground' : 'text-muted-foreground')}
               >
                 {span(n)}
               </button>
@@ -316,7 +318,7 @@ export function NoteList({
               </div>
             </div>
             <p className={cn('text-sm break-words', n.status === 'done' && 'text-muted-foreground line-through decoration-muted-foreground/40')}>{n.text}</p>
-            {n.reply && <p className={cn('text-xs', n.status === 'fixed' ? 'text-emerald-400/90' : 'text-muted-foreground')}>Claude: {n.reply}</p>}
+            {n.reply && <p className="line-clamp-2 text-xs text-muted-foreground" title={n.reply}>{n.reply}</p>}
           </li>
         ))}
       </ul>

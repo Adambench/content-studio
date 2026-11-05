@@ -10,7 +10,6 @@ import { getMedia } from '../services/media';
 import { getWorkspace } from '../services/pieces';
 import { accessToken, disconnectAccount, finishConnect, getAccount, listAccounts, pickAccounts, pickOpen, publicAccount, refreshProfiles, startConnect, updateAccount } from '../publish/accounts';
 import { PlatformError, type AccountRow } from '../publish/platforms';
-import { creatorInfo } from '../publish/platforms/tiktok';
 import { createPosts, deletePost, getPost, listPosts, piecePosts, planPosts, postDetail, postNow, scheduleSchema, stopPost, updatePost, updateSchema, upcomingPosts } from '../publish/posts';
 import { kickScheduler } from '../publish/scheduler';
 import { detectTailscaleUrl, platformApp, publicUrl, redirectUri, variantFile, verifyLink } from '../publish/setup';
@@ -51,7 +50,6 @@ function setupInfo() {
     publicUrl: publicUrl(),
     catchUpHours: getSetting('catchUpHours') ?? DEFAULT_CATCH_UP_HOURS,
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    tiktokVerification: getSetting('tiktokVerification')?.name ?? null,
     platforms: Object.fromEntries(
       PUBLISH_PLATFORMS.map((p) => [
         p,
@@ -120,13 +118,6 @@ export async function publishingRoutes(app: FastifyInstance) {
     }
   });
 
-  app.put('/api/publishing/tiktok-verification', async (req) => {
-    const body = z.object({ name: z.string().regex(/^tiktok[\w-]{1,120}\.txt$/, 'That doesn’t look like TikTok’s verification file (tiktok….txt).'), content: z.string().max(2000) }).parse(req.body);
-    setSetting('tiktokVerification', body);
-    emit({ type: 'changed', entity: 'settings' });
-    return setupInfo();
-  });
-
   // ---------- accounts ----------
 
   app.get<{ Params: { wid: string } }>('/api/workspaces/:wid/accounts', async (req) => {
@@ -155,18 +146,6 @@ export async function publishingRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>('/api/accounts/:id', async (req) => {
     await disconnectAccount(req.params.id);
     return { ok: true };
-  });
-
-  // TikTok wants the creator's current options shown every time a post is set up.
-  app.get<{ Params: { id: string } }>('/api/accounts/:id/creator-info', async (req) => {
-    const a = getAccount(req.params.id);
-    if (a.platform !== 'tiktok') throw badRequest('Only TikTok accounts have creator info.');
-    try {
-      return await creatorInfo(await accessToken(a));
-    } catch (err) {
-      if (err instanceof PlatformError) throw new HttpError(502, err.message);
-      throw err;
-    }
   });
 
   // The platform sends the browser here after sign-in. Public: the one-time state proves it.
@@ -211,13 +190,6 @@ export async function publishingRoutes(app: FastifyInstance) {
     const file = await variantFile(m, link.variant);
     reply.header('Cache-Control', 'private, max-age=86400');
     return reply.type(file.mime).sendFile(basename(file.path), dirname(file.path));
-  });
-
-  // TikTok's URL-prefix ownership check reads this file from <public address>/api/public/.
-  app.get<{ Params: { file: string } }>('/api/public/:file', async (req, reply) => {
-    const v = getSetting('tiktokVerification');
-    if (!v || v.name !== req.params.file) throw notFound();
-    return reply.type('text/plain; charset=utf-8').send(v.content);
   });
 
   // ---------- posts ----------

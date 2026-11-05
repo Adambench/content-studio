@@ -6,10 +6,30 @@ import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, HttpError, notFound } from '../lib/http';
 import { getPiece, getWorkspace } from '../services/pieces';
-import { episodeOrderWarning } from '../ideas/ideas';
 import { accountLabel, publicAccount } from './accounts';
 import type { AccountRow, PostRow } from './platforms';
 import { publicUrl } from './setup';
+
+/** A series goes out in order: a warning when an earlier episode isn't out (or due) by this time. */
+function episodeOrderWarning(pieceId: string, platform: string, at: number): string | null {
+  const piece = getPiece(pieceId);
+  if (!piece.series || !piece.episode) return null;
+  const earlier = db
+    .select({ id: schema.pieces.id, episode: schema.pieces.episode })
+    .from(schema.pieces)
+    .where(and(eq(schema.pieces.workspaceId, piece.workspaceId), eq(schema.pieces.series, piece.series), lt(schema.pieces.episode, piece.episode)))
+    .all();
+  for (const e of earlier) {
+    const out = db
+      .select({ at: schema.posts.scheduledAt, status: schema.posts.status })
+      .from(schema.posts)
+      .where(and(eq(schema.posts.pieceId, e.id), eq(schema.posts.platform, platform as PostRow['platform'])))
+      .all()
+      .some((x) => x.status !== 'failed' && x.status !== 'missed' && x.at <= at);
+    if (!out) return `Ep ${e.episode} of ${piece.series} isn’t out before this one.`;
+  }
+  return null;
+}
 
 export const copySchema = z.object({ caption: z.string().max(10_000), title: z.string().max(500), tags: z.string().max(2000) });
 export const optionsSchema = z
@@ -118,7 +138,7 @@ export function planPosts(pieceId: string, input: ScheduleInput) {
     } else at = base + i * input.when.staggerMinutes * 60_000;
     if (account.status === 'reconnect') problems.push({ level: 'error', message: `Reconnect ${accountLabel(account)} first (Accounts page).` });
     // A series goes out in order.
-    const order = episodeOrderWarning(pieceId, account.platform, at);
+    const order = at === null ? null : episodeOrderWarning(pieceId, account.platform, at);
     if (order) problems.push({ level: 'warning', message: order });
     const copy = t.copy ?? copyFromDraft(account.platform, draft, input.format);
     problems.push(

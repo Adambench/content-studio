@@ -1,4 +1,4 @@
-import { Check, CircleAlert, ExternalLink, Film, Loader2, MoreHorizontal, Pencil, Plus, RefreshCw, Sparkles, StickyNote, Trash2, X } from 'lucide-react';
+import { Check, CircleAlert, ExternalLink, Film, Loader2, MoreHorizontal, Pencil, Plus, RefreshCw, StickyNote, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ASPECT_LABELS, type Ingredient, type IngredientMark, type PageStyle, type ReferenceVideo } from '@shared/references';
@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { api, errorMessage, fileUrl } from '@/lib/api';
-import { clock, compact, timeAgo } from '@/lib/format';
+import { clock, compact } from '@/lib/format';
 import { openExternal } from '@/lib/native';
 import { keys, queryClient, useReferences, useStyle, useWorkspaces } from '@/lib/queries';
 import type { Workspace } from '@/lib/types';
@@ -113,15 +113,7 @@ function StyleCard({ page, references }: { page: Workspace; references: Referenc
   const [full, setFull] = useState(false);
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
-  const read = references.filter((r) => r.status === 'done' && r.ingredients.length);
-  const marked = read.reduce((n, r) => n + r.ingredients.filter((g) => g.mark).length, 0);
-  const building = s?.status === 'building';
 
-  async function build() {
-    setBusy(true);
-    await act(() => api(`/styles/${page.id}/build`, { body: {} }));
-    setBusy(false);
-  }
   async function save() {
     setBusy(true);
     const ok = await act(() => api(`/styles/${page.id}`, { method: 'PUT', body: { body } }));
@@ -129,41 +121,22 @@ function StyleCard({ page, references }: { page: Workspace; references: Referenc
     if (ok) setEditing(false);
   }
 
-  const status = !s
-    ? ''
-    : s.body
-      ? [`Written from ${s.references} video${s.references === 1 ? '' : 's'}${s.builtAt ? ` ${timeAgo(s.builtAt)}` : ''}`, s.edited && 'changed by you', s.stale && 'your marks changed since'].filter(Boolean).join(' · ')
-      : read.length
-        ? `${marked ? `${marked} marked so far. ` : ''}Mark what you want on the videos below, then write it.`
-        : 'Add a video that moved you: the style is written from what you mark on it.';
 
   return (
-    <section className="space-y-3 rounded-lg border border-brand/30 bg-brand-soft p-4">
+    <section className="space-y-3 rounded-lg border p-4">
       <div className="flex flex-wrap items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <h2 className="flex items-center gap-1.5 text-sm font-medium">
-            <Sparkles className="size-4 text-brand" /> {page.name}’s style
-          </h2>
-          <p className="text-xs text-muted-foreground">{building ? 'Writing it from your marks…' : status}</p>
-        </div>
+        <h2 className="min-w-0 flex-1 text-sm font-medium">{page.name}’s style</h2>
         {!editing && (
-          <div className="flex gap-2">
-            {s?.body && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setBody(s.body);
-                  setEditing(true);
-                }}
-              >
-                <Pencil /> Edit
-              </Button>
-            )}
-            <Button size="sm" variant={s?.body && !s.stale ? 'outline' : 'default'} onClick={build} disabled={busy || building || !read.length}>
-              {building ? <Spinner /> : <Sparkles />} {s?.body ? 'Write it again' : 'Write it from my marks'}
-            </Button>
-          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setBody(s?.body ?? '');
+              setEditing(true);
+            }}
+          >
+            <Pencil /> {s?.body ? 'Edit' : 'Write it'}
+          </Button>
         )}
       </div>
       {s?.status === 'error' && <p className="text-xs text-destructive">{s.error}</p>}
@@ -268,11 +241,6 @@ function ReferenceCard({ reference: r, pages }: { reference: ReferenceVideo; pag
                 <DropdownMenuItem onClick={() => openExternal(r.url)}>
                   <ExternalLink /> Open the post
                 </DropdownMenuItem>
-                {m && !running && (
-                  <DropdownMenuItem onClick={() => act(() => api(`/references/${r.id}/redraft`, { body: {} }))}>
-                    <RefreshCw /> Read it again (your marks stay)
-                  </DropdownMenuItem>
-                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Inspiration for</DropdownMenuLabel>
                 {pages.map((w) => (
@@ -307,13 +275,7 @@ function ReferenceCard({ reference: r, pages }: { reference: ReferenceVideo; pag
               <p className="text-sm">{r.read.why}</p>
               <p className="text-xs text-muted-foreground">{r.read.summary}</p>
             </>
-          ) : (
-            m && (
-              <Button size="xs" variant="outline" onClick={() => act(() => api(`/references/${r.id}/redraft`, { body: {} }))}>
-                <RefreshCw /> Read it for its ingredients
-              </Button>
-            )
-          )}
+          ) : null}
         </div>
       </div>
 

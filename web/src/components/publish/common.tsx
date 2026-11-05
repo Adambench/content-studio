@@ -6,7 +6,7 @@ import type { Account, Post } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 /** Simplified platform marks, drawn in the platform's colour so posts are recognisable at a glance. */
-export function PlatformIcon({ platform, className }: { platform: PublishPlatform; className?: string }) {
+export function PlatformIcon({ platform, className }: { platform: PublishPlatform | 'tiktok' | 'youtube' | string; className?: string }) {
   const common = { viewBox: '0 0 24 24', 'aria-hidden': true, className: cn('size-4 shrink-0', className) } as const;
   if (platform === 'youtube')
     return (

@@ -198,7 +198,7 @@ export type Campaign = {
 /** A video filmed for a campaign (UGC): a card on one of its pages. */
 export type UgcPiece = { id: string; title: string; stage: string; workspaceId: string; createdAt: number };
 
-export type CampaignDetail = Campaign & { sources: CampaignSource[]; moments: Moment[]; ugc: UgcPiece[]; submissions: Submission[]; results: CampaignResults };
+export type CampaignDetail = Campaign & { sources: CampaignSource[]; moments: Moment[] };
 
 /**
  * A posted clip's submission to its Content Rewards campaign. `to_submit`: posted, waiting for me to submit it on

@@ -235,69 +235,32 @@ versionCode from the tag (`v1.2.3` → 10203).
 11. **Ideas canvas and save-from-anywhere** — built 2026-10-21 (see *Phase 11*)
 12. **Viral quality, knowledge base, toolbox** — built except step 3's recorded library (waits on my pick of a source): steps 0–7 done by 2026-10-30 (see *Phase 12*)
 13. **Frame-exact cuts** — built 2026-11-04 (see *Phase 13*); no outside editor
-14. **Declutter** — decided 2026-11-05, mockup first, then build (see *Phase 14*)
+14. **Declutter** — built 2026-11-05 (see *Phase 14*)
 
 ## Waiting on me
 
-- Phase 12 step 3: pick the recorded SFX source (licence must allow commercial use), and listen to a motion video with
-  *Sound on every move* on.
-- Phase 12 step 4: try a few library scenes in the editor (Overlays → Scene) and say which look off.
-- Phase 12 step 7: Knowledge → References: paste 2–3 shorts I like (one TikTok, one Reel: only YouTube was tried),
-  read the lessons and approve or dismiss them.
-- Account review and brands: done and in the app (*Pages (account review)*); steps 5 and 6 can start. Still open: the
-  personal brand's name; the third clipping page. Read each page's Settings → Brand guide once and fix anything off.
-- Phase 12 step 5: `npm run install-app`, then on each page Brand → Mascot pick its mascot (Personal brand: the founder,
-  Gentle Return: the Traveller, Blox Moments: Blok, Long Story Short: the host; the clipping pages' Brand tab was
-  missing until 2026-10-30). Then ask Claude in a video's chat for a mascot scene and look at it.
-- Phase 12 step 6: Gentle Return → Settings: kind *Islamic page*, then *Use the Islamic page stages* (adds Record,
-  Clips making and Review). Lectures (sidebar): confirm the campaign once, paste a lecture (a Creative Commons one
-  downloads by itself; any other waits for *Get*, which means I checked the channel allows clips) and look at the
-  clips in Review: the speaker tag's name is the channel's, fix it where the channel isn't the speaker. An original:
-  ask Claude for a script on an ayah, record it in the editor (Sound → Your voice), ask Claude to build the video.
-  Check each ayah, translation and hadith before posting. The translation is Saheeh International from Tanzil, free
-  for non-commercial use: if the page is ever monetised, ask its publisher or switch translation.
-
-- Phase 0 on the platforms' sites, then connect real accounts.
+- Phase 14, after the install: look over the board (my ideas are cards now; Claude's flesh-outs are in each card's
+  history), delete one of the two "Announcement" cards, and copy the old Notes plan to Obsidian (it stays in the
+  database's `notebook` table). Then update the phone (Android 0.3.0 from Obtainium) and try *Add footage* and sharing
+  clips to a video.
+- Phase 12 step 3: pick the recorded SFX source (licence must allow commercial use).
+- Knowledge → References: paste 2–3 shorts I like and write what I like about each (no Claude read since Phase 14).
+- Still open from the account review: the personal brand's name; the third clipping page. Read each page's Settings →
+  Brand guide once and fix anything off. Mascots (shared/mascots.ts): tell Claude Code each page's (Personal brand: the
+  founder, Blox Moments: Blok, Long Story Short: the host).
+- Gentle Return is hidden (Phase 14); its Islamic features stay in the code for when it comes back.
+- Phase 0 on Meta's site (Instagram API with Unified login), then connect the real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
   Listen to the first clips from a source with background music (the music check was only tried on stand-ins).
-- Listen to the built-in SFX (86 now; the 55 added on 2026-10-17 were only checked by measurement) and the voices; drop
-  any I don't like (`server/scripts/make-sfx.py`, `shared/sfx.ts`).
-- A format video and a UGC video for real.
-- Research: each page's *What it watches* (or *Find channels for me*), *Run now* once; sign in to TikTok.
-- Settings → Connected sites: sign in to Content Rewards (Whop) and Vyro, TikTok, Instagram; check each says “Signed in”.
-  Then add a Vyro campaign on its page: if the read still lands on Vyro's catalog (even with 5 s more wait), use
-  *Read from pasted text*. Vyro's earnings page (used for submissions) was only guessed from its app's code.
-  Whop's session cookie is a guess (`SITES.whop.sessionCookie`): if it stays “Not signed in”, list the HttpOnly
-  cookies on contentrewards.com and pin the right one. Then “Try a page” on a joined campaign (rules and files should
-  be in the text).
-- After a clip is posted and submitted: campaign → Submissions → *Check now*; if nothing matches, the submissions page
-  doesn't show post links → adjust `syncSubmissions`.
-- Renders on the home PCs: pull the repo on each PC and run `scripts/setup-worker.sh --server … --code … --with render`
-  (plus what else that PC runs). Settings → Compute should list *Video renders (HyperFrames)*; then render a video and
-  see the stage say "… on <PC>". Measure a 50 s clip there against the laptop (~5 min here).
-- Compute: on each home PC run `scripts/setup-worker.sh --server … --code …` (code from Settings → Compute); check `journalctl --user -u content-studio-worker`, that Settings → Compute shows the GPU and four tools, and *Run a test* says it ran there. Then measure each tool's speed on both cards against the laptop (the plan's step 3 asks for it): Whisper, Demucs, matte, speaker scan. The CUDA builds for Pascal (cu126 wheels, cuDNN 9 for faster-whisper) are untried.
-- Find clips: check `DISCOVER_URL` (`server/src/finder/discover.ts`) is the page that lists Content Rewards campaigns; run it once with a real creator and see that the viral search finds their clips (`ytsearch` for "<creator> clips").
-- Self-hosted models (phase 9), on the home PCs: pull the repo, then on the 1070 PC `scripts/setup-worker.sh --server … --code … --with llm,video,voice` and on the 1050 Ti PC `… --with image` (generation needs `nvidia-cuda-toolkit`, git, cmake, build-essential; the model server needs `zstd`). Check Settings → Models says *Ready: qwen3-vl:30b-a3b-instruct · on <PC>*, Compute lists *Pictures*, *Video clips*, *My voice* and *Text model*. Then: a chat on *Local* that edits a video with tools; a background job with *Local only* on; *Generate* a picture from a video's Footage and look at it; a clip overnight; Settings → My voice: record 10–30 s, *Hear the clone*. Measure (the plan needs it): local chat turn time, a picture on each card, a clip on the 1070. Untried here (no GPU, no Hugging Face or ollama.com access): the Ollama download and `ollama pull`, every model download URL in `setup-worker.sh` (file names from memory; FLUX's `ae.safetensors` is from black-forest-labs/FLUX.1-schnell, which may ask for a Hugging Face login), the CUDA build of stable-diffusion.cpp on Pascal, Chatterbox on Pascal, and how well the local model calls the studio tools.
-- Ideas (phase 11): release a new Android build, then share a TikTok, a Reel, a Short and a screenshot with **Save to Ideas**
-  (check the "Saved to …" notification, *Add a note* typed in it, *Change page*); open a personal page in the app once
-  first so it knows where to save. Instagram saves only get the account and caption (from the desktop window), no
-  thumbnail, views or words, and *Break it down* fails on Instagram without a signed-in yt-dlp. On the Ideas page,
-  *Move them here* moves the 8 title-only cards from the Videos board (my click). "× their usual" for TikTok and
-  Instagram needs the desktop app (it reads the profile, at most once a week per account).
-- Not run with a real chat yet: directions (`direction.pitch`), `view_render` and the package notes; `write_scene`/`view_overlay`, `write_format_video`, `write_ugc_video`, transitions;
-  the weekly review with the playbook.
-
-## TikTok audit demo (record once Content Posting works)
-
-1. Settings → Publishing shows the TikTok app; Accounts → Connect TikTok → consent screen (scopes) → back with the
-   account.
-2. Switch the account to **Post directly**.
-3. A piece with a finished video → **Schedule** → TikTok: creator nickname, visibility with no default, Comment/Duet/
-   Stitch off until switched on, commercial-content disclosure (Your brand / Branded content, “Only me” disabled for
-   branded), the Music Usage / Branded Content Policy line, caption, preview.
-4. **Post now** → Posting → Posted.
-5. Show the post in the TikTok app (private while unaudited).
-6. Show every scope used: Analytics reading views (`video.list`) and followers (`user.info.stats`).
+- Listen to the built-in SFX (86 now; the 55 added on 2026-10-17 were only checked by measurement) and drop any I don't
+  like (`server/scripts/make-sfx.py`, `shared/sfx.ts`).
+- Settings → Connected sites: sign in to Content Rewards (Whop), Vyro and Instagram; check each says “Signed in”. A Vyro
+  campaign: if the read lands on Vyro's catalog, read it again from pasted text (Claude Code). Whop's session cookie is
+  a guess (`SITES.whop.sessionCookie`).
+- Renders on the home PCs: pull the repo on each PC and run `scripts/setup-worker.sh --server … --code … --with render`.
+  Settings → Compute should list *Video renders (HyperFrames)*; then render a video and see the stage say "… on <PC>".
+  Measure a 50 s clip there against the laptop (~5 min here). The same for Whisper, Demucs, the matte and the speaker
+  scan (`journalctl --user -u content-studio-worker`; the CUDA builds for Pascal are untried).
 
 ## Phase 8 build plan (2026-10-16)
 
@@ -879,8 +842,8 @@ professionally with Claude. Laptop first (1920 × 1080).
 
 Build (after the mockup):
 - [x] Mockup: Home, a card being written, a card in review, Calendar, the phone (share + scripts), with my real titles (three rounds, approved 2026-11-05)
-- [ ] Delete the features above (server, web, shared, Android), and the rules in CLAUDE.md that go with them
-- [ ] Move the Personal brand bubbles onto video cards (one-off script, database backed up first)
-- [ ] Top tabs + page chips; hide Gentle Return
-- [ ] Home board; card page; review page with the one Approve
-- [ ] Phone app: share to a video, scripts; release a new Android build (`API_VERSION` bump)
+- [x] Delete the features above (server, web, shared, Android), and the rules in CLAUDE.md that go with them (2026-11-05). The in-app agent stays, only to fix an edit that fails the check before its render
+- [x] Move the Personal brand bubbles onto video cards (`db/phase14.ts`, at the first start; the database is copied to `backups/` first). Tried on a copy: 11 ideas, the series numbered
+- [x] Pages on the top bar, sections under them; Gentle Return hidden; every page on `BOARD_STAGES`
+- [x] Home board; card page; review page with the one Approve (tried on a copy: approve → Sat 12:30, Undo; a real Hooks call, 8 s)
+- [x] Phone app: share to a video, Add footage, scripts; `API_VERSION` 4; Android 0.3.0 (CI builds it)

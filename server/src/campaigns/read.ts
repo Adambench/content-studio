@@ -261,7 +261,8 @@ export async function readCampaign({ campaignId, text }: { campaignId: string; t
     pageText: !market ? c.pageText : page.text.slice(0, 200_000),
     readAt: Date.now(),
     readNote: note ?? (text ? 'Read from the page’s text you pasted.' : null),
-    status: c.status === 'reading' ? 'to_confirm' : c.status,
+    // Dropping its link on a page is my yes (PLAN.md Phase 14): it goes live once read, unless the halal screen rejects it.
+    status: c.status === 'reading' || c.status === 'to_confirm' ? (out.halal.verdict === 'reject' ? 'paused' : 'active') : c.status,
   });
 
   for (const s of found) insertSource(campaignId, { kind: sourceKindOf(s.url), link: s.url, title: s.title.slice(0, 200) });

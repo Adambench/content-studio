@@ -5,8 +5,9 @@
  * it and the app compares it with its own. 2: edits have a nasheed track instead of music (an older app saving an edit
  * would drop it) and the music asset type is gone. 3: edits have camera moves, colour looks, textures, caption fonts and
  * many more transitions, caption presets, graphics, layouts and animations (an older app saving an edit would drop them).
+ * 4: Phase 14: the phone only writes scripts and sends footage to a video; Ideas, captures and saved posts are gone.
  */
-export const API_VERSION = 3;
+export const API_VERSION = 4;
 
 export type Health = { ok: true; api: number; version: string };
 

@@ -86,11 +86,6 @@ export function ComputeCard() {
                         {TOOL_INFO[t].label}
                       </Badge>
                     ))}
-                    {w.llmUrl && (
-                      <Badge variant="outline" className="text-[11px]">
-                        Text model
-                      </Badge>
-                    )}
                     {w.online && w.tools.length === 0 && <span className="text-xs text-amber-400">No tools installed on it yet: run the setup script.</span>}
                   </div>
                 </div>

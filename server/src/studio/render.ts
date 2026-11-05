@@ -369,14 +369,14 @@ export async function renderJob({ renderId }: { renderId: string }) {
     setRender(r, { status: 'done', progress: 1, stage: 'Done', mediaId, elapsedMs: Date.now() - started, finishedAt: now() });
     emit({ type: 'changed', entity: 'media', workspaceId: r.workspaceId, id: mediaId });
     emit({ type: 'changed', entity: 'pieces', workspaceId: r.workspaceId, id: r.pieceId });
-    // A clip being made (a card in Making) is ready for my yes or no once rendered.
+    // A clip being made, or a video Claude is editing, is ready for my yes or no once rendered.
     const stages = getWorkspace(r.workspaceId).stages.map((s) => s.id);
     const fresh = getPiece(r.pieceId);
-    if (fresh.stage === 'making' && stages.includes(REVIEW_STAGE)) {
+    if (['making', 'edit', 'film'].includes(fresh.stage) && stages.includes(REVIEW_STAGE)) {
       db.update(schema.pieces).set({ stage: REVIEW_STAGE, updatedAt: now() }).where(eq(schema.pieces.id, r.pieceId)).run();
       emit({ type: 'changed', entity: 'pieces', workspaceId: r.workspaceId, id: r.pieceId });
-      await notify('Clip ready for review', `“${piece.title}”`, `/w/${r.workspaceId}/p/${r.pieceId}`);
-    } else await notify('Video ready', `“${piece.title}” finished rendering.`, `/w/${r.workspaceId}/p/${r.pieceId}`);
+      await notify('Ready to watch', `“${piece.title}”`, `/c/${r.pieceId}`);
+    } else await notify('Video ready', `“${piece.title}” finished rendering.`, `/c/${r.pieceId}`);
   } catch (err) {
     const cancelled = abort.signal.aborted;
     const message = err instanceof Error ? err.message : String(err);

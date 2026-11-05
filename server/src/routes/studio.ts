@@ -13,7 +13,6 @@ import { emit } from '../lib/events';
 import { badRequest, notFound } from '../lib/http';
 import { correctTranscript, getMedia } from '../services/media';
 import { clipToolsInstalled } from '../services/cliptools';
-import { hasVoiceReference, speak, ttsInstalled, voiceReferencePath } from '../services/tts';
 import { CHARACTERS, CLONE_VOICE, VOICES, type CharacterId } from '../../../shared/recipe';
 import { characterSvg } from '../studio/characters';
 import { JobError, enqueue, hasPendingJob } from '../jobs/queue';
@@ -117,37 +116,6 @@ export async function studioRoutes(app: FastifyInstance) {
 
   // The quality check on its own: the edit as it is now, saved as a version if it changed.
   app.post<{ Params: { id: string } }>('/api/edits/:id/check', async (req) => checkEdit(getEdit(req.params.id).id, 'you'));
-
-  // A format video's voice: speak the recipe, time it, lay out the edit (a new version).
-  app.post<{ Params: { id: string } }>('/api/edits/:id/build', async (req) => {
-    const edit = getEdit(req.params.id);
-    if (!normalizeEdit(edit.working).recipe) throw badRequest('This edit isn’t a format video.');
-    if (!ttsInstalled()) throw badRequest('Install the clip tools first (Settings → Clip tools): the voices come with them.');
-    if (!hasPendingJob('format.build', 'editId', edit.id)) enqueue('format.build', { editId: edit.id, by: 'you' }, { maxAttempts: 1 });
-    return { ok: true };
-  });
-
-  // How a voice sounds: a short sample, made once and kept (the cloned voice's, once per recording).
-  app.get<{ Params: { voice: string } }>('/api/tts/voices/:voice', async (req, reply) => {
-    const id = req.params.voice.replace(/\.wav$/, '');
-    if (!VOICES.some((v) => v.id === id)) throw notFound('No such voice');
-    if (!ttsInstalled()) throw badRequest('Install the clip tools first (Settings → Clip tools).');
-    if (id === CLONE_VOICE && !hasVoiceReference()) throw badRequest('Record your voice first (Settings → My voice).');
-    const version = id === CLONE_VOICE ? `-${Math.round(statSync(voiceReferencePath()).mtimeMs)}` : '';
-    const file = join(config.cacheDir, 'voices', `${id}${version}.wav`);
-    if (!existsSync(file)) {
-      await mkdir(dirname(file), { recursive: true });
-      try {
-        await speak([{ text: 'Here’s how I sound reading your script. Short lines work best.', voice: id, speed: 1.05, pause: 0.1 }], file);
-      } catch (err) {
-        // The cloned voice needs a home PC: say so instead of failing the request.
-        if (err instanceof JobError) throw badRequest(err.message);
-        throw err;
-      }
-    }
-    reply.header('Cache-Control', 'private, max-age=86400');
-    return reply.type('audio/wav').sendFile(basename(file), dirname(file));
-  });
 
   // "Follow the speaker": find the shots and who's talking in the footage, then reframe on them (a new version).
   app.post<{ Params: { id: string } }>('/api/edits/:id/reframe', async (req) => {

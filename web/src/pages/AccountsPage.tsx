@@ -1,23 +1,22 @@
 import { Plus, RefreshCw, Settings, Unplug, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { ACTIVE_PLATFORMS, type PublishPlatform, type QueueSlot } from '@shared/publish';
 import { PageHeader } from '@/components/PageHeader';
 import { AccountAvatar, accountName, DAY_NAMES, firstDayOfWeek, PlatformIcon, platformLabel } from '@/components/publish/common';
-import { useWorkspaceContext } from '@/components/WorkspaceLayout';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { api, errorMessage } from '@/lib/api';
 import { desktop } from '@/lib/desktop';
 import { isApp, openExternal } from '@/lib/native';
-import { keys, queryClient, useAccounts, usePublishingSetup } from '@/lib/queries';
+import { keys, queryClient, useAccounts, usePublishingSetup, useWorkspace } from '@/lib/queries';
+import type { Workspace } from '@/lib/types';
 import type { Account } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -35,8 +34,7 @@ async function signIn(path: string, body: unknown) {
   toast(desktop ? 'Finish signing in in your browser' : 'Finish signing in in the new tab', { description: 'This page updates by itself when it’s done.' });
 }
 
-export function AccountsPage() {
-  const { workspace } = useWorkspaceContext();
+function Accounts({ workspace }: { workspace: Workspace }) {
   const accounts = useAccounts(workspace.id);
   const setup = usePublishingSetup();
   const [busy, setBusy] = useState<PublishPlatform | null>(null);
@@ -149,26 +147,6 @@ function AccountCard({ account: a, timeZone }: { account: Account; timeZone?: st
           </div>
         )}
 
-        {a.platform === 'tiktok' && (
-          <div className="space-y-2">
-            <Label>How posts reach TikTok</Label>
-            <Select value={a.settings.tiktokMode ?? 'inbox'} onValueChange={(v) => patch({ settings: { tiktokMode: v as 'inbox' | 'direct' } })}>
-              <SelectTrigger className="w-full sm:w-[26rem]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="inbox">Send to my TikTok inbox, I post it from the app</SelectItem>
-                <SelectItem value="direct">Post directly</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {(a.settings.tiktokMode ?? 'inbox') === 'inbox'
-                ? 'Works before TikTok audits your developer app. At the scheduled time the video lands in your TikTok inbox; open TikTok, paste the caption and post.'
-                : 'Needs TikTok’s audit of your developer app — until then TikTok only accepts direct posts to private accounts.'}
-            </p>
-          </div>
-        )}
-        {a.platform === 'youtube' && <p className="text-xs text-muted-foreground">Until Google audits your API project, YouTube makes every upload private — you can publish it from YouTube Studio.</p>}
 
         <QueueEditor slots={a.slots} timeZone={timeZone} onChange={(slots) => patch({ slots })} />
       </CardContent>
@@ -251,4 +229,17 @@ function QueueEditor({ slots, timeZone, onChange }: { slots: QueueSlot[]; timeZo
       </Button>
     </div>
   );
+}
+
+/** Where a page posts, and when (Settings → a page → Accounts). */
+export function AccountsPage() {
+  const { wid = '' } = useParams();
+  const ws = useWorkspace(wid);
+  if (!ws.data)
+    return (
+      <div className="grid h-full place-items-center">
+        <Spinner />
+      </div>
+    );
+  return <Accounts workspace={ws.data} />;
 }

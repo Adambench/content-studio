@@ -1,159 +1,119 @@
-import { ArrowLeft, AudioLines, FileIcon, Film, Image as ImageIcon, Link2, Send } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { WorkspaceDot } from '@/components/WorkspaceDot';
+import { COLUMN_LABELS, type BoardItem } from '@shared/board';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
-import { errorMessage } from '@/lib/api';
-import { bytes } from '@/lib/format';
+import { api, errorMessage, uploadFiles } from '@/lib/api';
+import { writes } from '@/lib/nav';
 import { pendingShare, Studio, type QueuedFile } from '@/lib/native';
-import { useBoard, useSettings, useWorkspaces } from '@/lib/queries';
-import { useStore } from '@/lib/ui-state';
+import { keys, queryClient, useBoardData } from '@/lib/queries';
+import { createStore, useStore } from '@/lib/ui-state';
 
-const isAudio = (f: QueuedFile) => f.mime.startsWith('audio/');
+/** Clips picked with "Add footage": the phone's own files (the app), or the browser's. */
+export const pickedFiles = createStore<{ native: QueuedFile[] } | { web: File[] } | null>(null);
 
-function FileKindIcon({ file }: { file: QueuedFile }) {
-  const Icon = file.mime.startsWith('video/') ? Film : file.mime.startsWith('image/') ? ImageIcon : isAudio(file) ? AudioLines : FileIcon;
-  return <Icon className="size-4 shrink-0 text-muted-foreground" />;
-}
+const ORDER = ['film', 'writing', 'ideas'] as const;
 
 /**
- * Something shared to the app from another app (Android's share sheet): pick the workspace (and, for footage, a
- * piece), then it uploads in the background. Like the PWA's share target: video and photos go to the library, voice
- * notes and text or links become idea captures.
+ * "Send N clips to": footage shared to the app (the share sheet) or picked with Add footage goes into the video I
+ * pick, uploading in the background. Only clips (video, or voice for a voiceover) come here.
  */
 export function SharePage() {
   const share = useStore(pendingShare);
-  const { data: workspaces = [] } = useWorkspaces();
-  const settings = useSettings();
+  const picked = useStore(pickedFiles);
+  const board = useBoardData();
   const navigate = useNavigate();
-  const [wid, setWid] = useState('');
-  const [pieceId, setPieceId] = useState('none');
-  const [sending, setSending] = useState(false);
-  const board = useBoard(wid);
-  // Once it's sent (or dropped) the share is cleared; that mustn't redirect over where we're going.
+  const [sending, setSending] = useState<string | null>(null);
   const leaving = useRef(false);
 
-  useEffect(() => {
-    if (!wid && workspaces.length) setWid(workspaces.find((w) => w.id === settings.data?.lastWorkspaceId)?.id ?? workspaces[0].id);
-  }, [workspaces, settings.data, wid]);
+  const shared = share?.files.filter((f) => f.mime.startsWith('video/') || f.mime.startsWith('audio/')) ?? [];
+  const count = share ? shared.length : picked ? ('native' in picked ? picked.native.length : picked.web.length) : 0;
+  if (!share && !picked) return leaving.current ? null : <Navigate to="/" replace />;
 
-  if (!share) return leaving.current ? null : <Navigate to="/" replace />;
-  const footage = share.files.filter((f) => !isAudio(f));
-  const voice = share.files.filter(isAudio);
-  const text = share.files.length ? null : share.text;
-
-  async function cancel() {
+  async function close() {
     if (share) await Studio.discardShare({ id: share.id }).catch(() => {});
     leaving.current = true;
     pendingShare.set(null);
-    navigate(-1);
+    pickedFiles.set(null);
+    navigate('/', { replace: true });
   }
 
-  async function send() {
-    if (!share || !wid) return;
-    setSending(true);
+  async function send(target: BoardItem | 'new') {
+    const page = board.data?.pages.find((p) => !p.hidden && writes(p.kind));
+    if (!page) return;
+    setSending(target === 'new' ? 'new' : target.id);
     try {
-      const target = { workspaceId: wid, pieceId: pieceId === 'none' ? null : pieceId };
-      if (footage.length) await Studio.enqueueFiles({ ...target, source: 'share', files: footage });
-      if (voice.length) await Studio.enqueueFiles({ workspaceId: wid, source: 'capture', files: voice });
-      // Text and links: the Saved pile of a page with Ideas, else an idea card made by Claude.
-      const toIdeas = workspaces.find((w) => w.id === wid)?.kind !== 'clipping';
-      const savedId = crypto.randomUUID();
-      if (text && toIdeas) await Studio.enqueueSaved({ workspaceId: wid, id: savedId, text });
-      else if (text) await Studio.enqueueText({ workspaceId: wid, text });
-      await Studio.discardShare({ id: share.id });
+      let pieceId: string;
+      let workspaceId: string;
+      let title: string;
+      if (target === 'new') {
+        const made = await api<{ id: string; title: string }>(`/workspaces/${page.id}/pieces`, { method: 'POST', body: { title: 'New video', stage: 'film' } });
+        pieceId = made.id;
+        workspaceId = page.id;
+        title = made.title;
+      } else {
+        pieceId = target.id;
+        workspaceId = target.workspaceId;
+        title = target.title;
+      }
+      if (share) {
+        await Studio.enqueueFiles({ workspaceId, pieceId, source: 'share', files: shared });
+        await Studio.discardShare({ id: share.id });
+      } else if (picked && 'native' in picked) {
+        await Studio.enqueueFiles({ workspaceId, pieceId, source: 'upload', files: picked.native });
+      } else if (picked) {
+        await uploadFiles(`/workspaces/${workspaceId}/media?pieceId=${pieceId}`, picked.web);
+      }
       leaving.current = true;
       pendingShare.set(null);
-      const ws = workspaces.find((w) => w.id === wid)?.name ?? 'the workspace';
-      if (footage.length) toast.success(`Sending to ${ws}`, { description: target.pieceId ? 'It uploads in the background into that video.' : 'It uploads in the background into the Inbox; Claude suggests which video it belongs to.' });
-      else if (toIdeas) toast.success(`Saved to ${ws}`, { description: 'It’s in Ideas → Saved. Next time, “Save to Ideas” in the share sheet does this with no screen.' });
-      else toast.success('Idea captured', { description: 'Claude will turn it into a card on the board.' });
-      navigate(footage.length ? (target.pieceId ? `/w/${wid}/p/${target.pieceId}` : `/w/${wid}/inbox`) : toIdeas ? `/w/${wid}/ideas` : `/w/${wid}/board`, { replace: true });
+      pickedFiles.set(null);
+      void queryClient.invalidateQueries({ queryKey: keys.boardAll });
+      toast.success(`${count} clip${count === 1 ? '' : 's'} sent to ${title}`);
+      navigate(`/c/${pieceId}`, { replace: true });
     } catch (err) {
       toast.error(errorMessage(err));
-      setSending(false);
+      setSending(null);
     }
   }
 
+  const pages = new Set((board.data?.pages ?? []).filter((p) => !p.hidden && writes(p.kind)).map((p) => p.id));
+  const items = (board.data?.items ?? []).filter((i) => pages.has(i.workspaceId));
   return (
     <div className="flex h-full flex-col">
-      <header className="pt-safe flex items-center gap-2 border-b px-2 md:px-4">
-        <div className="flex h-12 items-center gap-2">
-          <Button variant="ghost" size="icon-sm" aria-label="Cancel" onClick={cancel}>
+      <header className="pt-safe flex items-center gap-2 px-2">
+        <div className="flex h-14 items-center gap-2">
+          <Button variant="ghost" size="icon" className="size-10" aria-label="Cancel" onClick={close}>
             <ArrowLeft />
           </Button>
-          <h1 className="text-base font-semibold">Add to Content Studio</h1>
+          <h1 className="text-xl font-semibold">{count ? `Send ${count} clip${count === 1 ? '' : 's'} to` : 'Only clips can be sent here'}</h1>
         </div>
       </header>
-
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-6">
-        <section className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            {footage.length ? 'Goes into a video, or the Inbox' : 'Becomes an idea card'}
-            {voice.length > 0 && footage.length > 0 && ' (voice notes become idea cards)'}
-          </p>
-          <ul className="divide-y rounded-lg border">
-            {share.files.map((f) => (
-              <li key={f.path} className="flex items-center gap-3 px-3 py-2.5">
-                <FileKindIcon file={f} />
-                <span className="min-w-0 flex-1 truncate text-sm">{f.name}</span>
-                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{bytes(f.size)}</span>
-              </li>
-            ))}
-            {text && (
-              <li className="flex items-start gap-3 px-3 py-2.5">
-                <Link2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                <p className="min-w-0 flex-1 text-sm break-words whitespace-pre-wrap">{text}</p>
-              </li>
-            )}
-          </ul>
-        </section>
-
-        <div className="space-y-2">
-          <Label>Workspace</Label>
-          <Select value={wid} onValueChange={(v) => (setWid(v), setPieceId('none'))}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder={workspaces.length ? 'Workspace' : 'Loading…'} />
-            </SelectTrigger>
-            <SelectContent>
-              {workspaces.map((w) => (
-                <SelectItem key={w.id} value={w.id}>
-                  <WorkspaceDot color={w.color} /> {w.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {count > 0 && (
+        <div className="pb-safe min-h-0 flex-1 overflow-y-auto px-4 pb-6">
+          {ORDER.map((c) => {
+            const list = items.filter((i) => i.column === c);
+            if (!list.length) return null;
+            return (
+              <section key={c}>
+                <h2 className="px-1 pt-5 pb-2 text-xs font-semibold tracking-widest text-muted-foreground uppercase">{COLUMN_LABELS[c]}</h2>
+                <div className="flex flex-col gap-2">
+                  {list.map((i) => (
+                    <button key={i.id} type="button" disabled={!!sending} onClick={() => send(i)} className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3.5 text-left text-base disabled:opacity-60">
+                      <span className="min-w-0 flex-1 truncate">{i.title}</span>
+                      {sending === i.id ? <Spinner /> : i.series ? <span className="text-[13px] text-muted-foreground">Ep {i.series.episode}</span> : null}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+          <button type="button" disabled={!!sending} onClick={() => send('new')} className="mt-6 flex w-full items-center gap-3 rounded-xl border border-dashed px-4 py-3.5 text-left text-base text-muted-foreground disabled:opacity-60">
+            {sending === 'new' ? <Spinner /> : '+'} New video
+          </button>
         </div>
-
-        {footage.length > 0 && (
-          <div className="space-y-2">
-            <Label>Piece (optional)</Label>
-            <Select value={pieceId} onValueChange={setPieceId} disabled={!board.data}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">The Inbox (Claude suggests where)</SelectItem>
-                {(board.data ?? []).map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-      </div>
-
-      <div className="pb-safe border-t p-3">
-        <Button size="lg" className="w-full" onClick={send} disabled={!wid || sending}>
-          {sending ? <Spinner /> : <Send />} {footage.length ? `Upload ${footage.length === 1 ? 'it' : `${footage.length} files`}` : 'Capture idea'}
-        </Button>
-      </div>
+      )}
     </div>
   );
 }

@@ -8,7 +8,6 @@ import { getSetting } from '../lib/settings';
 import { enqueue, hasPendingJob } from '../jobs/queue';
 import { SOURCE_RETENTION_DAYS } from '../../../shared/campaigns';
 import { freeSourceVideos } from './sources';
-import { awaitingCampaign, createDueSubmissions } from './submissions';
 
 const TICK_MS = 30 * 60_000;
 const BUDGET_EVERY = 20 * 3600_000;
@@ -43,13 +42,9 @@ async function cleanSources() {
 function tick() {
   if (!hasPendingJob('campaign.budget') && budgetsDue()) enqueue('campaign.budget', {}, { maxAttempts: 1 });
   void cleanSources().catch((err) => console.warn(`[campaigns] cleaning sources: ${(err as Error).message}`));
-  const last = getSetting('submissionsSync');
-  if (desktopAvailable() && awaitingCampaign() && !hasPendingJob('submissions.sync') && (!last || now() - last.at >= SUBMISSIONS_EVERY)) enqueue('submissions.sync', {}, { maxAttempts: 1 });
 }
 
 export function startCampaignUpkeep() {
-  // Posts that went out while submissions didn't exist yet (or while the app was off) get theirs.
-  void createDueSubmissions().catch((err) => console.warn(`[submissions] ${(err as Error).message}`));
   setTimeout(tick, 2 * 60_000);
   timer = setInterval(tick, TICK_MS);
 }

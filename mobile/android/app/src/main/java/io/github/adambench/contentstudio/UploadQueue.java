@@ -105,39 +105,6 @@ final class UploadQueue {
         notifyChanged();
     }
 
-    synchronized void addText(String workspaceId, String text) throws JSONException {
-        JSONObject item = new JSONObject();
-        item.put("id", UUID.randomUUID().toString());
-        item.put("kind", "text");
-        item.put("name", text.length() > 80 ? text.substring(0, 80) + "…" : text);
-        item.put("text", text);
-        item.put("size", 0);
-        item.put("workspaceId", workspaceId);
-        add(item);
-        save();
-        notifyChanged();
-    }
-
-    /**
-     * A share for the Saved pile (`text`: a link or note), or a note for one already sent (`note`). Both name the card
-     * by `ideaId`, so whichever reaches the computer first makes it and the other joins it.
-     */
-    synchronized void addSaved(String workspaceId, String ideaId, @Nullable String text, @Nullable String note) throws JSONException {
-        JSONObject item = new JSONObject();
-        item.put("id", UUID.randomUUID().toString());
-        item.put("kind", "saved");
-        String label = note != null ? "Note: " + note : text != null ? text : "Saved";
-        item.put("name", label.length() > 80 ? label.substring(0, 80) + "…" : label);
-        item.put("ideaId", ideaId);
-        if (text != null) item.put("text", text);
-        if (note != null) item.put("note", note);
-        item.put("size", 0);
-        item.put("workspaceId", workspaceId);
-        add(item);
-        save();
-        notifyChanged();
-    }
-
     private void add(JSONObject item) throws JSONException {
         item.put("sent", 0);
         item.put("state", "waiting");

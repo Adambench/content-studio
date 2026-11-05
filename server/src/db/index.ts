@@ -22,6 +22,8 @@ function createDb() {
 }
 
 export const db = createDb();
+/** The database itself, for what drizzle can't say (a backup copy). */
+export const rawDb = sqlite;
 export { schema };
 
 export function runMigrations() {

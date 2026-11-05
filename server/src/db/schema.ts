@@ -4,16 +4,13 @@ import type { PostStats, ReviewBody, ReviewStatus } from '../../../shared/analyt
 import type { FramesCheck, MomentCaptions, MomentKind, MomentSpeaker, MomentStatus, MusicCheck, StandaloneScores } from '../../../shared/clipping';
 import type { CampaignOrigin, CampaignPlatform, CampaignStatus, HalalVerdict, Payout, RuleItem, SourceKind, SourceStatus, SubmissionStatus } from '../../../shared/campaigns';
 import type { EditSpec, EditTemplate } from '../../../shared/edit';
-import type { ViralHint } from '../../../shared/finder';
 import type { MascotId } from '../../../shared/mascots';
 import type { NoteStatus } from '../../../shared/notes';
 import type { PieceDirections } from '../../../shared/direction';
-import type { IdeaAssist, IdeaKind } from '../../../shared/ideas';
 import type { KnowledgeSource, KnowledgeStatus, KnowledgeTopic } from '../../../shared/knowledge';
 import type { QualityReport } from '../../../shared/quality';
 import type { Ingredient, PageStyle, ReferenceMeasures, ReferencePlatform, ReferenceRead, ReferenceStatus } from '../../../shared/references';
 import type { FindKind, FindStatus, ToolKind } from '../../../shared/toolbox';
-import type { AnalysisStatus, ItemPlatform, ResearchAnalysis, ResearchBriefBody, ResearchSettings, ResearchSource } from '../../../shared/research';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostStatus, PublishPlatform, QueueSlot } from '../../../shared/publish';
 import type { SessionKind } from '../../../shared/devices';
 import type { AssetType, ChatPart, DraftContent, InboxSuggestion, MediaKind, MediaSource, ModuleId, ProxyStatus, RenderStatus, Stage, TranscriptStatus, WorkspaceKind } from '../../../shared/types';
@@ -53,7 +50,7 @@ export const workspaces = sqliteTable('workspaces', {
   // The page's niche in a sentence: research keywords, and how moments are judged for fit.
   niche: text('niche').notNull().default(''),
   // What the Research brief watches: keywords, YouTube channels, TikTok and Instagram handles (normalizeResearch).
-  research: text('research', { mode: 'json' }).$type<ResearchSettings>().notNull().default(sql`'{}'`),
+  research: text('research', { mode: 'json' }).$type<Record<string, unknown>>().notNull().default(sql`'{}'`),
   description: text('description').notNull().default(''),
   brandGuide: text('brand_guide').notNull().default(''),
   // Claude-maintained notes about my voice, learned from my edits.
@@ -63,6 +60,8 @@ export const workspaces = sqliteTable('workspaces', {
   // The brand's video look (shape, captions, grade, watermark, voice settings), applied to new edits.
   editTemplate: text('edit_template', { mode: 'json' }).$type<EditTemplate>(),
   stages: text('stages', { mode: 'json' }).$type<Stage[]>().notNull(),
+  /** Out of the top bar and Home (Settings → Pages); its data stays. */
+  hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
   position: integer('position').notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -84,6 +83,9 @@ export const pieces = sqliteTable(
     directions: text('directions', { mode: 'json' }).$type<PieceDirections | null>(),
     /** The render I said looks good (shared/review.ts): a newer render asks for another look. */
     reviewedMediaId: text('reviewed_media_id'),
+    /** The series it's an episode of, and its number in it. */
+    series: text('series'),
+    episode: integer('episode'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -545,7 +547,7 @@ export const campaignSources = sqliteTable(
     uploadedAt: integer('uploaded_at'),
     creator: text('creator'),
     // Moments other clippers' clips of this video got big on (shared/finder.ts), found by the finder; the pick reads them.
-    viral: text('viral', { mode: 'json' }).$type<ViralHint[]>().notNull().default(sql`'[]'`),
+    viral: text('viral', { mode: 'json' }).$type<unknown[]>().notNull().default(sql`'[]'`),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -630,7 +632,7 @@ export const researchItems = sqliteTable(
   {
     id: id(),
     workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
-    platform: text('platform').$type<ItemPlatform>().notNull(),
+    platform: text('platform').$type<string>().notNull(),
     externalId: text('external_id').notNull(),
     url: text('url').notNull(),
     channel: text('channel').notNull().default(''),
@@ -641,11 +643,11 @@ export const researchItems = sqliteTable(
     score: real('score'),
     postedAt: integer('posted_at'),
     hook: text('hook').notNull().default(''),
-    source: text('source').$type<ResearchSource>().notNull(),
+    source: text('source').$type<string>().notNull(),
     keyword: text('keyword'),
     mediaId: text('media_id').references(() => media.id, { onDelete: 'set null' }),
-    analysis: text('analysis', { mode: 'json' }).$type<ResearchAnalysis>(),
-    analysisStatus: text('analysis_status').$type<AnalysisStatus>().notNull().default('none'),
+    analysis: text('analysis', { mode: 'json' }).$type<unknown>(),
+    analysisStatus: text('analysis_status').$type<string>().notNull().default('none'),
     analysisError: text('analysis_error'),
     /** What's said in it (YouTube's captions or Whisper), for a saved post. */
     transcript: text('transcript').notNull().default(''),
@@ -664,7 +666,7 @@ export const researchBriefs = sqliteTable(
     // Local date, yyyy-mm-dd.
     day: text('day').notNull(),
     status: text('status').$type<'running' | 'done' | 'error'>().notNull().default('running'),
-    body: text('body', { mode: 'json' }).$type<ResearchBriefBody>(),
+    body: text('body', { mode: 'json' }).$type<unknown>(),
     sweep: text('sweep').notNull().default(''),
     error: text('error'),
     createdAt: createdAt(),
@@ -674,7 +676,7 @@ export const researchBriefs = sqliteTable(
 );
 
 /**
- * A card on a page's Ideas canvas (shared/ideas.ts): an idea, a series, a saved post or a picture, in a tree. Deleting
+ * Kept for its data only (Phase 14 moved my ideas onto video cards and deleted the canvas). A card on a page's Ideas canvas: an idea, a series, a saved post or a picture, in a tree. Deleting
  * marks it (`deletedAt`) so it can be undone; marked ones go for good after a month.
  */
 export const ideas = sqliteTable(
@@ -684,7 +686,7 @@ export const ideas = sqliteTable(
     workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
     parentId: text('parent_id').references((): AnySQLiteColumn => ideas.id, { onDelete: 'cascade' }),
     position: real('position').notNull().default(0),
-    kind: text('kind').$type<IdeaKind>().notNull().default('idea'),
+    kind: text('kind').$type<string>().notNull().default('idea'),
     title: text('title').notNull().default(''),
     body: text('body').notNull().default(''),
     script: text('script').notNull().default(''),
@@ -697,7 +699,7 @@ export const ideas = sqliteTable(
     /** The video it was locked in as. */
     pieceId: text('piece_id').references(() => pieces.id, { onDelete: 'set null' }),
     by: text('by').$type<'you' | 'claude'>().notNull().default('you'),
-    assist: text('assist', { mode: 'json' }).$type<IdeaAssist | null>(),
+    assist: text('assist', { mode: 'json' }).$type<unknown>(),
     seenAt: integer('seen_at'),
     deletedAt: integer('deleted_at'),
     createdAt: createdAt(),

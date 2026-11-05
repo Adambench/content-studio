@@ -1,7 +1,7 @@
 import type { SDKRateLimitInfo } from '@anthropic-ai/claude-agent-sdk';
 import type { AiTask } from '../../../shared/ai';
 import type { ClaudeUsage } from '../../../shared/types';
-import { BACKGROUND_FIVE_HOUR, routeFor } from '../ai/route';
+import { BACKGROUND_FIVE_HOUR } from '../ai/route';
 import { emit } from '../lib/events';
 import { getSetting, setSetting } from '../lib/settings';
 import { JobError } from '../jobs/queue';
@@ -27,12 +27,11 @@ export function recordUsage(info: SDKRateLimitInfo): ClaudeUsage {
 
 /**
  * Throw a waiting JobError while the 5-hour usage is above ~80 %, so the job tries again a minute after the window
- * resets; the chat stays usable meanwhile. A reading from a window that has already reset doesn't count. A task the
- * self-hosted model answers now (`ai/route.ts`) never waits. Only for background work: what I clicked for and wait on
- * doesn't call it (it asks with `now: true`).
+ * resets. A reading from a window that has already reset doesn't count. Only for background work: what I clicked for
+ * and wait on doesn't call it (it asks with `now: true`).
  */
-export async function waitForUsage(task: AiTask) {
-  if ((await routeFor(task)).provider === 'local') return;
+export async function waitForUsage(_task: AiTask) {
+  if ((getSetting('claudeLimitedUntil') ?? 0) > Date.now()) throw new JobError('Claude refused for usage: waiting an hour.', { wait: true, delayMs: 60 * 60_000 });
   const five = getSetting('claudeUsage')?.fiveHour;
   if (!five || five.utilization < BACKGROUND_FIVE_HOUR || five.resetsAt <= Date.now()) return;
   const delayMs = five.resetsAt - Date.now() + 60_000;

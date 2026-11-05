@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { and, desc, eq, inArray, isNull, like, or } from 'drizzle-orm';
 import { z } from 'zod';
-import { ugcPieces } from '../campaigns/ugc';
 import { enqueue } from '../jobs/queue';
 import { inReview, normalizeDraft, type DraftContent } from '../../../shared/types';
 import { config } from '../config';
@@ -12,19 +11,13 @@ import { emit } from '../lib/events';
 import { extractFrames } from '../lib/ffmpeg';
 import { formatTime, getMedia, mediaPath, readTranscript } from '../services/media';
 import { createBranch, createPiece, getBranch, getPiece, getPieceDetail, getWorkspace, mergeDraft, saveVersion } from '../services/pieces';
-import { digest } from '../analytics/report';
 import { clock, MOMENT_KIND_LABELS } from '../../../shared/clipping';
 import { campaignsForWorkspace, listMoments, listSources } from '../campaigns/campaigns';
-import { campaignResults, listSubmissions } from '../campaigns/submissions';
-import { SUBMISSION_STATUS_LABELS } from '../../../shared/campaigns';
-import { analyses, latestBriefs, recentOutliers, researchSettings } from '../research/research';
 import { getMoment, queueMake } from '../clipping/moments';
 import { findMoments } from '../routes/clipping';
 import { accountLabel, listAccounts } from '../publish/accounts';
 import { piecePosts, upcomingPosts } from '../publish/posts';
 import { studioTools, studioToolLabel } from './studio-tools';
-import { createIdea, getIdea, hasIdeas, listIdeas } from '../ideas/ideas';
-import { notebookText } from '../ideas/notebook';
 import { reviewStates } from '../studio/notes';
 import { REVIEW_LABELS } from '../../../shared/review';
 import { ok, safe, ToolError } from './tool-helpers';
@@ -436,31 +429,6 @@ export function buildTools(workspaceId: string) {
     ),
 
     tool(
-      'get_analytics',
-      'Read how published posts did: views, likes, comments, shares, saves, watch time and how each compares with the account’s typical post ' +
-        '(views after 24 hours), plus each account’s followers, queue times and which times of day and weekdays have done best, and the latest weekly review. ' +
-        'Numbers come from the platforms and are refreshed every few hours. Read-only.',
-      {
-        days: z.number().int().min(1).max(90).optional().describe('How many days of posts to list in detail (default 28)'),
-        pieceId: z.string().optional().describe('Only this piece’s posts'),
-      },
-      safe(async ({ days, pieceId }) => {
-        if (pieceId) ownPiece(pieceId);
-        const { text } = digest(workspaceId, days ?? 28, { pieceId });
-        const review = db
-          .select({ body: schema.reviews.body, createdAt: schema.reviews.createdAt })
-          .from(schema.reviews)
-          .where(and(eq(schema.reviews.workspaceId, workspaceId), eq(schema.reviews.status, 'done')))
-          .orderBy(desc(schema.reviews.createdAt))
-          .get();
-        const last = review?.body
-          ? `\n\n## Latest weekly review (${new Date(review.createdAt).toDateString()})\n${review.body.headline}\n${review.body.summary}\nLessons:${review.body.lessons.map((l) => `\n- ${l}`).join('')}`
-          : '';
-        return ok(text.replace(/\[(A|P)\d+\] /g, '') + last);
-      }),
-    ),
-
-    tool(
       'get_campaigns',
       'List the campaigns this page works on (marketplace campaigns from Content Rewards or Vyro assigned to it, or this business’s own): status, payout per 1,000 views, budget left, deadline, ' +
         'platforms and the halal screen. Read-only: adding, confirming and assigning campaigns is the creator’s click.',
@@ -489,8 +457,7 @@ export function buildTools(workspaceId: string) {
     tool(
       'get_campaign',
       'Read one campaign in full: the brief, every rule (kind and what the app can check), creator requirements, payouts per platform, budget, the halal screen with ' +
-        'its reasons, its source videos (title, length, whether they are downloaded and transcribed), its results (clips made, approved, posted, views, the ' +
-        'campaign’s approval rate, earnings) and its submissions on its marketplace. Check its rules before suggesting anything for it. Read-only.',
+        'its reasons and its source videos (title, length, whether they are downloaded and transcribed). Check its rules before suggesting anything for it. Read-only.',
       { campaignId: z.string().describe('From get_campaigns') },
       safe(async ({ campaignId }) => {
         const c = campaignsForWorkspace(workspaceId).find((x) => x.id === campaignId);
@@ -536,21 +503,6 @@ export function buildTools(workspaceId: string) {
           deadline: c.deadline ? new Date(c.deadline).toDateString() : undefined,
           halal: { verdict: c.halalVerdict, reasons: c.halalReasons },
           sources,
-          // Videos filmed for it (UGC) on this page.
-          filmed: ugcPieces(c.id)
-            .filter((p) => p.workspaceId === workspaceId)
-            .map((p) => ({ pieceId: p.id, title: p.title, stage: p.stage })),
-          // How its clips did and what they earned; submitting on Content Rewards is the creator's click.
-          results: campaignResults(c.id),
-          submissions: listSubmissions({ campaignId: c.id, workspaceId }).map((s) => ({
-            clip: s.pieceTitle,
-            platform: s.platform,
-            status: SUBMISSION_STATUS_LABELS[s.status],
-            views: s.views ?? s.postViews ?? undefined,
-            earnings: s.earnings ?? undefined,
-            estimate: s.earnings === null ? (s.estimate ?? undefined) : undefined,
-            note: s.note || s.estimateNote || undefined,
-          })),
         });
       }),
     ),
@@ -585,104 +537,6 @@ export function buildTools(workspaceId: string) {
         queueMake(m.id);
         return ok('Queued: the clip lands in Review once it’s rendered.');
       }),
-    ),
-
-    tool(
-      'write_ugc_video',
-      'Start a video the creator films for a campaign themselves (UGC: them on camera with the product): one background Claude request writes the hook, what to ' +
-        'say with shot cues, a shot list, the requirements checklist and the captions from the brief and rules, as a new card on this page linked to the campaign ' +
-        '(so its posts get submissions). For campaigns that want the creator on camera, or a business’s own product videos.',
-      { campaignId: z.string().describe('From get_campaigns'), angle: z.string().max(500).optional().describe('An angle to take, if the creator gave one') },
-      safe(async ({ campaignId, angle }) => {
-        const c = campaignsForWorkspace(workspaceId).find((x) => x.id === campaignId);
-        if (!c) throw new ToolError('That campaign isn’t one this page works on.');
-        if (c.status !== 'active') throw new ToolError('The campaign isn’t active.');
-        enqueue('ugc.script', { campaignId, workspaceId, angle }, { maxAttempts: 3 });
-        return ok('Started: the card appears on the board in a minute, with the script, shot list and captions.');
-      }),
-    ),
-
-    tool(
-      'get_research',
-      'Read what’s working in this page’s niche: today’s research brief (patterns that over-perform, topics, ideas, hooks; on a clipping page, what moments to ' +
-        'look for), the outliers behind it (posts from the accounts the page watches that got several times their usual views: title or caption, first spoken words, ' +
-        'views, × the account’s median) and videos the creator had analysed (hook, structure, edit, why it works). Learn from the formulas; never copy anyone’s words. Read-only.',
-      { outliers: z.number().int().min(0).max(40).optional().describe('How many outliers to list (default 15)') },
-      safe(async ({ outliers }) => {
-        const { done } = latestBriefs(workspaceId);
-        const items = recentOutliers(workspaceId, 21, outliers ?? 15);
-        const watched = researchSettings(workspaceId);
-        return ok({
-          watching: watched,
-          brief: done?.body ? { day: done.day, sweep: done.sweep, ...done.body, patterns: done.body.patterns.map(({ pattern, why }) => ({ pattern, why })) } : 'No brief yet.',
-          outliers: items.map((it) => ({
-            platform: it.platform,
-            account: it.channel,
-            title: it.title || undefined,
-            firstWords: it.hook || undefined,
-            views: it.views ?? undefined,
-            timesUsual: it.score ? Number(it.score.toFixed(1)) : undefined,
-            posted: it.postedAt ? new Date(it.postedAt).toDateString() : undefined,
-            url: it.url,
-          })),
-          analysed: analyses(workspaceId, 8)
-            .filter((a) => a.analysis)
-            .map((a) => ({ title: a.title || a.url, account: a.channel || undefined, whyItWorks: a.analysis!.whyItWorks, takeaways: a.analysis!.takeaways, metrics: a.analysis!.metrics })),
-        });
-      }),
-    ),
-
-    tool(
-      'get_ideas',
-      'Read this page’s Ideas canvas: the creator’s brainstorm before anything is a video, as a tree of cards: ideas (title, notes, script draft, labels, ' +
-        'the video it became and its stage), series (premise, format, episodes in order), posts saved from other creators (platform, account, caption, views, × ' +
-        'their usual, what’s said) and pictures, plus the Saved pile of things shared from the phone. Read-only.',
-      { cardId: z.string().optional().describe('Only this card and what’s under it'), depth: z.number().int().min(1).max(6).optional().describe('Levels to include (default 4)') },
-      safe(async ({ cardId, depth }) => {
-        if (!hasIdeas(workspaceId)) throw new ToolError('Clipping pages don’t have Ideas.');
-        const nodes = listIdeas(workspaceId);
-        if (cardId && !nodes.some((n) => n.id === cardId)) throw new ToolError('That card isn’t on this page.');
-        const kids = (pid: string | null) => nodes.filter((n) => n.parentId === pid).sort((a, b) => a.position - b.position);
-        const card = (n: (typeof nodes)[number], level: number): Record<string, unknown> => ({
-          id: n.id,
-          kind: n.kind,
-          title: n.title || undefined,
-          notes: n.body ? n.body.slice(0, 600) : undefined,
-          script: n.script ? n.script.slice(0, 1500) : undefined,
-          format: n.format || undefined,
-          labels: n.labels.length ? n.labels : undefined,
-          video: n.piece ? { id: n.piece.id, stage: n.piece.stageName, views: n.piece.views ?? undefined } : undefined,
-          post: n.post ? { platform: n.post.platform, account: n.post.channel, caption: n.post.title.slice(0, 200) || undefined, views: n.post.views ?? undefined, timesUsual: n.post.score ? Number(n.post.score.toFixed(1)) : undefined, url: n.url } : undefined,
-          byClaude: n.by === 'claude' || undefined,
-          under: level < (depth ?? 4) && kids(n.id).length ? kids(n.id).map((c) => card(c, level + 1)) : kids(n.id).length ? `${kids(n.id).length} more (read with cardId)` : undefined,
-        });
-        const roots = cardId ? nodes.filter((n) => n.id === cardId) : kids(null);
-        return ok(roots.map((n) => card(n, 1)));
-      }),
-    ),
-
-    tool(
-      'add_ideas',
-      'Add new cards to the Ideas canvas, marked as yours: under a card (`parentId`: a series for new episodes, an idea for sub-ideas or angles) or at the ' +
-        'top level. Only adds: never change or delete the creator’s cards, and only when they ask for ideas on the canvas.',
-      {
-        parentId: z.string().optional().describe('From get_ideas; leave out for the top level'),
-        items: z.array(z.object({ title: z.string().min(1).max(200), notes: z.string().max(2000).optional() })).min(1).max(20),
-      },
-      safe(async ({ parentId, items }) => {
-        if (!hasIdeas(workspaceId)) throw new ToolError('Clipping pages don’t have Ideas.');
-        if (parentId && getIdea(parentId).workspaceId !== workspaceId) throw new ToolError('That card is on another page.');
-        const made = items.map((i) => createIdea(workspaceId, { parentId: parentId ?? null, title: i.title, body: i.notes ?? '', by: 'claude' }));
-        return ok(`Added ${made.length} card${made.length === 1 ? '' : 's'} to Ideas.`);
-      }),
-    ),
-
-    tool(
-      'get_notebook',
-      'Read this page’s Notes: the creator’s free writing, with no structure (brain dumps, half-formed thoughts, plans, lists, things to say), last written first; each note’s first line is its title. ' +
-        'Read-only: never change or rewrite their notes. When they ask to turn a note into ideas, add_ideas adds them as cards.',
-      { noteId: z.string().optional().describe('One note in full (long notes are cut short in the list)') },
-      safe(async ({ noteId }) => ok(notebookText(workspaceId, noteId))),
     ),
 
     tool(

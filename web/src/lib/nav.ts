@@ -1,50 +1,34 @@
-import { BadgeDollarSign, CalendarDays, ChartColumn, Clapperboard, Inbox, Lightbulb, Mic, NotebookPen, Palette, Telescope, type LucideIcon } from 'lucide-react';
-import type { Workspace } from './types';
+import { isWritingColumn, type BoardColumn } from '@shared/board';
+import { createStore } from './ui-state';
 
-export type NavItem = {
-  /** Relative to the workspace, or absolute (outside workspaces). */
-  to: string;
-  label: string;
-  icon: LucideIcon;
-  badge?: 'inbox' | 'attention';
-};
+// Pages on the top bar, then the page's sections (PLAN.md Phase 14). A page that writes its videos (Personal brand)
+// has Ideas · Videos · Calendar; a clipping page has Campaigns · Clips · Calendar.
 
-/**
- * A workspace's pages in working order, so the first one is where to start. Clipping: find → clips → campaigns;
- * personal and business: ideas (the brainstorm canvas) and notes (free writing) → videos → loose footage, with
- * research further down. Every page has Brand (mascot, logo, fonts); a clipping page's Inbox only shows when
- * something's in it.
- */
-export function workspaceNav(ws: Pick<Workspace, 'kind' | 'modules' | 'inboxCount'>): NavItem[] {
-  const has = (m: Workspace['modules'][number]) => ws.modules.includes(m);
-  const clipping = ws.kind === 'clipping';
-  const items: (NavItem | false)[] = clipping
+export type SectionId = 'ideas' | 'videos' | 'clips' | 'campaigns' | 'calendar';
+export type Section = { id: SectionId; label: string };
+
+/** Whether a page's videos start as my ideas and scripts (not clips made for campaigns). */
+export const writes = (kind: string) => kind !== 'clipping';
+
+export function sectionsFor(kind: string): Section[] {
+  return writes(kind)
     ? [
-        has('research') && { to: 'research', label: 'Find', icon: Telescope },
-        { to: 'board', label: 'Clips', icon: Clapperboard },
-        has('campaigns') && { to: 'campaigns', label: 'Campaigns', icon: BadgeDollarSign },
-        { to: 'calendar', label: 'Calendar', icon: CalendarDays, badge: 'attention' },
-        { to: 'analytics', label: 'Analytics', icon: ChartColumn },
-        !!ws.inboxCount && { to: 'inbox', label: 'Inbox', icon: Inbox, badge: 'inbox' },
-        { to: 'assets', label: 'Brand', icon: Palette },
+        { id: 'ideas', label: 'Ideas' },
+        { id: 'videos', label: 'Videos' },
+        { id: 'calendar', label: 'Calendar' },
       ]
     : [
-        has('ideas') && { to: 'ideas', label: 'Ideas', icon: Lightbulb },
-        { to: 'notes', label: 'Notes', icon: NotebookPen },
-        { to: 'board', label: 'Videos', icon: Clapperboard },
-        // An Islamic page clips lectures (its own campaign).
-        ws.kind === 'islamic' && has('clipping') && { to: 'lectures', label: 'Lectures', icon: Mic },
-        { to: 'inbox', label: 'Inbox', icon: Inbox, badge: 'inbox' },
-        has('research') && { to: 'research', label: 'Research', icon: Telescope },
-        has('campaigns') && { to: 'campaigns', label: 'Campaigns', icon: BadgeDollarSign },
-        { to: 'calendar', label: 'Calendar', icon: CalendarDays, badge: 'attention' },
-        { to: 'analytics', label: 'Analytics', icon: ChartColumn },
-        { to: 'assets', label: 'Brand', icon: Palette },
+        { id: 'campaigns', label: 'Campaigns' },
+        { id: 'clips', label: 'Clips' },
+        { id: 'calendar', label: 'Calendar' },
       ];
-  return items.filter((i): i is NavItem => !!i);
 }
 
-export const navHref = (wid: string, item: NavItem) => (item.to.startsWith('/') ? item.to : `/w/${wid}/${item.to}`);
+/** The section a card lives in. */
+export const sectionOf = (kind: string, column: BoardColumn): SectionId => (writes(kind) ? (isWritingColumn(column) ? 'ideas' : 'videos') : 'clips');
 
-/** What the board is called on this kind of page. */
-export const boardLabel = (kind: Workspace['kind']) => (kind === 'clipping' ? 'Clips' : 'Videos');
+/** The section I last opened on each page, so its tab takes me back there. */
+export const lastSection = createStore<Record<string, SectionId>>({}, 'cs.lastSection');
+
+export const pagePath = (wid: string, section?: SectionId) => `/p/${wid}${section ? `/${section}` : ''}`;
+export const cardPath = (id: string) => `/c/${id}`;

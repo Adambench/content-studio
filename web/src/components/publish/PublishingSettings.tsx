@@ -14,19 +14,6 @@ import type { PublishingSetup } from '@/lib/types';
 import { PlatformIcon, platformLabel } from './common';
 
 const GUIDES: Record<PublishPlatform, { console: string; idLabel: string; secretLabel: string; configLabel?: string; steps: React.ReactNode[] }> = {
-  tiktok: {
-    console: 'https://developers.tiktok.com/apps',
-    idLabel: 'Client key',
-    secretLabel: 'Client secret',
-    steps: [
-      'On developers.tiktok.com, create an app (Web).',
-      'Add the Login Kit, Content Posting API and Display API products; in Content Posting, turn on Direct Post.',
-      'Scopes: user.info.basic, video.upload, video.publish, plus video.list and user.info.stats for analytics.',
-      'Login Kit → Redirect URI: the address below.',
-      'For photo posts, add a URL prefix property for your public address + /api/public/ and upload TikTok’s verification file below.',
-      'Posts stay private (or go to your inbox) until TikTok audits the app — the audit needs a screen recording of this app posting.',
-    ],
-  },
   instagram: {
     console: 'https://developers.facebook.com/apps',
     idLabel: 'App ID',
@@ -40,17 +27,6 @@ const GUIDES: Record<PublishPlatform, { console: string; idLabel: string; secret
       'Copy the App ID and secret from App settings → Basic, and the configuration’s ID from Facebook Login for Business → Configurations.',
       'Make each Instagram account a tester: Unified login → Generate access tokens → Add account; then on instagram.com, signed in as that account, Settings → Website permissions → Apps and websites → Tester invites → Accept.',
       'Connect from a workspace’s Accounts page and pick the Instagram account for it in Meta’s window. If Meta doesn’t pass on which one, Content Studio asks for its ID (the number under its name in Generate access tokens). Leave the app unpublished: it works for your own accounts.',
-    ],
-  },
-  youtube: {
-    console: 'https://console.cloud.google.com/apis/credentials',
-    idLabel: 'Client ID',
-    secretLabel: 'Client secret',
-    steps: [
-      'In Google Cloud, create a project and enable the YouTube Data API v3 and the YouTube Analytics API (watch time and shares).',
-      'OAuth consent screen: External, add yourself as a test user, then Publish app (“In production”) — otherwise sign-ins expire after 7 days.',
-      'Credentials → Create OAuth client ID → Web application → Authorised redirect URI: the address below.',
-      'Uploads are private until Google approves the YouTube API audit form.',
     ],
   },
 };
@@ -274,19 +250,6 @@ function PlatformApp({ platform, setup }: { platform: PublishPlatform; setup: Pu
               )}
             </div>
           </form>
-          {platform === 'tiktok' && (
-            <div className="space-y-1.5">
-              <Label className="text-xs">URL-prefix verification file (for photo posts)</Label>
-              <div className="flex flex-wrap items-center gap-2">
-                <input ref={file} type="file" accept=".txt,text/plain" className="hidden" onChange={(e) => e.target.files?.[0] && uploadVerification(e.target.files[0])} />
-                <Button size="sm" variant="outline" onClick={() => file.current?.click()}>
-                  <Upload /> {setup.tiktokVerification ? 'Replace file' : 'Upload TikTok’s file'}
-                </Button>
-                {setup.tiktokVerification && setup.publicUrl && <code className="font-mono text-xs text-muted-foreground">{`${setup.publicUrl}/api/public/${setup.tiktokVerification}`}</code>}
-              </div>
-              <p className="text-xs text-muted-foreground">In TikTok’s portal verify the prefix {setup.publicUrl ? <code className="font-mono">{setup.publicUrl}/api/public/</code> : 'your public address + /api/public/'}.</p>
-            </div>
-          )}
         </div>
       )}
     </section>

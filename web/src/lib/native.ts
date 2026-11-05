@@ -52,26 +52,14 @@ type StudioPlugin = {
   discardShare(o: { id: string }): Promise<void>;
   pickFiles(o: { accept: string[]; camera?: boolean }): Promise<{ files: QueuedFile[] }>;
   enqueueFiles(o: UploadTarget & { files: QueuedFile[] }): Promise<void>;
-  enqueueText(o: { workspaceId: string; text: string }): Promise<void>;
-  /** A link or text for the page's Saved pile (Ideas), sent when the computer can be reached. */
-  enqueueSaved(o: { workspaceId: string; id: string; text: string }): Promise<void>;
-  /** Where "Save to Ideas" in the share sheet sends things: the last personal or business page opened. */
-  setShareTarget(o: { workspaceId: string; name: string }): Promise<void>;
   listUploads(): Promise<{ uploads: UploadItem[] }>;
   retryUpload(o: { id: string }): Promise<void>;
   removeUpload(o: { id: string }): Promise<void>;
   clearFinished(): Promise<void>;
-  /** Record a voice memo; stopping it (or leaving the app) queues it as an idea capture for the workspace. */
-  startRecording(o: { workspaceId: string }): Promise<void>;
-  /** `queued` is false when it was too short to keep. */
-  stopRecording(): Promise<{ queued: boolean; durationMs: number }>;
-  cancelRecording(): Promise<void>;
   canLock(): Promise<{ available: boolean }>;
   unlock(o: { title: string; subtitle?: string }): Promise<{ ok: boolean }>;
   addListener(event: 'share', fn: (s: SharePayload) => void): Promise<PluginListenerHandle>;
   addListener(event: 'uploads', fn: (e: { uploads: UploadItem[] }) => void): Promise<PluginListenerHandle>;
-  addListener(event: 'recordLevel', fn: (e: { level: number; elapsedMs: number }) => void): Promise<PluginListenerHandle>;
-  addListener(event: 'recordStopped', fn: (e: { queued: boolean; durationMs: number }) => void): Promise<PluginListenerHandle>;
 };
 
 /** The app build in a browser: pairing lives in localStorage; the native extras aren't there. */

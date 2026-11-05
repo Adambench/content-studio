@@ -13,8 +13,12 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
 /** The editable content of one alternative (branch) of a piece. Versions snapshot this. */
 export type DraftContent = {
   hook: string;
+  /** What I say. */
   script: string;
+  /** The effects and edit I want. */
   notes: string;
+  /** The two headings of the card's document, which I can rename (normalizeDraft fills them). */
+  labels?: { script: string; notes: string };
   platforms: {
     tiktok: { caption: string; hashtags: string };
     instagram: { caption: string; hashtags: string };
@@ -46,6 +50,7 @@ export function normalizeDraft(input: unknown): DraftContent {
     hook: d.hook ?? base.hook,
     script: d.script ?? base.script,
     notes: d.notes ?? base.notes,
+    labels: { script: d.labels?.script?.trim() || 'Script', notes: d.labels?.notes?.trim() || 'Notes' },
     platforms: {
       tiktok: { ...base.platforms.tiktok, ...p.tiktok },
       instagram: { ...base.platforms.instagram, ...p.instagram },
@@ -118,7 +123,24 @@ export const ISLAMIC_STAGES: Stage[] = [
   { id: 'posted', name: 'Posted' },
 ];
 
-/** Where clips wait for my yes or no (Today lists them). */
+/**
+ * Every page's stages since Phase 14: one board for all (shared/board.ts maps them to its columns), so a personal
+ * video goes Idea → Script → Film → Edit → Review like a clip goes Making → Review.
+ */
+export const BOARD_STAGES: Stage[] = [
+  { id: 'idea', name: 'Idea' },
+  { id: 'script', name: 'Writing' },
+  { id: 'film', name: 'Ready to film' },
+  { id: 'making', name: 'Making' },
+  { id: 'edit', name: 'Editing' },
+  { id: 'fixing', name: 'With Claude' },
+  { id: 'review', name: 'Review' },
+  { id: 'ready', name: 'Approved' },
+  { id: 'scheduled', name: 'Scheduled' },
+  { id: 'posted', name: 'Posted' },
+];
+
+/** Where clips wait for my yes or no. */
 export const REVIEW_STAGE = 'review';
 /**
  * Where a clip I've commented on waits while Claude fixes it, so Review holds only what I haven't watched: it moves
@@ -155,10 +177,10 @@ export const MODULE_INFO: Record<ModuleId, { label: string; hint: string }> = {
 };
 
 export const KIND_PRESETS: Record<WorkspaceKind, { modules: ModuleId[]; stages: Stage[] }> = {
-  personal: { modules: ['ideas', 'filming', 'grading', 'research'], stages: DEFAULT_STAGES },
-  business: { modules: ['ideas', 'filming', 'grading', 'campaigns', 'research'], stages: DEFAULT_STAGES },
-  clipping: { modules: ['campaigns', 'clipping', 'research'], stages: CLIPPING_STAGES },
-  islamic: { modules: ['ideas', 'clipping', 'research'], stages: ISLAMIC_STAGES },
+  personal: { modules: ['ideas', 'filming', 'grading', 'research'], stages: BOARD_STAGES },
+  business: { modules: ['ideas', 'filming', 'grading', 'campaigns', 'research'], stages: BOARD_STAGES },
+  clipping: { modules: ['campaigns', 'clipping', 'research'], stages: BOARD_STAGES },
+  islamic: { modules: ['ideas', 'clipping', 'research'], stages: BOARD_STAGES },
 };
 
 /** Known modules only, in the usual order. */

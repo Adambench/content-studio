@@ -21,7 +21,7 @@ export const publicUrl = () => getSetting('publicUrl')?.replace(/\/+$/, '') || n
  * address; Google also accepts this computer's own address.
  */
 export function redirectUri(platform: PublishPlatform) {
-  const base = publicUrl() ?? (platform === 'youtube' ? `http://localhost:${config.port}` : null);
+  const base = publicUrl();
   return base ? `${base}/api/oauth/${platform}/callback` : null;
 }
 

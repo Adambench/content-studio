@@ -1,14 +1,11 @@
-import { Bell, ChartColumn, CheckCircle2, CircleAlert, FolderOpen, LogOut, Smartphone } from 'lucide-react';
+import { Bell, CheckCircle2, CircleAlert, FolderOpen, LogOut, Smartphone } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import type { WeeklyReviewSetting } from '@shared/analytics';
 import { CLAUDE_MODELS } from '@shared/types';
 import { ConnectedSitesCard } from '@/components/ConnectedSites';
 import { PageHeader } from '@/components/PageHeader';
 import { ComputeCard } from '@/components/ComputeSettings';
-import { ModelsCard } from '@/components/ModelsSettings';
-import { VoiceCard } from '@/components/VoiceSettings';
 import { FirebaseSetup, PairedDevices, PairPhone, ThisPhone } from '@/components/PhoneSettings';
 import { PublishingCard } from '@/components/publish/PublishingSettings';
 import { UsageMeter } from '@/components/UsageMeter';
@@ -24,7 +21,9 @@ import { api, errorMessage } from '@/lib/api';
 import { desktop } from '@/lib/desktop';
 import { isApp } from '@/lib/native';
 import { currentSubscription, disablePush, enablePush, pushSupported } from '@/lib/push';
-import { keys, queryClient, useAuth, useSettings, useSystemStatus } from '@/lib/queries';
+import { keys, queryClient, useAuth, useSettings, useSystemStatus, useWorkspaces } from '@/lib/queries';
+import { WorkspaceDot } from '@/components/WorkspaceDot';
+import { cn } from '@/lib/utils';
 
 function Status({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return (
@@ -59,11 +58,25 @@ export function SettingsPage() {
     }
   }
 
+  if (isApp)
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader title="Settings" actions={<Button variant="ghost" onClick={() => history.back()}>Done</Button>} />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl space-y-6 p-4">
+            <ThisPhoneCard />
+          </div>
+        </div>
+      </div>
+    );
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Settings" />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-6">
+          <PagesCard />
+
           {desktop && <AppCard dataDir={st?.dataDir} />}
 
           <Card>
@@ -91,15 +104,10 @@ export function SettingsPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Each chat can switch model. Background jobs (idea capture, voice learning) use lighter models to save your limits.</p>
               </div>
               <UsageMeter className="max-w-sm px-0" />
             </CardContent>
           </Card>
-
-          <ModelsCard />
-
-          <VoiceCard />
 
           <TranscriptionCard whisperModel={s?.whisperModel ?? 'small'} onModel={(v) => patch({ whisperModel: v })} />
 
@@ -113,73 +121,14 @@ export function SettingsPage() {
 
           <ConnectedSitesCard />
 
-          {s && <WeeklyReviewCard setting={s.weeklyReview} model={CLAUDE_MODELS.find((m) => m.id === (s.defaultModel ?? 'opus'))?.label ?? 'Opus'} onChange={(weeklyReview) => patch({ weeklyReview })} />}
+          <NotificationsCard pushDevices={st?.pushDevices ?? 0} vapidPublicKey={s?.vapidPublicKey} />
 
-          {isApp ? <ThisPhoneCard /> : <NotificationsCard pushDevices={st?.pushDevices ?? 0} vapidPublicKey={s?.vapidPublicKey} />}
+          <PhoneCard />
 
-          {!isApp && <PhoneCard />}
-
-          {!desktop && !isApp && <SignOutCard />}
+          {!desktop && <SignOutCard />}
         </div>
       </div>
     </div>
-  );
-}
-
-function WeeklyReviewCard({ setting, model, onChange }: { setting: WeeklyReviewSetting; model: string; onChange: (s: Partial<WeeklyReviewSetting>) => void }) {
-  const [time, setTime] = useState(setting.time);
-  useEffect(() => setTime(setting.time), [setting.time]);
-  return (
-    <Card id="weekly-review">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ChartColumn className="size-4" /> Weekly review
-        </CardTitle>
-        <CardDescription>
-          Once a week Claude looks at how each workspace’s posts did (on its Analytics page): what worked and why, ideas to try, better queue times for you to apply, and what it
-          learned for the voice memory. One {model} request per workspace a week, only when something went out in the last two weeks.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center gap-3">
-          <Switch id="weekly-review-on" checked={setting.enabled} onCheckedChange={(enabled) => onChange({ enabled })} />
-          <Label htmlFor="weekly-review-on">Review every week</Label>
-        </div>
-        {setting.enabled && (
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Day</Label>
-              <Select value={String(setting.day)} onValueChange={(v) => onChange({ day: Number(v) })}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3, 4, 5, 6, 0].map((d) => (
-                    <SelectItem key={d} value={String(d)}>
-                      {new Date(2000, 0, 2 + d).toLocaleDateString(undefined, { weekday: 'long' })}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="weekly-review-time" className="text-xs">
-                Time
-              </Label>
-              <Input
-                id="weekly-review-time"
-                type="time"
-                value={time}
-                onChange={(e) => e.target.value && setTime(e.target.value)}
-                onBlur={() => time !== setting.time && onChange({ time })}
-                className="h-9 w-32"
-              />
-            </div>
-          </div>
-        )}
-        <p className="text-xs text-muted-foreground">If the computer is off or asleep then, it runs when it’s back (within three days). You can also run one any time from Analytics → Review now.</p>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -573,6 +522,42 @@ function SignOutCard() {
       <CardContent>
         <Button variant="ghost" onClick={signOut}>
           <LogOut /> Sign out
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** My pages: open one's settings, show or hide it, add one. */
+function PagesCard() {
+  const pages = useWorkspaces();
+  async function setHidden(id: string, hidden: boolean) {
+    try {
+      await api(`/workspaces/${id}`, { method: 'PATCH', body: { hidden } });
+      void queryClient.invalidateQueries({ queryKey: keys.workspaces });
+      void queryClient.invalidateQueries({ queryKey: keys.boardAll });
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
+  return (
+    <Card id="pages">
+      <CardHeader>
+        <CardTitle>Pages</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1">
+        {(pages.data ?? []).map((w) => (
+          <div key={w.id} className="flex items-center gap-3 py-1.5">
+            <WorkspaceDot color={w.color} />
+            <Link to={`/settings/${w.id}`} className={cn('flex-1 text-[15px] hover:underline', w.hidden && 'text-muted-foreground')}>
+              {w.name}
+            </Link>
+            <span className="text-sm text-muted-foreground">{w.hidden ? 'Hidden' : 'Shown'}</span>
+            <Switch checked={!w.hidden} onCheckedChange={(on) => void setHidden(w.id, !on)} aria-label={`Show ${w.name}`} />
+          </div>
+        ))}
+        <Button variant="ghost" className="mt-2 -ml-2" asChild>
+          <Link to="/new">+ New page</Link>
         </Button>
       </CardContent>
     </Card>

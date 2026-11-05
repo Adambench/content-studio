@@ -13,10 +13,8 @@ import { skillOptions } from './plugin';
 import { chatSystemPrompt } from './prompt';
 import { buildTools, toolLabel } from './tools';
 import { recordUsage } from './usage';
-import { runLocalTurn } from '../ai/local-agent';
 import { claudeFamily, countToolCall, countUse } from '../toolbox/uses';
-import { localStatus } from '../ai/local';
-import { canFallBack, isUsageError, routeFor } from '../ai/route';
+import { isUsageError, markClaudeLimited } from '../ai/route';
 
 const WEB_TOOLS = ['WebSearch', 'WebFetch'];
 
@@ -74,9 +72,7 @@ export async function runChat(input: {
     .run();
   emit({ type: 'changed', entity: 'threads', workspaceId: ws.id, id: thread.id });
 
-  // `local` is the creator's own model; a Claude model on auto moves there when Claude's usage runs low.
-  const route = model === 'local' ? { provider: 'local' as const, reason: '' } : await routeFor('chat');
-  if (route.provider === 'claude') countUse('model', `claude-${claudeFamily(model)}`);
+  countUse('model', `claude-${claudeFamily(model)}`);
   const persist = () => db.update(schema.chatMessages).set({ parts }).where(eq(schema.chatMessages.id, assistantId)).run();
   const abort = new AbortController();
   running.set(thread.id, abort);
@@ -201,39 +197,19 @@ export async function runChat(input: {
     rerenderLatest(now_.edit.id, 'claude');
   };
 
-  const runLocal = async (why: string) => {
-    if (why) {
-      const status = await localStatus();
-      const note = { type: 'text' as const, text: `_On your own model (${status.model ?? 'local'}). ${why}._\n\n` };
-      parts.push(note);
-      input.onEvent({ type: 'text', text: note.text });
-    }
-    await runLocalTurn({ threadId: thread.id, skipMessageIds: [userId, assistantId], text: input.text, systemPrompt, tools, parts, signal: abort.signal, onEvent: input.onEvent, persist });
-  };
-
   try {
-    if (route.provider === 'local') await runLocal(route.reason);
-    else {
-      try {
-        try {
-          for await (const m of attempt(thread.sdkSessionId ?? undefined)) handle(m);
-        } catch (err) {
-          // A stored session can vanish (e.g. Claude's local history was cleared); start a fresh one once.
-          const missing = thread.sdkSessionId && parts.length === 0 && /no conversation found|session.*not found/i.test(String(err));
-          if (!missing) throw err;
-          db.update(schema.chatThreads).set({ sdkSessionId: null }).where(eq(schema.chatThreads.id, thread.id)).run();
-          thread.sdkSessionId = null;
-          for await (const m of attempt(undefined)) handle(m);
-        }
-      } catch (err) {
-        if (abort.signal.aborted || parts.some((p) => p.type === 'tool') || !(await canFallBack('chat', err))) throw err;
-        refused = true;
-      }
-      // Claude said no for usage before doing anything: the creator's own model answers this turn instead.
-      if (refused && !abort.signal.aborted && !parts.some((p) => p.type === 'tool') && (await canFallBack('chat', new Error('usage limit')))) {
-        await runLocal('Claude refused for usage');
-      }
+    try {
+      for await (const m of attempt(thread.sdkSessionId ?? undefined)) handle(m);
+    } catch (err) {
+      // A stored session can vanish (e.g. Claude's local history was cleared); start a fresh one once.
+      const missing = thread.sdkSessionId && parts.length === 0 && /no conversation found|session.*not found/i.test(String(err));
+      if (!missing) throw err;
+      db.update(schema.chatThreads).set({ sdkSessionId: null }).where(eq(schema.chatThreads.id, thread.id)).run();
+      thread.sdkSessionId = null;
+      for await (const m of attempt(undefined)) handle(m);
     }
+    // Claude said no for usage: background work waits for it to come back.
+    if (refused) markClaudeLimited();
   } catch (err) {
     if (abort.signal.aborted) {
       parts.push({ type: 'text', text: '\n\n_Stopped._' });

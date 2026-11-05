@@ -67,3 +67,27 @@ export function shortWhen(ms: number) {
   if (ms - Date.now() < 6 * 86400_000) return d.toLocaleDateString(undefined, { weekday: 'short' });
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
+
+const hm = (d: Date) => d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+
+/** When a post goes out, short: "18:00" today, "Fri 12:30" this week, then the date and time. */
+export function postTime(ms: number) {
+  const d = new Date(ms);
+  if (d.toDateString() === new Date().toDateString()) return hm(d);
+  if (Math.abs(ms - Date.now()) < 6 * 86400_000) return `${d.toLocaleDateString(undefined, { weekday: 'short' })} ${hm(d)}`;
+  return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${hm(d)}`;
+}
+
+/** A day, said simply: "Today", "Yesterday", "Tomorrow", a weekday this week, else the date. */
+export function dayText(ms: number) {
+  const day = (t: number) => Math.floor((t - new Date(t).getTimezoneOffset() * 60_000) / 86400_000);
+  const diff = day(ms) - day(Date.now());
+  if (diff === 0) return 'Today';
+  if (diff === -1) return 'Yesterday';
+  if (diff === 1) return 'Tomorrow';
+  if (Math.abs(diff) < 6) return new Date(ms).toLocaleDateString(undefined, { weekday: 'short' });
+  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/** "Today 18:00", "Fri 12:30": a post's time in words. */
+export const postWhen = (ms: number) => `${dayText(ms)} ${hm(new Date(ms))}`;

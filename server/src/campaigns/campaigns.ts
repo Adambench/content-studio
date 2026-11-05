@@ -5,10 +5,8 @@ import type { Campaign, CampaignDetail, CampaignSource } from '../../../shared/c
 import type { Moment } from '../../../shared/clipping';
 import { config } from '../config';
 import { db, now, schema } from '../db';
-import { ugcPieces } from './ugc';
 import { emit } from '../lib/events';
 import { notFound } from '../lib/http';
-import { campaignResults, listSubmissions } from './submissions';
 
 export type CampaignRow = typeof schema.campaigns.$inferSelect;
 export type SourceRow = typeof schema.campaignSources.$inferSelect;
@@ -69,9 +67,6 @@ export function getCampaignDetail(id: string): CampaignDetail {
     ...toCampaign(row, pagesOf([id]).get(id)),
     sources: listSources(id).map(toSource),
     moments: listMoments(id),
-    ugc: ugcPieces(id),
-    submissions: listSubmissions({ campaignId: id }),
-    results: campaignResults(id),
   };
 }
 

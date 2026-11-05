@@ -21,7 +21,6 @@ import { updateMoment } from './moments';
 
 /** Everything a viewer reads on a platform: caption and hashtags, or title, description and tags. */
 function platformText(d: DraftContent, p: PublishPlatform) {
-  if (p === 'youtube') return [d.platforms.youtube.title, d.platforms.youtube.description, d.platforms.youtube.tags].join('\n');
   return [d.platforms[p].caption, d.platforms[p].hashtags].join('\n');
 }
 
@@ -119,7 +118,7 @@ function queueInput(clip: ReviewClip, tiktokPrivacy?: TikTokPrivacy) {
     mediaIds: [clip.render!.mediaId],
     targets: clip.accounts
       .filter((a) => !a.reconnect)
-      .map((a) => ({ accountId: a.id, options: a.platform === 'tiktok' && a.tiktokMode === 'direct' ? { tiktokPrivacy } : {} })),
+      .map((a) => ({ accountId: a.id, options: {} })),
     when: { mode: 'queue' as const, asap: true },
   };
 }
@@ -160,7 +159,6 @@ export function approveClip(pieceId: string, opts: { tiktokPrivacy?: TikTokPriva
   const ws = getWorkspace(piece.workspaceId);
   const ready = ws.stages.some((s) => s.id === 'ready') ? 'ready' : piece.stage;
   const usable = clip.accounts.filter((a) => !a.reconnect);
-  if (usable.some((a) => a.platform === 'tiktok' && a.tiktokMode === 'direct') && !opts.tiktokPrivacy) throw badRequest('Choose who can see it on TikTok.');
   // My yes means I watched it and it's fine (shared/review.ts); refused while a comment is open.
   markReviewed(piece.id, true);
   moveTo(piece, ready);

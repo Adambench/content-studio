@@ -1,35 +1,25 @@
-import { createBrowserRouter, Navigate } from 'react-router';
+import { createBrowserRouter, Navigate, useParams } from 'react-router';
 import { AppShell } from '@/components/AppShell';
 import { AuthGate } from '@/components/AuthGate';
-import { WorkspaceLayout } from '@/components/WorkspaceLayout';
 import { isApp } from '@/lib/native';
 import { AccountsPage } from '@/pages/AccountsPage';
-import { AnalyticsPage } from '@/pages/AnalyticsPage';
-import { AssetsPage } from '@/pages/AssetsPage';
-import { LecturesRedirect } from '@/pages/LecturesRedirect';
-import { BoardPage } from '@/pages/BoardPage';
-import { CalendarPage } from '@/pages/CalendarPage';
-import { CampaignPage } from '@/pages/CampaignPage';
-import { CampaignRedirect, CampaignsRedirect } from '@/pages/CampaignRedirect';
-import { CampaignsPage } from '@/pages/CampaignsPage';
-import { CapturePage } from '@/pages/CapturePage';
-import { HomeRedirect } from '@/pages/HomeRedirect';
-import { IdeasPage } from '@/pages/IdeasPage';
-import { NotesPage } from '@/pages/NotesPage';
-import { InboxPage } from '@/pages/InboxPage';
+import { CardPage } from '@/pages/CardPage';
+import { HomePage, SectionPage } from '@/pages/HomePage';
 import { KnowledgePage } from '@/pages/KnowledgePage';
-import { ToolboxPage } from '@/pages/ToolboxPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NewWorkspacePage } from '@/pages/NewWorkspacePage';
 import { PairPage } from '@/pages/PairPage';
-import { PiecePage } from '@/pages/PiecePage';
-import { ResearchPage } from '@/pages/ResearchPage';
-import { ReviewRedirect } from '@/pages/ReviewRedirect';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { SharePage } from '@/pages/SharePage';
-import { StudioPage } from '@/pages/StudioPage';
-import { TodayPage } from '@/pages/TodayPage';
+import { ToolboxPage } from '@/pages/ToolboxPage';
 import { WorkspaceSettingsPage } from '@/pages/WorkspaceSettingsPage';
+
+/** Addresses from before Phase 14 (old notifications, bookmarks) land where they belong now. */
+function Legacy() {
+  const { wid, pid } = useParams();
+  if (pid) return <Navigate to={`/c/${pid}`} replace />;
+  return <Navigate to={wid ? `/p/${wid}` : '/'} replace />;
+}
 
 export const router = createBrowserRouter([
   // The Android app pairs instead of signing in with a password.
@@ -41,41 +31,22 @@ export const router = createBrowserRouter([
       {
         element: <AppShell />,
         children: [
-          { index: true, element: <HomeRedirect /> },
-          { path: 'today', element: <TodayPage /> },
-          // Campaigns are a page's: these open them there.
-          { path: 'campaigns', element: <CampaignsRedirect /> },
-          { path: 'campaigns/:id', element: <CampaignRedirect /> },
-          { path: 'review', element: <ReviewRedirect /> },
-          { path: 'settings', element: <SettingsPage /> },
+          { index: true, element: <HomePage /> },
+          { path: 'p/:wid', element: <SectionPage /> },
+          { path: 'p/:wid/:section', element: <SectionPage /> },
+          { path: 'c/:id', element: <CardPage /> },
           { path: 'knowledge', element: <KnowledgePage /> },
           { path: 'toolbox', element: <ToolboxPage /> },
-          { path: 'capture', element: <CapturePage /> },
+          { path: 'settings', element: <SettingsPage /> },
+          { path: 'settings/:wid', element: <WorkspaceSettingsPage /> },
+          { path: 'settings/:wid/accounts', element: <AccountsPage /> },
           { path: 'share', element: <SharePage /> },
-          { path: 'w/new', element: <NewWorkspacePage /> },
-          {
-            path: 'w/:wid',
-            element: <WorkspaceLayout />,
-            children: [
-              { index: true, element: <Navigate to="board" replace /> },
-              { path: 'board', element: <BoardPage /> },
-              { path: 'ideas', element: <IdeasPage /> },
-              { path: 'notes', element: <NotesPage /> },
-              { path: 'p/:pid', element: <PiecePage /> },
-              { path: 'p/:pid/edit', element: <StudioPage /> },
-              { path: 'inbox', element: <InboxPage /> },
-              { path: 'library', element: <Navigate to="../inbox" replace /> },
-              { path: 'assets', element: <AssetsPage /> },
-              { path: 'calendar', element: <CalendarPage /> },
-              { path: 'accounts', element: <AccountsPage /> },
-              { path: 'analytics', element: <AnalyticsPage /> },
-              { path: 'research', element: <ResearchPage /> },
-              { path: 'campaigns', element: <CampaignsPage /> },
-              { path: 'campaigns/:id', element: <CampaignPage /> },
-              { path: 'lectures', element: <LecturesRedirect /> },
-              { path: 'settings', element: <WorkspaceSettingsPage /> },
-            ],
-          },
+          { path: 'new', element: <NewWorkspacePage /> },
+          { path: 'w/:wid/p/:pid', element: <Legacy /> },
+          { path: 'w/:wid/p/:pid/edit', element: <Legacy /> },
+          { path: 'w/:wid/*', element: <Legacy /> },
+          { path: 'today', element: <Navigate to="/" replace /> },
+          { path: 'review', element: <Navigate to="/" replace /> },
         ],
       },
     ],
