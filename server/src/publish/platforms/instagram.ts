@@ -13,12 +13,17 @@ const INSIGHTS_RECONNECT = 'Add instagram_manage_insights to the configuration i
 // Reels also report average watch time (in milliseconds).
 const REEL_METRICS = 'views,reach,likes,comments,shares,saved,ig_reels_avg_watch_time';
 const FEED_METRICS = 'views,reach,likes,comments,shares,saved';
+// Meta blocked the developer app itself (2026-11-04: every call failed, even ones made with only the app's own ID and
+// secret). Only the app's dashboard says why; a new sign-in goes through the same app, so reconnecting can't help.
+const APP_BLOCKED =
+  'Meta has blocked your Meta developer app, so Content Studio can’t reach Instagram. Open it at developers.facebook.com/apps to see why and ask for a review, then try again (reconnecting won’t help).';
 
 function graphError(status: number, body: any) {
   const e = body?.error ?? {};
   const message: string = e.error_user_msg || e.message || body?.raw || `HTTP ${status}`;
   const code = e.code === undefined ? undefined : e.error_subcode ? `${e.code}/${e.error_subcode}` : String(e.code);
   if (e.code === 190 || status === 401) return new PlatformError('Instagram refused the sign-in.', 'auth', undefined, code);
+  if (e.code === 200 && /API access blocked/i.test(e.message ?? '')) return new PlatformError(APP_BLOCKED, 'fatal', undefined, code);
   // Rate limits (app, account and the daily publishing cap).
   if ([4, 17, 32, 613, 80002].includes(e.code) || status === 429) return new PlatformError(`Instagram asked us to slow down (${message}).`, 'rate', 15 * 60_000, code);
   // Media not ready yet, or Instagram's own transient trouble.
@@ -26,8 +31,9 @@ function graphError(status: number, body: any) {
   return new PlatformError(`Instagram said: ${message}`, 'fatal', undefined, code);
 }
 
-// "Permission denied" / "Permissions error": the sign-in didn't include insights.
-const isPermissionError = (err: unknown) => err instanceof PlatformError && (err.code === '10' || err.code === '200' || err.code?.startsWith('10/') || err.code?.startsWith('200/'));
+// "Permission denied" / "Permissions error": the sign-in didn't include insights. (A blocked app is code 200 too.)
+const isPermissionError = (err: unknown) =>
+  err instanceof PlatformError && err.message !== APP_BLOCKED && (err.code === '10' || err.code === '200' || err.code?.startsWith('10/') || err.code?.startsWith('200/'));
 // "Object with ID … does not exist": deleted on Instagram.
 const isGone = (err: unknown) => err instanceof PlatformError && err.code === '100/33';
 
