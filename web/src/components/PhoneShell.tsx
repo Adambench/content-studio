@@ -10,8 +10,9 @@ import { api, errorMessage } from '@/lib/api';
 import { writes } from '@/lib/nav';
 import { isNative, Studio } from '@/lib/native';
 import { keys, queryClient, useBoardData, usePiece } from '@/lib/queries';
+import { cn } from '@/lib/utils';
 import { pickedFiles } from '@/pages/SharePage';
-import { UploadsButton } from './AppChrome';
+import { uploadSummary, UploadsButton, usePieceUploads } from './AppChrome';
 
 /** The pages I write videos for (only those are on the phone). */
 function useWriterPages() {
@@ -59,10 +60,20 @@ function AddFootage() {
 }
 
 function Row({ item }: { item: BoardItem }) {
+  const sending = uploadSummary(usePieceUploads(item.id));
   return (
-    <Link to={`/c/${item.id}`} className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3.5 text-base">
+    <Link to={`/c/${item.id}`} className="relative flex items-center gap-3 overflow-hidden rounded-xl border bg-card px-4 py-3.5 text-base">
       <span className="min-w-0 flex-1 truncate">{item.title}</span>
-      {item.footage ? (
+      {sending ? (
+        <>
+          <span className={cn('shrink-0 text-[13px] tabular-nums', sending.failed ? 'text-destructive' : 'text-muted-foreground')}>{sending.text}</span>
+          {!sending.failed && (
+            <span className="absolute inset-x-0 bottom-0 h-0.5 bg-muted">
+              <span className="block h-full bg-brand transition-[width]" style={{ width: `${sending.fraction * 100}%` }} />
+            </span>
+          )}
+        </>
+      ) : item.footage ? (
         <span className="shrink-0 text-[13px] text-muted-foreground">
           {item.footage} clip{item.footage === 1 ? '' : 's'}
         </span>

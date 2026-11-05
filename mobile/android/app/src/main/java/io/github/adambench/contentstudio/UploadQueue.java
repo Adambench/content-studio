@@ -201,7 +201,7 @@ final class UploadQueue {
                 continue;
             }
             JSObject o = new JSObject();
-            for (String key : new String[] { "id", "kind", "name", "size", "sent", "state", "workspaceId", "createdAt" }) o.put(key, item.opt(key));
+            for (String key : new String[] { "id", "kind", "name", "size", "sent", "state", "workspaceId", "pieceId", "createdAt" }) o.put(key, item.opt(key));
             o.put("error", item.optString("error", null));
             out.put(o);
         }

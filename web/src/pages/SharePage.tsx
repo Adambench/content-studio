@@ -26,6 +26,8 @@ export function SharePage() {
   const board = useBoardData();
   const navigate = useNavigate();
   const [sending, setSending] = useState<string | null>(null);
+  // Picked in a browser: sent here and now, so show how far it's got.
+  const [progress, setProgress] = useState<number | null>(null);
   const leaving = useRef(false);
 
   const shared = share?.files.filter((f) => f.mime.startsWith('video/') || f.mime.startsWith('audio/')) ?? [];
@@ -64,7 +66,7 @@ export function SharePage() {
       } else if (picked && 'native' in picked) {
         await Studio.enqueueFiles({ workspaceId, pieceId, source: 'upload', files: picked.native });
       } else if (picked) {
-        await uploadFiles(`/workspaces/${workspaceId}/media?pieceId=${pieceId}`, picked.web);
+        await uploadFiles(`/workspaces/${workspaceId}/media?pieceId=${pieceId}`, picked.web, setProgress);
       }
       leaving.current = true;
       pendingShare.set(null);
@@ -75,6 +77,7 @@ export function SharePage() {
     } catch (err) {
       toast.error(errorMessage(err));
       setSending(null);
+      setProgress(null);
     }
   }
 
@@ -102,7 +105,7 @@ export function SharePage() {
                   {list.map((i) => (
                     <button key={i.id} type="button" disabled={!!sending} onClick={() => send(i)} className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3.5 text-left text-base disabled:opacity-60">
                       <span className="min-w-0 flex-1 truncate">{i.title}</span>
-                      {sending === i.id ? <Spinner /> : i.series ? <span className="text-[13px] text-muted-foreground">Ep {i.series.episode}</span> : null}
+                      {sending === i.id ? <Sending progress={progress} /> : i.series ? <span className="text-[13px] text-muted-foreground">Ep {i.series.episode}</span> : null}
                     </button>
                   ))}
                 </div>
@@ -110,10 +113,14 @@ export function SharePage() {
             );
           })}
           <button type="button" disabled={!!sending} onClick={() => send('new')} className="mt-6 flex w-full items-center gap-3 rounded-xl border border-dashed px-4 py-3.5 text-left text-base text-muted-foreground disabled:opacity-60">
-            {sending === 'new' ? <Spinner /> : '+'} New video
+            {sending === 'new' ? <Sending progress={progress} /> : '+'} New video
           </button>
         </div>
       )}
     </div>
   );
+}
+
+function Sending({ progress }: { progress: number | null }) {
+  return progress === null ? <Spinner /> : <span className="text-[13px] text-muted-foreground tabular-nums">{Math.round(progress * 100)}%</span>;
 }

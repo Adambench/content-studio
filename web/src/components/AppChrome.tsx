@@ -1,4 +1,4 @@
-import { CircleAlert, CloudOff, Fingerprint, RefreshCw, RotateCw, Upload, X } from 'lucide-react';
+import { Check, CircleAlert, CloudOff, Fingerprint, RefreshCw, RotateCw, Upload, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -6,7 +6,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { errorMessage } from '@/lib/api';
 import { bytes } from '@/lib/format';
 import { checkServer, compatibility, locked, Studio, uploads, type UploadItem } from '@/lib/native';
-import { queryClient, useWorkspaces } from '@/lib/queries';
+import { queryClient, useBoardData, useWorkspaces } from '@/lib/queries';
 import { serverReachable, useStore } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
 
@@ -84,8 +84,8 @@ export function UploadsButton({ className }: { className?: string }) {
 
 function UploadsSheet({ open, onOpenChange, items }: { open: boolean; onOpenChange: (o: boolean) => void; items: UploadItem[] }) {
   const { data: workspaces = [] } = useWorkspaces();
-  const name = (wid: string) => workspaces.find((w) => w.id === wid)?.name;
-  const act = (fn: () => Promise<void>) => () => void fn().catch((err) => console.warn(errorMessage(err)));
+  const board = useBoardData();
+  const name = (u: UploadItem) => board.data?.items.find((i) => i.id === u.pieceId)?.title ?? workspaces.find((w) => w.id === u.workspaceId)?.name;
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="max-h-[80dvh] gap-0 pb-safe">
@@ -95,35 +95,7 @@ function UploadsSheet({ open, onOpenChange, items }: { open: boolean; onOpenChan
         </SheetHeader>
         <ul className="min-h-0 flex-1 divide-y overflow-y-auto px-4">
           {items.map((u) => (
-            <li key={u.id} className="flex items-center gap-3 py-2.5">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm">{u.kind === 'text' ? `Idea: ${u.name}` : u.kind === 'saved' ? `Saved: ${u.name}` : u.name}</p>
-                <p className={cn('truncate text-xs text-muted-foreground', u.state === 'failed' && 'text-destructive')}>
-                  {u.state === 'failed'
-                    ? u.error
-                    : u.state === 'done'
-                      ? `Sent${name(u.workspaceId) ? ` to ${name(u.workspaceId)}` : ''}`
-                      : u.state === 'uploading' && u.kind === 'file'
-                        ? `${bytes(u.sent)} of ${bytes(u.size)}`
-                        : 'Waiting for your computer'}
-                </p>
-                {u.state === 'uploading' && u.size > 0 && (
-                  <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full bg-brand transition-[width]" style={{ width: `${(u.sent / u.size) * 100}%` }} />
-                  </div>
-                )}
-              </div>
-              {u.state === 'failed' && (
-                <Button size="icon-sm" variant="ghost" aria-label="Try again" onClick={act(() => Studio.retryUpload({ id: u.id }))}>
-                  <RotateCw />
-                </Button>
-              )}
-              {u.state !== 'uploading' && (
-                <Button size="icon-sm" variant="ghost" aria-label={u.state === 'done' ? 'Remove from list' : 'Cancel'} onClick={act(() => Studio.removeUpload({ id: u.id }))}>
-                  <X />
-                </Button>
-              )}
-            </li>
+            <UploadRow key={u.id} u={u} sentTo={name(u)} />
           ))}
         </ul>
         {items.some((u) => u.state === 'done') && (
@@ -169,5 +141,73 @@ export function LockScreen() {
         {error && <p className="text-xs text-destructive">{error}</p>}
       </div>
     </div>
+  );
+}
+
+const act = (fn: () => Promise<void>) => () => void fn().catch((err) => console.warn(errorMessage(err)));
+
+/** One upload: its name, where it's at (with a bar while sending), retry and cancel. */
+function UploadRow({ u, sentTo }: { u: UploadItem; sentTo?: string }) {
+  return (
+    <li className="flex items-center gap-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm">{u.kind === 'text' ? `Idea: ${u.name}` : u.kind === 'saved' ? `Saved: ${u.name}` : u.name}</p>
+        <p className={cn('truncate text-xs text-muted-foreground', u.state === 'failed' && 'text-destructive')}>
+          {u.state === 'failed'
+            ? u.error
+            : u.state === 'done'
+              ? `Sent${sentTo ? ` to ${sentTo}` : ''}`
+              : u.state === 'uploading' && u.kind === 'file'
+                ? `${bytes(u.sent)} of ${bytes(u.size)}`
+                : 'Waiting for your computer'}
+        </p>
+        {u.state === 'uploading' && u.size > 0 && (
+          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+            <div className="h-full bg-brand transition-[width]" style={{ width: `${(u.sent / u.size) * 100}%` }} />
+          </div>
+        )}
+      </div>
+      {u.state === 'done' && <Check className="size-4 text-muted-foreground" />}
+      {u.state === 'failed' && (
+        <Button size="icon-sm" variant="ghost" aria-label="Try again" onClick={act(() => Studio.retryUpload({ id: u.id }))}>
+          <RotateCw />
+        </Button>
+      )}
+      {u.state !== 'uploading' && (
+        <Button size="icon-sm" variant="ghost" aria-label={u.state === 'done' ? 'Remove from list' : 'Cancel'} onClick={act(() => Studio.removeUpload({ id: u.id }))}>
+          <X />
+        </Button>
+      )}
+    </li>
+  );
+}
+
+/** This phone's uploads into one video. */
+export function usePieceUploads(pieceId: string) {
+  return useStore(uploads).filter((u) => u.pieceId === pieceId);
+}
+
+/** Where a video's uploads are at, in a word: null when none are sending or stuck. */
+export function uploadSummary(items: UploadItem[]): { text: string; failed: boolean; fraction: number } | null {
+  const failed = items.filter((u) => u.state === 'failed').length;
+  const active = items.filter((u) => u.state === 'waiting' || u.state === 'uploading');
+  if (failed) return { text: `${failed} not sent`, failed: true, fraction: 0 };
+  if (!active.length) return null;
+  const size = active.reduce((n, u) => n + u.size, 0);
+  const sent = active.reduce((n, u) => n + u.sent, 0);
+  const fraction = size ? sent / size : 0;
+  if (!active.some((u) => u.state === 'uploading')) return { text: 'Waiting', failed: false, fraction };
+  return { text: `Sending ${Math.round(fraction * 100)}%`, failed: false, fraction };
+}
+
+/** The clips this phone is still sending to a video (or couldn't), live, under its Footage. */
+export function PieceUploads({ items }: { items: UploadItem[] }) {
+  if (!items.length) return null;
+  return (
+    <ul className="divide-y">
+      {items.map((u) => (
+        <UploadRow key={u.id} u={u} />
+      ))}
+    </ul>
   );
 }

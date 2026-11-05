@@ -29,6 +29,8 @@ export type UploadItem = {
   state: 'waiting' | 'uploading' | 'done' | 'failed';
   error: string | null;
   workspaceId: string;
+  /** The video it's going to (absent from apps before 0.3.1). */
+  pieceId?: string | null;
   createdAt: number;
 };
 export type SharePayload = { id: string; files: QueuedFile[]; text: string | null };

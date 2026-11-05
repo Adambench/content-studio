@@ -2,6 +2,7 @@ import { Paperclip } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { COLUMN_LABELS, COLUMN_STAGE, WRITING_COLUMNS, type BoardColumn, type WritingColumn } from '@shared/board';
+import { PieceUploads, usePieceUploads } from '@/components/AppChrome';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Spinner } from '@/components/ui/spinner';
@@ -93,12 +94,14 @@ export function WriteView({ piece, column, series, phone = false }: { piece: Pie
   const { draft, change, ready } = useDraft(piece);
   const [title, setTitle] = useState(piece.title);
   const { help, ask, close } = useHelp(piece.id);
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading] = useState<number | null>(null);
   const file = useRef<HTMLInputElement>(null);
   useEffect(() => setTitle(piece.title), [piece.title]);
 
   const labels = draft.labels ?? { script: 'Script', notes: 'Notes' };
   const footage = piece.media.filter((m) => FOOTAGE.has(m.source));
+  // Clips the phone is still sending here; once sent they're in `footage`.
+  const sending = usePieceUploads(piece.id).filter((u) => u.state !== 'done');
 
   function takeHook(hook: string) {
     const before = draft.script;
@@ -130,15 +133,15 @@ export function WriteView({ piece, column, series, phone = false }: { piece: Pie
 
   async function addFootage(files: File[]) {
     if (!files.length) return;
-    setUploading(true);
+    setUploading(0);
     try {
-      await uploadFiles(`/workspaces/${piece.workspaceId}/media?pieceId=${piece.id}`, files);
+      await uploadFiles(`/workspaces/${piece.workspaceId}/media?pieceId=${piece.id}`, files, setUploading);
       void queryClient.invalidateQueries({ queryKey: keys.piece(piece.id) });
       void queryClient.invalidateQueries({ queryKey: keys.boardAll });
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
-      setUploading(false);
+      setUploading(null);
     }
   }
 
@@ -183,8 +186,16 @@ export function WriteView({ piece, column, series, phone = false }: { piece: Pie
           </Button>
         ) : (
           <>
-            <Button variant="ghost" size="sm" disabled={uploading} onClick={() => file.current?.click()}>
-              {uploading ? <Spinner /> : <Paperclip />} Add
+            <Button variant="ghost" size="sm" disabled={uploading !== null} onClick={() => file.current?.click()}>
+              {uploading === null ? (
+                <>
+                  <Paperclip /> Add
+                </>
+              ) : (
+                <>
+                  <Spinner /> <span className="tabular-nums">{Math.round(uploading * 100)}%</span>
+                </>
+              )}
             </Button>
             <input
               ref={file}
@@ -200,6 +211,7 @@ export function WriteView({ piece, column, series, phone = false }: { piece: Pie
           </>
         )}
       </div>
+      <PieceUploads items={sending} />
       {footage.length ? (
         <ul className="flex flex-wrap gap-2">
           {footage.map((m) => (
@@ -209,7 +221,7 @@ export function WriteView({ piece, column, series, phone = false }: { piece: Pie
             </li>
           ))}
         </ul>
-      ) : (
+      ) : sending.length ? null : (
         <p className="text-[15px] text-muted-foreground">None yet</p>
       )}
     </section>
