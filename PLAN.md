@@ -235,6 +235,7 @@ versionCode from the tag (`v1.2.3` → 10203).
 11. **Ideas canvas and save-from-anywhere** — built 2026-10-21 (see *Phase 11*)
 12. **Viral quality, knowledge base, toolbox** — built except step 3's recorded library (waits on my pick of a source): steps 0–7 done by 2026-10-30 (see *Phase 12*)
 13. **Frame-exact cuts** — built 2026-11-04 (see *Phase 13*); no outside editor
+14. **Declutter** — decided 2026-11-05, mockup first, then build (see *Phase 14*)
 
 ## Waiting on me
 
@@ -850,3 +851,35 @@ closed). Kdenlive (GPL, 26.08) is the most complete open editor on Linux: MLT XM
 Olive: slow, heavy or stalled. Agent-first editors (WeftCut, OpenChatCut, OpenCut, Palmier Pro): one-person, pre-1.0
 or Mac-first; on the tech radar. HyperFrames Studio edits the graphics page, not footage. The Kdenlive MCP servers are
 unlicensed or need a patched build; auto-editor (public domain) is the reference for writing `.kdenlive` files.
+
+## Phase 14 (2026-11-05): declutter
+
+Why: I don't find things fast, the dashboards are cluttered, there's AI everywhere, and I lose scripts between idea
+bubbles (Personal brand: 67 bubbles four levels deep, 19 holding scripts, 30 made by Claude; two videos both called
+"Announcement"). The app is a dashboard: it shows me what's going on and takes my clicks. Claude does the editing
+(through Claude Code), the organising and the scheduling. What the app must be perfect at: editing videos
+professionally with Claude. Laptop first (1920 × 1080).
+
+| Topic | Decision |
+|---|---|
+| Pages | Personal brand, Long Story Short, Blox Moments. Gentle Return hidden (its Islamic features stay in the code) |
+| Unneeded features | Code deleted, not hidden; their data stays in the database (no tables dropped) |
+| Deleted | In-app chat; Ideas mind map (and Expand/Angles/Challenge/Episodes); Notes page (I move the notebook to Obsidian); Saved pile and the phone's *Save to Ideas*; Inbox; Capture; Research and Find; Campaigns and Brand screens; Analytics and all statistics (I read them on Instagram), the weekly review; the Edit studio; AI pictures and clips (home PC and kie.ai); the self-hosted model; the cloned voice; the AI voice and UGC; Claude's breakdown of references; TikTok, YouTube and X posting |
+| Kept | Calendar, Knowledge, Toolbox, Settings (as now, minus deleted features). Campaigns keep their backend: I paste links in Claude Code, rules keep steering clips, I submit on Content Rewards' site |
+| Navigation | Top tabs, no sidebar: Home · Calendar · Knowledge · Toolbox · Settings, with page chips (All, then one per page) |
+| Home | The board, nothing else: Ideas · Writing · Ready to film · Editing · Review · Scheduled · Posted (last 7 days). Every active page on it; clips start at Editing; a comment sends a card back to Editing. Cards are one line: page dot, title, length or episode |
+| Ideas = videos | One thing: an idea is its video card from the start (no lock-in, no copies). Series stay (numbered episodes) |
+| Old bubbles | Mine (37) move over with their scripts; sub-bubbles become bullet notes in their idea; Claude's 30 go |
+| Card page | Full page, with a sidebar to jump between ideas. One document with two preset headings I can rename: *Script* (what I say), then *Notes* under it (the effects I want). Hooks and Directions (help to script, with the viral skills): answers beside the document, a click takes one (a hook swaps my first line, with Undo; a direction goes under Notes) |
+| Review | Player, comments pinned to moments, post text (caption, hashtags), older renders. One *Approve* button that schedules (the top one only scrolled; the real one waited for every campaign rule to be ticked). Campaign rules hidden: a clip that breaks one shows one red line. I start fixes by saying "fix my comments" in Claude Code |
+| Look | Claude edits in its favourite of 2–3 looks; I can switch after the first render |
+| Look and feel | Mostly greys, one alarm colour only on what needs me, the page as a small dot. Big text, calm spacing, almost no helper sentences |
+| Phone | Only: share footage to a video I pick (the share screen), and write scripts. Nothing else |
+
+Build (after the mockup):
+- [ ] Mockup: Home, a card being written, a card in review, Calendar, the phone (share + scripts), with my real titles
+- [ ] Delete the features above (server, web, shared, Android), and the rules in CLAUDE.md that go with them
+- [ ] Move the Personal brand bubbles onto video cards (one-off script, database backed up first)
+- [ ] Top tabs + page chips; hide Gentle Return
+- [ ] Home board; card page; review page with the one Approve
+- [ ] Phone app: share to a video, scripts; release a new Android build (`API_VERSION` bump)
