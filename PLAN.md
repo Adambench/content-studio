@@ -214,8 +214,8 @@ versionCode from the tag (`v1.2.3` → 10203).
 3. **Scheduling & publishing** — built, tested against a stand-in. Open: real accounts; the TikTok audit demo.
 4. **Analytics & weekly review** — built, tested against a stand-in. Open: real numbers.
 5. **Later** — X, comments inbox.
-6. **Android app** — built, tested on an emulator; v0.1.0 released. Open: a real phone (Obtainium, QR scanning
-   needs Play services, real FCM). The phone needs a new release for everything since phase 7 (`API_VERSION` 2).
+6. **Android app** — built, tested on an emulator; v0.2.0 released 2026-11-05 (`API_VERSION` 3). Open: a real phone
+   (Obtainium, QR scanning needs Play services, real FCM).
 7. **Clipping, campaigns, research, formats** — built.
 8. **Streamlined video pipeline** — in progress, see *Phase 8 build plan*
    - [x] Step 1 — Every video is a package; nav per kind; Inbox + search instead of the Library (2026-10-16)
@@ -261,7 +261,6 @@ versionCode from the tag (`v1.2.3` → 10203).
   Listen to the first clips from a source with background music (the music check was only tried on stand-ins).
 - Listen to the built-in SFX (86 now; the 55 added on 2026-10-17 were only checked by measurement) and the voices; drop
   any I don't like (`server/scripts/make-sfx.py`, `shared/sfx.ts`).
-- Release a new Android build (API version 3): until then the phone app says it's out of date.
 - A format video and a UGC video for real.
 - Research: each page's *What it watches* (or *Find channels for me*), *Run now* once; sign in to TikTok.
 - Settings → Connected sites: sign in to Content Rewards (Whop) and Vyro, TikTok, Instagram; check each says “Signed in”.
