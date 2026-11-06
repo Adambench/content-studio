@@ -22,7 +22,7 @@ function useCurrentPage() {
   const item = onCard && board.data?.items.find((i) => i.id === onCard.params.id);
   if (!item) return null;
   const kind = board.data?.pages.find((p) => p.id === item.workspaceId)?.kind ?? 'personal';
-  return { wid: item.workspaceId, section: sectionOf(kind, item.column) };
+  return { wid: item.workspaceId, section: sectionOf(kind) };
 }
 
 /** Top to bottom: the page (Home or one of mine), then its section, then the content. */

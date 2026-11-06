@@ -5,7 +5,7 @@ import { api, errorMessage } from '@/lib/api';
 import { keys, queryClient } from '@/lib/queries';
 import type { PieceDetail } from '@/lib/types';
 
-/** The card's live draft: edited here at once, saved a moment after the last change, and kept in step with the server. */
+/** The card's live draft (one per open card: pass it down as `CardDraft`): edited here at once, saved a moment after the last change, and kept in step with the server. */
 export function useDraft(piece: PieceDetail) {
   const branch = piece.branches.find((b) => b.id === piece.activeBranchId) ?? piece.branches[0];
   const [draft, setDraft] = useState<DraftContent>(() => normalizeDraft(branch?.working));
@@ -49,6 +49,9 @@ export function useDraft(piece: PieceDetail) {
 
   return { draft, change, flush, ready: !!branch };
 }
+
+/** One card's draft, shared by everything on the card that edits it (the document, the post text), so no part saves over another's change. */
+export type CardDraft = ReturnType<typeof useDraft>;
 
 /** Rename a card (Enter or leaving the field). */
 export async function renameCard(id: string, title: string) {

@@ -16,10 +16,10 @@ section you need.
   (the board), `services/script-help.ts` (Hooks, Directions), `studio/` (edits → HyperFrames, render), `publish/`
   (Instagram), `campaigns/`, `clipping/`, `knowledge/` (the playbook as editable rules, references), `toolbox/` (what's
   installed and used, installing skills, the weekly scout), `jobs/` (queue), `db/phase14.ts` (the one-off move).
-- `web/` — React UI. Top bar: Home, then one tab per page; under a page its sections (`lib/nav.ts`: Ideas · Videos ·
+- `web/` — React UI. Top bar: Home, then one tab per page; under a page its sections (`lib/nav.ts`: Videos ·
   Calendar, or Campaigns · Clips · Calendar). Home and the sections are one board (`components/board/Board.tsx`,
-  columns from stages in `shared/board.ts`); a card opens at `/c/:id` (`pages/CardPage.tsx`: the Script + Notes
-  document while writing, the render + comments + Approve after). The phone gets `components/PhoneShell.tsx` only.
+  columns from stages in `shared/board.ts`); a card opens at `/c/:id` (`pages/CardPage.tsx`: at every stage the Script
+  + Notes document and the render + comments + Approve, the one the stage needs first; one shared `useDraft`). The phone gets `components/PhoneShell.tsx` only.
   `isDesktop` (`lib/desktop.ts`), `isApp`/`isNative` (`lib/native.ts`, the `vite --mode app` build).
 - `mobile/` — Capacitor 8, committed `android/`, one native plugin `StudioPlugin` (Java). CI builds APKs.
 - `shared/` — types for both sides (`types.ts`, `edit.ts`, `campaigns.ts`, `clipping.ts`, …).

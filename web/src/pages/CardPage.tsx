@@ -2,9 +2,10 @@ import { MoreHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { COLUMN_LABELS, columnOf, isWritingColumn, VIDEO_COLUMNS, WRITING_COLUMNS, type BoardItem } from '@shared/board';
-import { ReviewView } from '@/components/card/ReviewView';
-import { WriteView } from '@/components/card/WriteView';
+import { COLUMN_LABELS, columnOf, isWritingColumn, VIDEO_COLUMNS, type BoardColumn, type BoardItem } from '@shared/board';
+import { ReviewView, useVideoVersions } from '@/components/card/ReviewView';
+import { useDraft } from '@/components/card/useDraft';
+import { CardHeader, WriteView } from '@/components/card/WriteView';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -12,11 +13,14 @@ import { Spinner } from '@/components/ui/spinner';
 import { api, errorMessage } from '@/lib/api';
 import { pagePath, sectionOf, sectionsFor, writes } from '@/lib/nav';
 import { keys, queryClient, useBoardData, usePiece } from '@/lib/queries';
+import type { PieceDetail } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
-/** The cards of the same page and section, to jump between them (Ready to film first while writing). */
-function Sidebar({ items, current }: { items: BoardItem[]; current: BoardItem }) {
-  const columns = isWritingColumn(current.column) ? [...WRITING_COLUMNS].reverse() : VIDEO_COLUMNS;
+/** The sidebar on a page I write for: what waits for me, what's being made, what I'm writing, then what's gone out. */
+const WRITER_ORDER: readonly BoardColumn[] = ['review', 'editing', 'film', 'writing', 'ideas', 'scheduled', 'posted'];
+
+/** The cards of the same page, to jump between them. */
+function Sidebar({ items, current, columns }: { items: BoardItem[]; current: BoardItem; columns: readonly BoardColumn[] }) {
   return (
     <aside className="min-h-0 overflow-y-auto border-r px-2.5 pt-2 pb-8">
       {columns.map((c) => {
@@ -42,7 +46,28 @@ function Sidebar({ items, current }: { items: BoardItem[]; current: BoardItem })
   );
 }
 
-/** A card on its own page: the script while it's being written, the video once Claude has made it. */
+/**
+ * Everything on a card, whatever its stage: on a page I write for, its document (Script, Notes, footage) and its video
+ * (renders, comments, Approve), whichever the stage needs first; a clip has only its video. While I write, the video
+ * shows once one was made (a card sent back keeps its renders).
+ */
+function CardBody({ piece, item, writer }: { piece: PieceDetail; item: BoardItem; writer: boolean }) {
+  const draft = useDraft(piece);
+  const { current } = useVideoVersions(piece.id);
+  const writing = writer && isWritingColumn(item.column);
+  const doc = writer && <WriteView piece={piece} draft={draft} />;
+  const video = (!writing || !!current) && <ReviewView piece={piece} item={item} draft={draft} />;
+  const [first, second] = writing ? [doc, video] : [video, doc];
+  return (
+    <div className="space-y-8 px-12 pt-5 pb-20">
+      <CardHeader piece={piece} column={item.column} series={item.series} />
+      {first}
+      {second && <div className="border-t pt-10">{second}</div>}
+    </div>
+  );
+}
+
+/** A card on its own page, with the page's other cards beside it. */
 export function CardPage() {
   const { id = '' } = useParams();
   const piece = usePiece(id);
@@ -61,11 +86,10 @@ export function CardPage() {
   const page = board.data.pages.find((w) => w.id === p.workspaceId);
   const item = board.data.items.find((i) => i.id === p.id) ?? ({ id: p.id, workspaceId: p.workspaceId, title: p.title, stage: p.stage, column: columnOf(p.stage), position: p.position, updatedAt: p.updatedAt, durationMs: null, rendering: false, openComments: 0, nextPostAt: null, failed: null, postedAt: null, series: null, footage: 0 } satisfies BoardItem);
   const kind = page?.kind ?? 'personal';
-  const section = sectionOf(kind, item.column);
+  const section = sectionOf(kind);
   const sectionLabel = sectionsFor(kind).find((s) => s.id === section)?.label ?? 'Home';
-  const siblings = board.data.items.filter((i) => i.workspaceId === p.workspaceId && sectionOf(kind, i.column) === section);
+  const siblings = board.data.items.filter((i) => i.workspaceId === p.workspaceId);
   const back = pagePath(p.workspaceId, section);
-  const writing = isWritingColumn(item.column) && writes(kind);
 
   async function remove() {
     try {
@@ -80,7 +104,7 @@ export function CardPage() {
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[18rem_minmax(0,1fr)]">
-      <Sidebar items={siblings} current={item} />
+      <Sidebar items={siblings} current={item} columns={writes(kind) ? WRITER_ORDER : VIDEO_COLUMNS} />
       <div className="min-h-0 overflow-y-auto">
         <div className="flex items-center px-12 pt-5">
           <Link to={back} className="text-sm text-muted-foreground hover:text-foreground">
@@ -99,7 +123,7 @@ export function CardPage() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        {writing ? <WriteView key={p.id} piece={p} column={item.column} series={item.series} /> : <ReviewView key={p.id} piece={p} item={item} />}
+        <CardBody key={p.id} piece={p} item={item} writer={writes(kind)} />
       </div>
       <AlertDialog open={deleting} onOpenChange={setDeleting}>
         <AlertDialogContent>

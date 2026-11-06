@@ -4,6 +4,7 @@ import { Link, Navigate, Outlet, useMatch, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { COLUMN_LABELS, isWritingColumn, WRITING_COLUMNS, type BoardColumn, type BoardItem } from '@shared/board';
 import { useVideoVersions, VersionStrip } from '@/components/card/ReviewView';
+import { useDraft } from '@/components/card/useDraft';
 import { WriteView } from '@/components/card/WriteView';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -221,7 +222,13 @@ function PhoneVideo({ piece }: { piece: PieceDetail }) {
   );
 }
 
-/** One script on the phone (the same document as on the laptop), or a video to watch. */
+/** A script on the phone: the same document as on the laptop. */
+function PhoneScript({ piece, item }: { piece: PieceDetail; item: BoardItem }) {
+  const draft = useDraft(piece);
+  return <WriteView piece={piece} draft={draft} phone={{ column: item.column, series: item.series }} />;
+}
+
+/** One script on the phone, or a video to watch. */
 function PhoneCard({ id }: { id: string }) {
   const piece = usePiece(id);
   const board = useBoardData();
@@ -242,7 +249,7 @@ function PhoneCard({ id }: { id: string }) {
         {!piece.data || !item ? (
           <div className="grid h-full place-items-center">{piece.isError ? <p className="text-muted-foreground">This card is gone.</p> : <Spinner />}</div>
         ) : isWritingColumn(item.column) ? (
-          <WriteView key={id} piece={piece.data} column={item.column} series={item.series} phone />
+          <PhoneScript key={id} piece={piece.data} item={item} />
         ) : (
           <PhoneVideo key={id} piece={piece.data} />
         )}

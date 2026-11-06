@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Navigate, useParams } from 'react-router';
-import { BOARD_COLUMNS, VIDEO_COLUMNS, WRITING_COLUMNS } from '@shared/board';
+import { BOARD_COLUMNS, VIDEO_COLUMNS } from '@shared/board';
 import { Board } from '@/components/board/Board';
 import { CampaignLinks } from '@/components/CampaignLinks';
 import { Spinner } from '@/components/ui/spinner';
@@ -26,7 +26,7 @@ export function HomePage() {
   return <Board items={board.data.items} columns={BOARD_COLUMNS} pages={board.data.pages} addTo={writer?.id} />;
 }
 
-/** A page's section: its Ideas or Videos/Clips board, its campaign links, or its calendar. */
+/** A page's section: its Videos board (idea to posted) or Clips board, its campaign links, or its calendar. */
 export function SectionPage() {
   const { wid = '', section } = useParams();
   const board = useBoardData();
@@ -46,9 +46,8 @@ export function SectionPage() {
   }
   const items = board.data.items.filter((i) => i.workspaceId === wid);
   switch (here.id) {
-    case 'ideas':
-      return <Board items={items} columns={WRITING_COLUMNS} pages={board.data.pages} addTo={wid} />;
     case 'videos':
+      return <Board items={items} columns={BOARD_COLUMNS} pages={board.data.pages} addTo={wid} />;
     case 'clips':
       return <Board items={items} columns={VIDEO_COLUMNS} pages={board.data.pages} />;
     case 'campaigns':

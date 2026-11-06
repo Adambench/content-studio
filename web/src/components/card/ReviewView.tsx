@@ -10,7 +10,7 @@ import { postWhen } from '@/lib/format';
 import { keys, queryClient, useApprovePlan, useNotes, usePackage, usePiecePosts, useRenders, useVersions } from '@/lib/queries';
 import type { PieceDetail, RenderRow, VersionRow } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { useDraft } from './useDraft';
+import type { CardDraft } from './useDraft';
 
 const FIX = 'fix my comments';
 
@@ -163,8 +163,7 @@ function Looks({ piece }: { piece: PieceDetail }) {
 }
 
 /** The post's caption and hashtags (Instagram), saved as I type. */
-function PostText({ piece }: { piece: PieceDetail }) {
-  const { draft, change } = useDraft(piece);
+function PostText({ draft: { draft, change } }: { draft: CardDraft }) {
   const ig = draft.platforms.instagram;
   const set = (patch: Partial<typeof ig>) => change((d) => ({ ...d, platforms: { ...d.platforms, instagram: { ...d.platforms.instagram, ...patch } } }));
   return (
@@ -249,9 +248,10 @@ export function VersionStrip({ versions, current, selected, onPick, render }: { 
 
 /**
  * A video Claude made: the newest render (an older one beside it to compare), comments pinned to moments under it,
- * and on the right what it waits for, its look, the comments and the post's text.
+ * and on the right what it waits for, its look, the comments and the post's text. The card's title is above it
+ * (CardPage).
  */
-export function ReviewView({ piece, item }: { piece: PieceDetail; item: BoardItem | undefined }) {
+export function ReviewView({ piece, item, draft }: { piece: PieceDetail; item: BoardItem | undefined; draft: CardDraft }) {
   const { versions, current, loading } = useVideoVersions(piece.id);
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
   const [older, setOlder] = useState<string | null>(null);
@@ -259,31 +259,28 @@ export function ReviewView({ piece, item }: { piece: PieceDetail; item: BoardIte
   const olderRender = versions.find((v) => v.render?.mediaId === older)?.render;
 
   return (
-    <div className="space-y-6 px-12 pt-5 pb-16">
-      <h1 className="text-3xl font-semibold tracking-tight">{piece.title}</h1>
-      <div className="grid grid-cols-[auto_minmax(0,34rem)] items-start justify-start gap-14">
-        <div className="space-y-4">
-          {current?.mediaId ? (
-            <>
-              <div className="flex gap-4">
-                {olderRender?.mediaId && <Player mediaId={olderRender.mediaId} label={`v${olderRender.versionNumber ?? '?'}`} />}
-                <Player mediaId={current.mediaId} label={`v${current.versionNumber ?? '?'} · now`} onVideo={setVideo} />
-              </div>
-              <div className="max-w-[min(66vh,760px)]" style={{ width: 'calc(min(66vh, 760px) * 9 / 16)' }}>
-                <NoteComposer pieceId={piece.id} video={video} mediaId={current.mediaId} version={current.versionNumber} />
-              </div>
-              <VersionStrip versions={versions} current={current} selected={older} onPick={setOlder} render />
-            </>
-          ) : (
-            <div className="grid aspect-[9/16] h-[min(66vh,760px)] place-items-center rounded-xl bg-muted text-muted-foreground">{loading ? <Spinner /> : 'No render yet'}</div>
-          )}
-        </div>
-        <div className="space-y-9">
-          <Status piece={piece} item={item} />
-          {piece.workspaceId && <Looks piece={piece} />}
-          {current?.mediaId && <NoteList pieceId={piece.id} video={video} mediaId={current.mediaId} version={current.versionNumber} />}
-          <PostText piece={piece} />
-        </div>
+    <div className="grid grid-cols-[auto_minmax(0,34rem)] items-start justify-start gap-14">
+      <div className="space-y-4">
+        {current?.mediaId ? (
+          <>
+            <div className="flex gap-4">
+              {olderRender?.mediaId && <Player mediaId={olderRender.mediaId} label={`v${olderRender.versionNumber ?? '?'}`} />}
+              <Player mediaId={current.mediaId} label={`v${current.versionNumber ?? '?'} · now`} onVideo={setVideo} />
+            </div>
+            <div className="max-w-[min(66vh,760px)]" style={{ width: 'calc(min(66vh, 760px) * 9 / 16)' }}>
+              <NoteComposer pieceId={piece.id} video={video} mediaId={current.mediaId} version={current.versionNumber} />
+            </div>
+            <VersionStrip versions={versions} current={current} selected={older} onPick={setOlder} render />
+          </>
+        ) : (
+          <div className="grid aspect-[9/16] h-[min(66vh,760px)] place-items-center rounded-xl bg-muted text-muted-foreground">{loading ? <Spinner /> : 'No render yet'}</div>
+        )}
+      </div>
+      <div className="space-y-9">
+        <Status piece={piece} item={item} />
+        {piece.workspaceId && <Looks piece={piece} />}
+        {current?.mediaId && <NoteList pieceId={piece.id} video={video} mediaId={current.mediaId} version={current.versionNumber} />}
+        <PostText draft={draft} />
       </div>
     </div>
   );
