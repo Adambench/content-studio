@@ -279,6 +279,14 @@ export async function detectSpeech(file: string, start: number, end: number): Pr
   return speech;
 }
 
+/** Integrated loudness of a file's sound (LUFS), or null for silence. */
+export async function loudness(file: string, signal?: AbortSignal) {
+  const { stderr } = await execFile(requireBinary('ffmpeg'), ['-hide_banner', '-nostdin', '-i', file, '-vn', '-af', 'ebur128', '-f', 'null', '-'], { maxBuffer: 50 * 1024 * 1024, signal });
+  const m = /I:\s+(-?[\d.]+) LUFS/.exec(stderr.slice(stderr.lastIndexOf('Summary:')));
+  const v = m ? Number(m[1]) : NaN;
+  return Number.isFinite(v) && v > -70 ? v : null;
+}
+
 type Loudness = { input_i: string; input_tp: string; input_lra: string; input_thresh: string; target_offset: string };
 
 /**

@@ -20,7 +20,7 @@ import { config } from '../config';
 import { db, schema } from '../db';
 import { requireBinary } from '../lib/bin';
 import { emit } from '../lib/events';
-import { extractFrames, probe } from '../lib/ffmpeg';
+import { extractFrames, loudness, probe } from '../lib/ffmpeg';
 import { getSetting } from '../lib/settings';
 import { JobError } from '../jobs/queue';
 import { clipToolsInstalled } from '../services/cliptools';
@@ -45,14 +45,6 @@ const TAIL = 16;
 
 const ffmpeg = (args: string[], timeoutMs = 10 * 60_000) =>
   execFile(requireBinary('ffmpeg'), ['-hide_banner', '-nostdin', '-y', '-v', 'error', ...args], { maxBuffer: 20 * 1024 * 1024, timeout: timeoutMs });
-
-/** Integrated loudness (LUFS), or null for silence. */
-export async function loudness(file: string) {
-  const { stderr } = await execFile(requireBinary('ffmpeg'), ['-hide_banner', '-nostdin', '-i', file, '-af', 'ebur128', '-f', 'null', '-'], { maxBuffer: 50 * 1024 * 1024 });
-  const m = /I:\s+(-?[\d.]+) LUFS/.exec(stderr.slice(stderr.lastIndexOf('Summary:')));
-  const v = m ? Number(m[1]) : NaN;
-  return Number.isFinite(v) && v > -70 ? v : null;
-}
 
 /** The sound's level every 100 ms (dBFS). */
 async function levels(file: string) {

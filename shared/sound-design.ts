@@ -9,8 +9,26 @@ import { builtinSfxId } from './sfx';
 
 export type MoveKind = Exclude<SceneSound, 'none'>;
 
-/** A move on screen and the kind of sound it wants. `scene` and `clip` moves aren't an overlay's own start. */
-export type Move = { at: number; kind: MoveKind; what: string; from: 'overlay' | 'scene' | 'clip'; quiet?: boolean };
+/**
+ * A move on screen and the kind of sound it wants. `scene` and `clip` moves aren't an overlay's own start. `length`:
+ * how long a move that makes a sound all along (a line drawing, letters typing) goes on.
+ */
+export type Move = { at: number; kind: MoveKind; what: string; from: 'overlay' | 'scene' | 'clip'; quiet?: boolean; length?: number };
+
+/** Kinds whose sound goes on as long as the move does: it stops with the move, never runs on into a pause. */
+const ALONG: MoveKind[] = ['draw', 'typing'];
+/** A drawn line's or typed text's sound outlasts the move by this much (the pen lifting off). */
+const ALONG_TAIL = 0.15;
+
+/**
+ * The voice level the sounds' volumes are set for (a podcast's or a clip-on mic's). The final leveling (−14 LUFS)
+ * raises a quieter voice, a phone's at about −33 LUFS, and every sound with it: so the sounds and the nasheed come down
+ * by as much as the voice is quieter (and up as it's louder), and sit as far under the voice whatever the footage.
+ */
+export const VOICE_REF_LUFS = -16;
+/** How much the sounds' volumes are scaled for a voice this loud (LUFS, as cut); 1 when it isn't known. */
+export const soundLevel = (voiceLufs: number | null | undefined) =>
+  voiceLufs === null || voiceLufs === undefined || !Number.isFinite(voiceLufs) ? 1 : Math.min(2, Math.max(0.05, 10 ** ((voiceLufs - VOICE_REF_LUFS) / 20)));
 
 /** The sounds each kind takes turns with, how loud, and how far ahead of the frame they start (whooshes peak late). */
 const POOLS: Record<MoveKind, { names: string[]; volume: number; lead: number; rank: number }> = {
@@ -118,9 +136,11 @@ export function sceneMoves(o: Extract<EditOverlay, { type: 'scene' }>): Move[] {
     const steps = from === 'center' || from === 'edges' ? Math.ceil(n / 2) : n;
     // Letters type as one sound; a few words or items each get theirs; a fast, long stagger gets one at its start.
     const beats = !letters && steps > 1 && steps <= 8 && each >= 0.08 ? steps : 1;
+    // A sound that goes on with the move lasts as long as it: one beat's tween, or the whole stagger for one sound.
+    const length = ALONG.includes(kind.kind) ? round(t.duration + (beats === 1 ? each * Math.max(0, steps - 1) : 0) + ALONG_TAIL) : undefined;
     for (let k = 0; k < beats; k++) {
       const at = o.start + t.at + k * each + (kind.kind === 'thud' ? Math.min(0.2, t.duration * 0.4) : 0);
-      if (at < o.end) out.push({ at: round(at), kind: kind.kind, what: `${name} in scene${o.name ? ` “${o.name}”` : ''}`, from: 'scene', quiet: kind.quiet });
+      if (at < o.end) out.push({ at: round(at), kind: kind.kind, what: `${name} in scene${o.name ? ` “${o.name}”` : ''}`, from: 'scene', quiet: kind.quiet, ...(length && { length }) });
     }
   }
   return out;
@@ -165,7 +185,7 @@ export function motionSounds(spec: EditSpec, taken: SfxCue[] = baseSounds(spec))
     const pool = POOLS[m.kind];
     const i = turn.get(m.kind) ?? 0;
     turn.set(m.kind, i + 1);
-    return { id: `m-${k}`, mediaId: builtinSfxId(pool.names[i % pool.names.length]), at: round(Math.max(0, m.at - pool.lead)), volume: round(pool.volume * (m.quiet ? 0.7 : 1)) };
+    return { id: `m-${k}`, mediaId: builtinSfxId(pool.names[i % pool.names.length]), at: round(Math.max(0, m.at - pool.lead)), volume: round(pool.volume * (m.quiet ? 0.7 : 1)), ...(m.length && { length: m.length }) };
   });
 }
 

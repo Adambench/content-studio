@@ -542,7 +542,14 @@ export function graphicSounds(spec: Pick<EditSpec, 'overlays'>): SfxCue[] {
 }
 
 /** `mediaId` is a sound-effect asset or one of the app's own sounds (`builtin:<name>`, shared/sfx.ts). */
-export type SfxCue = { id: string; mediaId: string; at: number; volume: number };
+export type SfxCue = {
+  id: string;
+  mediaId: string;
+  at: number;
+  volume: number;
+  /** Plays only this long, then fades out: a sound that follows a move (a pen drawing a line) stops when the move does. */
+  length?: number;
+};
 
 /**
  * A vocal-only nasheed under the video. There's no music track: this is the only one an edit can have, only the

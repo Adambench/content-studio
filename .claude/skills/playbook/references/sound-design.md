@@ -57,6 +57,10 @@ a scribble as a line draws itself. That's what makes the motion feel physical, a
 
 - Effects sit **under the voice**: noticeable, never louder than speech. Under speech, start around 0.3–0.5 of the
   effect's own level; in a gap with no speech, up to about 0.8. Judge it by ear and keep the voice clearly on top.
+- The volumes are for a voice at about −16 LUFS (a podcast, a clip-on mic). The render measures the voice as cut and
+  turns every effect and the nasheed down by as much as it's quieter: a phone records about −33 LUFS, and the final
+  leveling would otherwise raise the effects with it, up to as loud as the speech.
+- A sound that follows a move (a scribble, typing) stops when the move does, never running on alone into a pause.
 - Impacts and booms are the loudest by nature: turn them down rather than up.
 - Watch the low end on phone speakers: a deep boom can sound like distortion. A shorter, higher impact often reads
   better.

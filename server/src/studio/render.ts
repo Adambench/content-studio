@@ -14,7 +14,7 @@ import { config } from '../config';
 import { db, newId, now, schema } from '../db';
 import { findBinary } from '../lib/bin';
 import { emit } from '../lib/events';
-import { cutSegment, gradeImage, normalizeLoudness, probe } from '../lib/ffmpeg';
+import { cutSegment, gradeImage, loudness, normalizeLoudness, probe } from '../lib/ffmpeg';
 import { checkCuts, exactPlan, handlePlay } from './exact-cuts';
 import { badRequest, HttpError, notFound } from '../lib/http';
 import { notify } from '../lib/push';
@@ -303,6 +303,15 @@ export async function renderJob({ renderId }: { renderId: string }) {
         const fadeOut = !next ? 0.12 : joinedOut ? 0 : 0.012;
         clipSources[i] = m ? await picture(m, `c${i}`, { start: clip.in, duration: clipLength(clip), zoom: clip.zoom, whole, audio: clip.volume > 0, fadeIn, fadeOut, playFrom: clip.playFrom, playTo: clip.playTo, ...handles[i] }) : null;
       }
+      const voiceLufs = await voiceLoudness(
+        drawn,
+        plan.clips.map((clip, i) => {
+          const source = clipSources[i];
+          return source && !source.silent && clip.volume > 0 ? { file: join(dir, source.src), seconds: clipLength(clip), volume: clip.volume } : null;
+        }),
+        drawn.audio.voiceover ? byId.get(drawn.audio.voiceover.mediaId) : undefined,
+        abort.signal,
+      ).catch((err: Error) => (console.warn(`[render] ${r.id} voice loudness: ${err.message}`), null));
 
       const { html } = composeEdit({
         spec: drawn,
@@ -315,6 +324,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
         fontUrl: (file) => `fonts/${file}`,
         scripts: GSAP_FILES,
         preview: false,
+        voiceLufs,
       });
       await writeFile(join(dir, 'index.html'), html);
 
@@ -439,6 +449,26 @@ export const renderingHere = () => drawingHere.size > 0;
  * Draw the frames on a home PC: the project folder goes over as one tar, the finished video comes back to `output`.
  * False when no worker has the renderer, or its run failed (the caller renders here instead).
  */
+/**
+ * How loud the edit's voice is as cut (LUFS): each clip with sound, and the voiceover, weighed by how long it plays.
+ * The sounds are set against it (`soundLevel`); null when there's no voice to measure.
+ */
+async function voiceLoudness(spec: EditSpec, clips: ({ file: string; seconds: number; volume: number } | null)[], voiceover: MediaRow | undefined, signal: AbortSignal) {
+  const parts: { lufs: number; seconds: number }[] = [];
+  for (const c of clips) {
+    const lufs = c ? await loudness(c.file, signal) : null;
+    if (c && lufs !== null) parts.push({ lufs: lufs + 20 * Math.log10(c.volume * spec.audio.voiceVolume || 1e-6), seconds: c.seconds });
+  }
+  const vo = spec.audio.voiceover;
+  if (vo && voiceover?.kind === 'audio' && vo.volume > 0) {
+    const lufs = await loudness(mediaPath(voiceover), signal);
+    if (lufs !== null) parts.push({ lufs: lufs + 20 * Math.log10(vo.volume), seconds: editDuration(spec) });
+  }
+  const seconds = parts.reduce((sum, p) => sum + p.seconds, 0);
+  if (!seconds) return null;
+  return 10 * Math.log10(parts.reduce((sum, p) => sum + p.seconds * 10 ** (p.lufs / 10), 0) / seconds);
+}
+
 async function renderRemote(dir: string, output: string, seconds: number, progress: (value: number, stage: string) => void, signal: AbortSignal) {
   if (!workerFor('render')) return false;
   const tar = join(dir, 'project.tar');

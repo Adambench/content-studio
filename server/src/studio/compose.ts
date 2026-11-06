@@ -21,7 +21,7 @@ import { captionCss, captionHtml, CAPTION_STYLE, captionTweens } from './caption
 import { animateIn, filterCss, lookStyle, motionState, motionStyle, motionTweens, splitChars, textureLayers } from './motion';
 import { LEAK_LAYER, OUTGOING_ON_TOP, transitionTweens, WHITE_LAYER } from './transitions';
 import { builtinSfx } from '../../../shared/sfx';
-import { allSounds } from '../../../shared/sound-design';
+import { allSounds, soundLevel } from '../../../shared/sound-design';
 import { composeGraphic, graphicsCss, STAT_HELPER } from './graphics';
 import { composeRecipe } from './recipe-layers';
 import { composeScene, sceneCss } from './scene';
@@ -58,6 +58,8 @@ export type ComposeInput = {
   preview: boolean;
   /** The page's own mascot, for scene mascots that don't name one. */
   mascot?: MascotId | null;
+  /** How loud the voice is as cut (LUFS, the render measures it): the sounds and the nasheed are set against it. */
+  voiceLufs?: number | null;
   /**
    * The Android app's WebView shows the preview from another origin: media is requested with CORS (so the runtime can
    * route audio through Web Audio), and videos get a blank poster instead of the WebView's grey play button.
@@ -334,8 +336,10 @@ export function composeEdit(input: ComposeInput) {
   // Never music: the one track an edit can have is a vocal-only nasheed, and only a nasheed asset plays.
   const track = spec.audio.nasheed;
   const nasheed = track ? media.get(track.mediaId) : undefined;
+  // Every other sound sits as far under the voice whatever the footage: a quiet phone voice brings them down with it.
+  const level = soundLevel(input.voiceLufs);
   if (track && nasheed?.assetType === 'nasheed') {
-    const full = track.volume;
+    const full = track.volume * level;
     const spans = track.duck ? speechSpans(words, 0.9) : [];
     const trackLen = nasheed.durationMs ? nasheed.durationMs / 1000 : Infinity;
     // Loop the track by laying copies end to end when it's shorter than the video.
@@ -358,8 +362,10 @@ export function composeEdit(input: ComposeInput) {
     const m = media.get(s.mediaId);
     if (s.at >= duration || (!builtin && m?.assetType !== 'sfx')) return;
     const seconds = builtin ? builtin.seconds : m?.durationMs ? m.durationMs / 1000 : Infinity;
-    const len = Math.min(duration - s.at, seconds);
-    body.push(`<audio id="s${i}" src="${esc(input.fileUrl(s.mediaId))}"${app.media} data-start="${n(s.at)}" data-duration="${n(len)}" data-track-index="7" data-volume="${n(s.volume)}"></audio>`);
+    // A sound that follows a move stops with it (fading), instead of running on into the next pause.
+    const len = Math.min(duration - s.at, seconds, s.length ?? Infinity);
+    const fade = s.length !== undefined && s.length < seconds ? ` data-fade-out="${n(Math.min(0.12, len / 3))}"` : '';
+    body.push(`<audio id="s${i}" src="${esc(input.fileUrl(s.mediaId))}"${app.media} data-start="${n(s.at)}" data-duration="${n(len)}" data-track-index="7" data-volume="${n(s.volume * level)}"${fade}></audio>`);
   });
 
   // ---------- page ----------
