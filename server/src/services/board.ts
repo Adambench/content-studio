@@ -42,7 +42,7 @@ function boardItems(workspaceIds: string[]): BoardItem[] {
     db
       .select({ pieceId: schema.renders.pieceId })
       .from(schema.renders)
-      .where(and(inArray(schema.renders.pieceId, ids), inArray(schema.renders.status, ['queued', 'running'])))
+      .where(and(inArray(schema.renders.pieceId, ids), inArray(schema.renders.status, ['queued', 'running']), eq(schema.renders.older, false)))
       .all()
       .map((r) => r.pieceId),
   );

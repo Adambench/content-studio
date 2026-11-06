@@ -237,7 +237,7 @@ export async function specTranscripts(spec: EditSpec, rows: MediaRow[]) {
   return out;
 }
 
-export function listRenders(editId: string, limit = 20) {
+export function listRenders(editId: string, limit = 50) {
   return db.select().from(schema.renders).where(eq(schema.renders.editId, editId)).orderBy(desc(schema.renders.createdAt)).limit(limit).all();
 }
 

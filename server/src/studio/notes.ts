@@ -110,7 +110,7 @@ export function followComments(pieceId: string) {
   let stage = piece.stage;
   if (piece.stage === REVIEW_STAGE && open) stage = FIXING_STAGE;
   else if (piece.stage === FIXING_STAGE && !open) {
-    const rendering = db.select({ id: schema.renders.id }).from(schema.renders).where(and(eq(schema.renders.pieceId, pieceId), inArray(schema.renders.status, ['queued', 'running']))).get();
+    const rendering = db.select({ id: schema.renders.id }).from(schema.renders).where(and(eq(schema.renders.pieceId, pieceId), inArray(schema.renders.status, ['queued', 'running']), eq(schema.renders.older, false))).get();
     const making = db.select({ id: schema.moments.id }).from(schema.moments).where(and(eq(schema.moments.pieceId, pieceId), eq(schema.moments.status, 'making'))).get();
     const head = findEditForPiece(pieceId)?.headVersionId;
     const shown = db

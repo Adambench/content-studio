@@ -1,8 +1,8 @@
 # CLAUDE.md
 
 Content Studio: single-user Electron desktop app that shows me my videos and takes my clicks; Claude (Claude Code in
-the terminal) does the editing, organising and scheduling. The phone (Android app, Capacitor) only writes scripts and
-sends footage. PLAN.md has the decisions (*Phase 14* is the current shape), measurements and open items. Read only the
+the terminal) does the editing, organising and scheduling. The phone (Android app, Capacitor) writes scripts, sends
+footage and plays the videos. PLAN.md has the decisions (*Phase 14* is the current shape), measurements and open items. Read only the
 section you need.
 
 ## Layout
@@ -86,7 +86,7 @@ section you need.
 - Stages: every page has `BOARD_STAGES` (`shared/types.ts`); `columnOf` (`shared/board.ts`) maps them to the board.
   A render that finishes moves a card in Making, Editing or Ready to film to Review (`studio/render.ts`).
 - UI: shadcn/ui (radix-nova) in `web/src/components/ui` is generated: compose, don't edit. Dark only, laptop first; the
-  phone only writes scripts and sends footage. No `alert`/`confirm`/`prompt`.
+  phone writes scripts, sends footage and plays the videos. No `alert`/`confirm`/`prompt`.
 - `pkill -f "<pattern>"` from a shell whose command line contains the pattern kills that shell: use `[x]yz` patterns.
 
 ## Commands

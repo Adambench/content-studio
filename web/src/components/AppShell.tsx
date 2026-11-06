@@ -77,7 +77,7 @@ function Desktop() {
   );
 }
 
-/** The laptop shows everything; the phone only writes scripts and sends footage (PhoneShell). */
+/** The laptop shows everything; the phone writes scripts, sends footage and plays the videos (PhoneShell). */
 export function AppShell() {
   const small = useMediaQuery('(max-width: 767px)');
   if (isApp || small)

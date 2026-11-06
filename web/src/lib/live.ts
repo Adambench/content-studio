@@ -63,6 +63,8 @@ function apply(event: LiveEvent) {
       case 'edits':
         inv(['own-measures']);
         inv(event.pieceId ? keys.edit(event.pieceId) : ['edit']);
+        // A card's version strip.
+        if (event.pieceId) inv([...keys.renders(event.pieceId), 'versions']);
         break;
       case 'renders':
         if (event.pieceId) inv(keys.renders(event.pieceId));

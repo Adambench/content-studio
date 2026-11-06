@@ -163,6 +163,8 @@ export type SystemStatus = {
 
 export type EditVersionMeta = { id: string; number: number; author: 'you' | 'claude'; message: string; createdAt: number };
 export type EditVersion = EditVersionMeta & { editId: string; spec: EditSpec };
+/** A version in a card's version strip: `footage` means it can be rendered. */
+export type VersionRow = EditVersionMeta & { footage: boolean };
 
 export type RenderRow = {
   id: string;
@@ -177,6 +179,8 @@ export type RenderRow = {
   mediaId: string | null;
   durationMs: number | null;
   elapsedMs: number | null;
+  /** A render of a version saved earlier, to watch it again. */
+  older: boolean;
   createdAt: number;
   finishedAt: number | null;
 };

@@ -202,6 +202,8 @@ export const renders = sqliteTable(
     mediaId: text('media_id').references(() => media.id, { onDelete: 'set null' }),
     durationMs: integer('duration_ms'),
     elapsedMs: integer('elapsed_ms'),
+    /** A render of a version saved earlier, to watch it again: dated with its version, never "the edit rendering". */
+    older: integer('older', { mode: 'boolean' }).notNull().default(false),
     createdAt: createdAt(),
     finishedAt: integer('finished_at'),
   },

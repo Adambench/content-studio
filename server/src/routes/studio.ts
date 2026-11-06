@@ -19,12 +19,12 @@ import { JobError, enqueue, hasPendingJob } from '../jobs/queue';
 import { getPiece, getWorkspace } from '../services/pieces';
 import { BUNDLED_FONTS, composeEdit } from '../studio/compose';
 import { lookupAyat } from '../islamic/quran';
-import { createEdit, editDetail, findEditForPiece, getEdit, listRenders, restoreEditVersion, saveEditVersion, specMedia, specTranscripts, updateEditWorking } from '../studio/edits';
+import { createEdit, editDetail, findEditForPiece, getEdit, listEditVersions, listRenders, restoreEditVersion, saveEditVersion, specMedia, specTranscripts, updateEditWorking } from '../studio/edits';
 import { proxyPath } from '../studio/proxy';
 import { checkEdit } from '../studio/quality';
 import { addNote, deleteNote, listNotes, markReviewed, updateNote } from '../studio/notes';
 import { NOTE_MAX, NOTE_STATUSES } from '../../../shared/notes';
-import { builtinSfxPath, cancelRender, getRender, GSAP_FILES, gsapFilePath, queueRender, runtimePath } from '../studio/render';
+import { builtinSfxPath, cancelRender, getRender, GSAP_FILES, gsapFilePath, queueRender, renderVersion, runtimePath } from '../studio/render';
 import { tightenEdit } from '../studio/tighten';
 import { bearerToken } from './auth';
 
@@ -45,6 +45,22 @@ export async function studioRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/api/pieces/:id/renders', async (req) => {
     const edit = findEditForPiece(req.params.id);
     return edit ? listRenders(edit.id) : [];
+  });
+
+  /** Every saved version of the piece's edit, newest first; `footage`: it has clips, so it can be rendered. */
+  app.get<{ Params: { id: string } }>('/api/pieces/:id/versions', async (req) => {
+    const edit = findEditForPiece(req.params.id);
+    if (!edit) return [];
+    const footage = new Set(
+      db
+        .select({ id: schema.editVersions.id, spec: schema.editVersions.spec })
+        .from(schema.editVersions)
+        .where(eq(schema.editVersions.editId, edit.id))
+        .all()
+        .filter((v) => normalizeEdit(v.spec).clips.length)
+        .map((v) => v.id),
+    );
+    return listEditVersions(edit.id).map((v) => ({ ...v, footage: footage.has(v.id) }));
   });
 
   /** Comments pinned to moments of the finished video, for Claude to fix (studio/notes.ts). */
@@ -94,6 +110,9 @@ export async function studioRoutes(app: FastifyInstance) {
     if (!v) throw notFound('Version not found');
     return { ...v, spec: normalizeEdit(v.spec) };
   });
+
+  // Render a version saved earlier, to watch it beside the newest (studio/render.ts renderVersion).
+  app.post<{ Params: { id: string } }>('/api/edit-versions/:id/render', async (req) => renderVersion(req.params.id));
 
   app.post<{ Params: { id: string } }>('/api/edit-versions/:id/restore', async (req) => {
     const { version } = restoreEditVersion(req.params.id);

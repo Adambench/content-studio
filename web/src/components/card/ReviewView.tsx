@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { api, errorMessage, mediaFileUrl } from '@/lib/api';
 import { postWhen } from '@/lib/format';
-import { keys, queryClient, useApprovePlan, useNotes, usePackage, usePiecePosts, useRenders } from '@/lib/queries';
-import type { PieceDetail } from '@/lib/types';
+import { keys, queryClient, useApprovePlan, useNotes, usePackage, usePiecePosts, useRenders, useVersions } from '@/lib/queries';
+import type { PieceDetail, RenderRow, VersionRow } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useDraft } from './useDraft';
 
@@ -19,7 +19,7 @@ export function copyFix() {
   toast(`Copied “${FIX}”: paste it in Claude Code`);
 }
 
-function Player({ mediaId, label, onVideo, className }: { mediaId: string; label: string; onVideo?: (v: HTMLVideoElement | null) => void; className?: string }) {
+export function Player({ mediaId, label, onVideo, className }: { mediaId: string; label: string; onVideo?: (v: HTMLVideoElement | null) => void; className?: string }) {
   return (
     <figure className={cn('space-y-2', className)}>
       <video ref={onVideo} src={mediaFileUrl(mediaId)} controls playsInline preload="metadata" className="aspect-[9/16] h-[min(66vh,760px)] rounded-xl bg-black" />
@@ -176,28 +176,87 @@ function PostText({ piece }: { piece: PieceDetail }) {
   );
 }
 
+export type Version = VersionRow & { render: RenderRow | undefined };
+
+/**
+ * Every version of a card's edit Claude saved, newest first, with its render (one per version, the newest), and the
+ * newest finished render: the video now. Older renders are dated with their version, so they never count as now.
+ */
+export function useVideoVersions(pieceId: string) {
+  const renders = useRenders(pieceId);
+  const versions = useVersions(pieceId);
+  return useMemo(() => {
+    const all = [...(renders.data ?? [])].sort((a, b) => b.createdAt - a.createdAt);
+    const done = all.filter((r) => r.status === 'done' && r.mediaId);
+    const pick = (v: VersionRow) =>
+      done.find((r) => r.versionId === v.id) ?? all.find((r) => r.versionId === v.id && (r.status === 'queued' || r.status === 'running')) ?? done.find((r) => !r.versionId && r.versionNumber === v.number);
+    const list: Version[] = (versions.data ?? []).filter((v) => v.footage).map((v) => ({ ...v, render: pick(v) }));
+    // Renders of versions no longer listed (an edit started over) still show.
+    for (const r of done) if (!list.some((v) => v.render?.id === r.id) && !list.some((v) => v.number === r.versionNumber))
+      list.push({ id: r.versionId ?? r.id, number: r.versionNumber ?? 0, author: 'claude', message: '', createdAt: r.createdAt, footage: true, render: r });
+    list.sort((a, b) => b.number - a.number);
+    return { versions: list, current: done[0], loading: renders.isLoading };
+  }, [renders.data, renders.isLoading, versions.data]);
+}
+
+/**
+ * The version strip: one button per version. A rendered one plays (`onPick`), one being rendered shows how far it
+ * is, and one never rendered renders on a click (`render`; on the laptop only).
+ */
+export function VersionStrip({ versions, current, selected, onPick, render }: { versions: Version[]; current: RenderRow | undefined; selected: string | null; onPick: (mediaId: string | null) => void; render?: boolean }) {
+  const shown = render ? versions : versions.filter((v) => v.render?.status === 'done');
+  if (shown.length < 2) return null;
+  async function start(v: Version) {
+    try {
+      await api(`/edit-versions/${v.id}/render`, { method: 'POST' });
+      void queryClient.invalidateQueries({ queryKey: keys.renders(current?.pieceId ?? '') });
+      toast(`Rendering v${v.number}`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
+  return (
+    <div className="space-y-2">
+      <h2 className="text-[13px] font-semibold tracking-widest text-muted-foreground uppercase">Versions</h2>
+      <div className="flex flex-wrap gap-1.5">
+        {shown.map((v) => {
+          const r = v.render;
+          const now = !!r && r.id === current?.id;
+          const label = `v${v.number}`;
+          if (r?.status === 'done' && r.mediaId)
+            return (
+              <Button key={v.id} size="sm" title={v.message} variant={now || r.mediaId === selected ? 'default' : 'outline'} onClick={() => !now && onPick(r.mediaId === selected ? null : r.mediaId)}>
+                {label}
+              </Button>
+            );
+          if (r)
+            return (
+              <Button key={v.id} size="sm" variant="ghost" disabled title={v.message}>
+                <Spinner /> {label}
+                {r.status === 'running' && <span className="tabular-nums">{Math.round(r.progress * 100)}%</span>}
+              </Button>
+            );
+          return (
+            <Button key={v.id} size="sm" variant="ghost" title={`${v.message ? `${v.message}. ` : ''}Not rendered: click to render`} className="text-muted-foreground" onClick={() => void start(v)}>
+              {label}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /**
  * A video Claude made: the newest render (an older one beside it to compare), comments pinned to moments under it,
  * and on the right what it waits for, its look, the comments and the post's text.
  */
 export function ReviewView({ piece, item }: { piece: PieceDetail; item: BoardItem | undefined }) {
-  const renders = useRenders(piece.id);
+  const { versions, current, loading } = useVideoVersions(piece.id);
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
   const [older, setOlder] = useState<string | null>(null);
-  // One per version, the newest render of each, newest first.
-  const versions = useMemo(() => {
-    const done = (renders.data ?? []).filter((r) => r.status === 'done' && r.mediaId).sort((a, b) => b.createdAt - a.createdAt);
-    const seen = new Set<string>();
-    return done.filter((r) => {
-      const k = String(r.versionNumber ?? r.id);
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
-  }, [renders.data]);
-  const current = versions[0];
   useEffect(() => setOlder(null), [current?.mediaId]);
-  const olderRender = versions.find((v) => v.mediaId === older);
+  const olderRender = versions.find((v) => v.render?.mediaId === older)?.render;
 
   return (
     <div className="space-y-6 px-12 pt-5 pb-16">
@@ -213,26 +272,10 @@ export function ReviewView({ piece, item }: { piece: PieceDetail; item: BoardIte
               <div className="max-w-[min(66vh,760px)]" style={{ width: 'calc(min(66vh, 760px) * 9 / 16)' }}>
                 <NoteComposer pieceId={piece.id} video={video} mediaId={current.mediaId} version={current.versionNumber} />
               </div>
-              {versions.length > 1 && (
-                <div className="space-y-2">
-                  <h2 className="text-[13px] font-semibold tracking-widest text-muted-foreground uppercase">Older renders</h2>
-                  <div className="flex flex-wrap gap-1.5">
-                    {versions.map((v, i) => (
-                      <Button
-                        key={v.id}
-                        size="sm"
-                        variant={i === 0 || v.mediaId === older ? 'default' : 'outline'}
-                        onClick={() => i > 0 && setOlder(v.mediaId === older ? null : v.mediaId)}
-                      >
-                        v{v.versionNumber ?? '?'}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <VersionStrip versions={versions} current={current} selected={older} onPick={setOlder} render />
             </>
           ) : (
-            <div className="grid aspect-[9/16] h-[min(66vh,760px)] place-items-center rounded-xl bg-muted text-muted-foreground">{renders.isLoading ? <Spinner /> : 'No render yet'}</div>
+            <div className="grid aspect-[9/16] h-[min(66vh,760px)] place-items-center rounded-xl bg-muted text-muted-foreground">{loading ? <Spinner /> : 'No render yet'}</div>
           )}
         </div>
         <div className="space-y-9">

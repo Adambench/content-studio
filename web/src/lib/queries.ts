@@ -10,7 +10,7 @@ import type { ReviewClip } from '@shared/clipping';
 import type { BoardData, CampaignLink } from '@shared/board';
 import type { ApprovePlan } from '@shared/dashboard';
 import type { SitesStatus } from '@shared/sites';
-import type { Account, AppSettings, PieceDetail, Post, PublishingSetup, RenderRow, SystemStatus, Workspace } from './types';
+import type { Account, AppSettings, PieceDetail, Post, PublishingSetup, RenderRow, SystemStatus, VersionRow, Workspace } from './types';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -88,6 +88,8 @@ export const useNotes = (pieceId: string) =>
     refetchInterval: (q) => (q.state.data?.some((n) => n.status === 'open') ? 20_000 : false),
   });
 export const useRenders = (pieceId: string) => useQuery({ queryKey: keys.renders(pieceId), queryFn: () => api<RenderRow[]>(`/pieces/${pieceId}/renders`) });
+/** Every saved version of a piece's edit (under the renders key, so a render's events refresh it too). */
+export const useVersions = (pieceId: string) => useQuery({ queryKey: [...keys.renders(pieceId), 'versions'], queryFn: () => api<VersionRow[]>(`/pieces/${pieceId}/versions`) });
 
 
 export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: () => api<AppSettings>('/settings') });

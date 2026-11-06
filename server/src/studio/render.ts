@@ -84,7 +84,7 @@ export function queueRender(editId: string, by: Author, opts: { check?: boolean 
   const busy = db
     .select({ id: schema.renders.id })
     .from(schema.renders)
-    .where(and(eq(schema.renders.editId, editId), inArray(schema.renders.status, ['queued', 'running'])))
+    .where(and(eq(schema.renders.editId, editId), inArray(schema.renders.status, ['queued', 'running']), eq(schema.renders.older, false)))
     .get();
   if (busy) throw new HttpError(409, 'This edit is already rendering.');
   const { version } = saveEditVersion(editId, { author: by, message: 'Rendered' });
@@ -108,6 +108,31 @@ export function queueRender(editId: string, by: Author, opts: { check?: boolean 
   return getRender(id);
 }
 
+/**
+ * Render a version saved earlier (one Claude made without rendering it), to watch it beside the newest. It's dated
+ * with its version, so the newest render (Review, Approve, publishing) stays the newest version's.
+ */
+export function renderVersion(versionId: string) {
+  const v = db.select().from(schema.editVersions).where(eq(schema.editVersions.id, versionId)).get();
+  if (!v) throw notFound('Version not found');
+  const edit = getEdit(v.editId);
+  const spec = normalizeEdit(v.spec);
+  if (!spec.clips.length) throw badRequest('This version has no footage.');
+  const have = db
+    .select()
+    .from(schema.renders)
+    .where(and(eq(schema.renders.versionId, v.id), inArray(schema.renders.status, ['queued', 'running', 'done'])))
+    .get();
+  if (have) return have;
+  const id = newId();
+  db.insert(schema.renders)
+    .values({ id, workspaceId: edit.workspaceId, editId: edit.id, pieceId: edit.pieceId, versionId: v.id, versionNumber: v.number, durationMs: Math.round(editDuration(spec) * 1000), older: true, createdAt: v.createdAt })
+    .run();
+  enqueue('video.render', { renderId: id }, { maxAttempts: 1 });
+  emit({ type: 'changed', entity: 'renders', workspaceId: edit.workspaceId, id, pieceId: edit.pieceId });
+  return getRender(id);
+}
+
 /** Edits whose newest version renders as soon as the render running now stops (it was of an older version). */
 const rerenderAfter = new Map<string, Author>();
 
@@ -119,7 +144,7 @@ export function rerenderLatest(editId: string, by: Author) {
   const busy = db
     .select()
     .from(schema.renders)
-    .where(and(eq(schema.renders.editId, editId), inArray(schema.renders.status, ['queued', 'running'])))
+    .where(and(eq(schema.renders.editId, editId), inArray(schema.renders.status, ['queued', 'running']), eq(schema.renders.older, false)))
     .get();
   if (busy?.status === 'queued') setRender(busy, { status: 'cancelled', stage: 'Cancelled', finishedAt: now() });
   else if (busy && running.has(busy.id)) {
@@ -363,12 +388,14 @@ export async function renderJob({ renderId }: { renderId: string }) {
         durationMs: Math.round(editDuration(spec) * 1000),
         width: box.width,
         height: box.height,
+        ...(r.older && { createdAt: r.createdAt }),
       })
       .run();
     enqueue('media.probe', { mediaId });
     setRender(r, { status: 'done', progress: 1, stage: 'Done', mediaId, elapsedMs: Date.now() - started, finishedAt: now() });
     emit({ type: 'changed', entity: 'media', workspaceId: r.workspaceId, id: mediaId });
     emit({ type: 'changed', entity: 'pieces', workspaceId: r.workspaceId, id: r.pieceId });
+    if (r.older) return;
     // A clip being made, or a video Claude is editing, is ready for my yes or no once rendered.
     const stages = getWorkspace(r.workspaceId).stages.map((s) => s.id);
     const fresh = getPiece(r.pieceId);
@@ -390,7 +417,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
   } finally {
     running.delete(r.id);
     await rm(dir, { recursive: true, force: true }).catch(() => {});
-    const by = rerenderAfter.get(r.editId);
+    const by = r.older ? undefined : rerenderAfter.get(r.editId);
     if (by) {
       rerenderAfter.delete(r.editId);
       rerenderLatest(r.editId, by);

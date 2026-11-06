@@ -834,11 +834,11 @@ professionally with Claude. Laptop first (1920 × 1080).
 | Ideas = videos | One thing: an idea is its video card from the start (no lock-in, no copies). Series stay (numbered episodes) |
 | Old bubbles | Mine (37) move over with their scripts; sub-bubbles become bullet notes in their idea; Claude's 30 go (and Claude's flesh-out notes on the locked-in videos). Both "Announcement" videos stay: I delete one (Delete on the card, with Undo) |
 | Card page | Full page, with a sidebar to jump between ideas (Ready to film, then Writing, then Ideas). One document with two preset headings I can rename: *Script* (what I say), then *Notes* under it (the effects I want). Hooks and Directions (help to script, with the viral skills): answers beside the document, a click takes one (a hook swaps my first line, with Undo; a direction goes under Notes) |
-| Review | Player, comments pinned to moments, post text (caption, hashtags), older renders. One *Approve* button that schedules (the top one only scrolled; the real one waited for every campaign rule to be ticked). Campaign rules hidden: a clip that breaks one shows one red line. I start fixes by saying "fix my comments" in Claude Code |
+| Review | Player, comments pinned to moments, post text (caption, hashtags), every version Claude saved (one never rendered renders on a click; 2026-11-05: the first edit's v1–v6 were saved but never rendered, so I couldn't see them). One *Approve* button that schedules (the top one only scrolled; the real one waited for every campaign rule to be ticked). Campaign rules hidden: a clip that breaks one shows one red line. I start fixes by saying "fix my comments" in Claude Code |
 | Look | Claude edits in its favourite of 2–3 looks; I can switch after the first render |
 | Footage | What I share lands on the video I pick; the card stays where it is until I tell Claude Code to edit it |
 | Look and feel | Mostly greys, one alarm colour only on what needs me, the page as a small dot (Long Story Short's dot violet: its orange looked like Personal brand's amber). Big text, calm spacing, almost no helper sentences |
-| Phone | Only: footage to a video I pick (shared from the gallery, or the app's *Add footage*: pick clips, then the video), and write scripts (Ready to film, Writing, Ideas). Nothing else |
+| Phone | Only: footage to a video I pick (shared from the gallery, or the app's *Add footage*: pick clips, then the video), and write scripts (Ready to film, Writing, Ideas). Since 2026-11-05 also *Videos*: watch the videos (Review, Editing, Scheduled, Posted; every page) and their rendered versions; no comments or Approve there |
 
 Build (after the mockup):
 - [x] Mockup: Home, a card being written, a card in review, Calendar, the phone (share + scripts), with my real titles (three rounds, approved 2026-11-05)
@@ -847,3 +847,4 @@ Build (after the mockup):
 - [x] Pages on the top bar, sections under them; Gentle Return hidden; every page on `BOARD_STAGES`
 - [x] Home board; card page; review page with the one Approve (tried on a copy: approve → Sat 12:30, Undo; a real Hooks call, 8 s)
 - [x] Phone app: share to a video, Add footage, scripts; `API_VERSION` 4; Android 0.3.0 (CI builds it)
+- [x] Every version on a card (older ones render on a click, dated with their version so Approve and publishing keep the newest); the phone's *Videos* (2026-11-05, Android 0.3.2)
