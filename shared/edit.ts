@@ -5,7 +5,7 @@ import { bundledFamily } from './fonts';
 import { BROLL_LAYOUTS, CLIP_MOTIONS, FILTER_LOOKS, MOTION_SCALE, NO_TEXTURES, OVERLAY_ANIMATIONS, type BrollLayout, type ClipMotion, type FilterLook, type OverlayAnimation, type Textures } from './looks';
 import { normalizeRecipe, type Recipe } from './recipe';
 import { normalizeScene, type SceneSpec } from './scene';
-import { refitScene, sceneMaxSeconds } from './scene-library';
+import { isScenePreset, refitScene, SCENE_LIBRARY, sceneMaxSeconds } from './scene-library';
 import { builtinSfxId } from './sfx';
 import type { Transcript } from './types';
 
@@ -345,9 +345,17 @@ export type GraphicOverlay = OverlayBase & {
 };
 
 /** A motion graphic Claude designed (shared/scene.ts): boxes, text, shapes and images with GSAP tweens, as data. */
-export type SceneOverlay = OverlayBase & { type: 'scene' } & SceneSpec;
+export type SceneOverlay = OverlayBase & {
+  type: 'scene';
+  /** The captions wait while it's on: it shows the spoken words itself (a line staged in type). */
+  hidesCaptions?: boolean;
+} & SceneSpec;
 
 export type EditOverlay = TextOverlay | ImageOverlay | BrollOverlay | GraphicOverlay | SceneOverlay;
+
+/** Overlays the captions wait for: a hook card that asks, or a scene that shows the spoken words itself (an ayah, a line staged in type). */
+export const holdsCaptions = (o: EditOverlay) =>
+  ((o.type === 'text' || o.type === 'graphic' || o.type === 'scene') && !!o.hidesCaptions) || (o.type === 'scene' && isScenePreset(o.preset) && !!SCENE_LIBRARY[o.preset].hidesCaptions);
 
 /** A phrase split into words, with the ones inside *stars* marked as accent. */
 export function graphicWords(text: string) {
@@ -795,7 +803,7 @@ function normalizeOverlay(input: Loose): EditOverlay | null {
     }
     case 'scene': {
       const end = Math.min(base.end, base.start + sceneMaxSeconds(input.preset));
-      return { ...base, end, type: 'scene', ...normalizeScene(input, end - base.start) };
+      return { ...base, end, type: 'scene', ...normalizeScene(input, end - base.start), ...(input.hidesCaptions === true && { hidesCaptions: true }) };
     }
     case 'broll':
       if (typeof input.mediaId !== 'string') return null;
@@ -996,21 +1004,72 @@ export function timelineWords(
 export type CaptionWord = { start: number; end: number; text: string };
 export type CaptionPage = { start: number; end: number; words: CaptionWord[] };
 
-/** Group words into the chunks shown on screen at once. A cut always starts a new chunk. */
-export function captionPages(words: (Pick<TimelineWord, 'start' | 'end' | 'text'> & { clipId?: string })[], settings: Pick<CaptionSettings, 'maxWords' | 'preset'>, duration: number): CaptionPage[] {
-  const maxChars = settings.preset === 'subtitle' ? 64 : settings.maxWords <= 2 ? 16 : 14 + settings.maxWords * 5;
+/** Words a caption line shouldn't end on: they lean on the word after them ("a", "the", "of", "I"…). */
+const LEANS = new Set(['a', 'an', 'the', 'of', 'to', 'in', 'on', 'at', 'for', 'with', 'by', 'from', 'into', 'and', 'or', 'but', 'so', 'if', 'as', 'than', 'that', 'my', 'your', 'his', 'her', 'our', 'their', 'its', 'this', 'i', "i'm", "i'll", 'we', 'you', "you're", 'he', 'she', 'they', 'what', 'is', 'are', 'was', 'be', 'very', 'just', 'not', "don't"]);
+/** Words that open a phrase: a good first word for a line. */
+const OPENS = new Set(['and', 'but', 'or', 'so', 'because', 'that', 'which', 'who', 'when', 'where', 'whether', 'if', 'then', 'to', 'of', 'in', 'on', 'for', 'with', 'as']);
+const bareWord = (w: string) => w.toLowerCase().replace(/[’]/g, "'").replace(/[^a-z']/g, '');
+
+/**
+ * One stretch of words that has to be broken into lines (it runs on: no sentence end, cut or long pause inside), split
+ * where it reads best: lines of at most `maxWords` words and `maxChars` letters, broken after a comma or at a pause,
+ * never after a word that leans on the next one, and no one-word line when a longer one fits. Fewer, fuller lines win
+ * a tie.
+ */
+function phraseLines<W extends { start: number; end: number; text: string }>(run: W[], maxWords: number, maxChars: number): W[][] {
+  const n = run.length;
+  const best = new Array<number>(n + 1).fill(Infinity);
+  const from = new Array<number>(n + 1).fill(0);
+  best[0] = 0;
+  for (let j = 1; j <= n; j++) {
+    let chars = -1;
+    for (let i = j - 1; i >= 0 && j - i <= maxWords; i--) {
+      chars += run[i].text.length + 1;
+      if (chars > maxChars && j - i > 1) break;
+      let cost = best[i] + 1;
+      if (j - i === 1 && n > 1 && maxWords > 2) cost += 3;
+      if (j < n) {
+        const last = run[j - 1];
+        const next = run[j];
+        // After a comma the clause is done; a word that leans on the next one (with no comma) keeps it on its line.
+        if (/[,;:]$/.test(last.text)) cost -= 2;
+        else if (LEANS.has(bareWord(last.text))) cost += 4;
+        cost -= Math.min(0.5, Math.max(0, next.start - last.end)) * 6;
+        if (OPENS.has(bareWord(next.text))) cost -= 0.5;
+      }
+      if (cost < best[j]) {
+        best[j] = cost;
+        from[j] = i;
+      }
+    }
+  }
+  const lines: W[][] = [];
+  for (let j = n; j > 0; j = from[j]) lines.unshift(run.slice(from[j], j));
+  return lines;
+}
+
+/** Group words into the chunks shown on screen at once: whole phrases, a sentence never spilling into the next. A cut always starts a new chunk. */
+/** Presets that show one line at a time, and about how many letters fit on it at size 1. */
+const LINE_CHARS: Partial<Record<CaptionPreset, number>> = { clean: 28 };
+
+export function captionPages(
+  words: (Pick<TimelineWord, 'start' | 'end' | 'text'> & { clipId?: string })[],
+  settings: Pick<CaptionSettings, 'maxWords' | 'preset'> & Partial<Pick<CaptionSettings, 'size'>>,
+  duration: number,
+): CaptionPage[] {
+  const line = LINE_CHARS[settings.preset];
+  const maxChars = Math.min(settings.preset === 'subtitle' ? 64 : settings.maxWords <= 2 ? 16 : 14 + settings.maxWords * 5, line ? Math.floor(line / (settings.size || 1)) : Infinity);
   const pages: CaptionPage[] = [];
-  let cur: CaptionWord[] = [];
+  let run: CaptionWord[] = [];
   let clip: string | undefined;
   const flush = () => {
-    if (cur.length) pages.push({ start: cur[0].start, end: cur[cur.length - 1].end, words: cur });
-    cur = [];
+    for (const line of phraseLines(run, settings.maxWords, maxChars)) pages.push({ start: line[0].start, end: line[line.length - 1].end, words: line });
+    run = [];
   };
   for (const w of words) {
-    const last = cur[cur.length - 1];
-    const chars = cur.reduce((n, x) => n + x.text.length + 1, 0);
-    if (last && (cur.length >= settings.maxWords || w.start - last.end > 0.6 || chars + w.text.length > maxChars || /[.!?]$/.test(last.text) || w.clipId !== clip)) flush();
-    cur.push({ start: w.start, end: w.end, text: w.text });
+    const last = run[run.length - 1];
+    if (last && (w.start - last.end > 0.6 || /[.!?]$/.test(last.text) || w.clipId !== clip)) flush();
+    run.push({ start: w.start, end: w.end, text: w.text });
     clip = w.clipId;
   }
   flush();

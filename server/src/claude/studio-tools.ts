@@ -439,6 +439,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         start: z.number().min(0).describe('Seconds on the finished video'),
         end: z.number().describe(`At most ${SCENE_MAX_SECONDS} s after start`),
         background: z.string().optional().describe('none (the video shows, default), dim (the video darkened), or a solid #rrggbb'),
+        hidesCaptions: z.boolean().optional().describe('The captions wait while it is on: only for a scene that shows the spoken words itself (a line staged in type, word by word as it is said)'),
         elements: z
           .array(
             z.object({
@@ -479,7 +480,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
           )
           .max(SCENE_MAX_TWEENS),
       },
-      safe(async ({ pieceId, sceneId, name, start, end, background, elements, tweens }) => {
+      safe(async ({ pieceId, sceneId, name, start, end, background, hidesCaptions, elements, tweens }) => {
         const edit = editFor(pieceId) ?? createEdit(pieceId, 'claude');
         const spec = normalizeEdit(edit.working);
         if (sceneId && !spec.overlays.some((o) => o.id === sceneId && o.type === 'scene')) throw new ToolError(`There’s no scene with id ${sceneId} on this edit.`);
@@ -488,7 +489,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
         const scene = normalizeScene({ name, background, elements, tweens }, Math.min(end - start, SCENE_MAX_SECONDS), problems);
         if (!scene.elements.length) throw new ToolError(`Nothing could be kept: ${problems.join('; ')}`);
         const id = sceneId ?? newEditId();
-        const overlay = { id, type: 'scene' as const, start, end: Math.min(end, start + SCENE_MAX_SECONDS), ...scene };
+        const overlay = { id, type: 'scene' as const, start, end: Math.min(end, start + SCENE_MAX_SECONDS), ...scene, ...(hidesCaptions && { hidesCaptions: true }) };
         const next: EditSpec = { ...spec, overlays: [...spec.overlays.filter((o) => o.id !== id), overlay].sort((a, b) => a.start - b.start) };
         const { version } = saveEditVersion(edit.id, { author: 'claude', message: `${sceneId ? 'Reworked' : 'Added'} the scene “${scene.name}”`, spec: next });
         return ok(

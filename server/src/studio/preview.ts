@@ -94,7 +94,8 @@ async function run(editId: string, overlayId: string, times?: number[]) {
     const chrome = await ensureRenderer();
     const output = join(dir, 'preview.mp4');
     await runWorker({ projectDir: dir, output, fps: PREVIEW_FPS }, chrome, () => {}, () => {}, new AbortController().signal);
-    const at = (times?.length ? times : [0.15, 0.4, 0.65, 0.9].map((f) => f * len)).slice(0, 6).map((t) => Math.min(Math.max(0, t), Math.max(0, len - 0.05)));
+    // The last frame is a frame before the end (a still asked for later has nothing to show).
+    const at = (times?.length ? times : [0.15, 0.4, 0.65, 0.9].map((f) => f * len)).slice(0, 6).map((t) => Math.min(Math.max(0, t), Math.max(0, len - 1.5 / PREVIEW_FPS)));
     const stills = await extractFrames(output, at, (i) => join(dir, `still-${i}.jpg`), 540);
     return { times: at, images: await Promise.all(stills.map((f) => readFile(f))) };
   } finally {

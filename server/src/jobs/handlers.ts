@@ -1,5 +1,5 @@
 import { workersWith } from '../compute/workers';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Transcript } from '../../../shared/types';
@@ -22,6 +22,7 @@ import { createPiece, getWorkspace } from '../services/pieces';
 import { makeProxy, onProxyFailed } from '../studio/proxy';
 import { onPublishFailed, publishPost } from '../publish/publisher';
 import { renderJob } from '../studio/render';
+import { refineWords, voiceEnvelope } from '../studio/clean-cuts';
 import { checkJob } from '../studio/quality';
 import { onReframeFailed, reframeEdit } from '../studio/reframe';
 import { enqueue, onJobFailed, registerJob } from './queue';
@@ -66,13 +67,24 @@ async function probeMedia({ mediaId }: { mediaId: string }) {
 async function transcribeMedia({ mediaId }: { mediaId: string }) {
   const row = setMedia(mediaId, { transcriptStatus: 'running' });
   const wav = join(config.tmpDir, `${mediaId}.wav`);
+  let transcript: Transcript;
   try {
     await extractAudio(mediaPath(row), wav);
     await runTool('transcribe', { audio: wav, json: transcriptPath(mediaId) }, { model: getSetting('whisperModel') ?? 'small' }, { timeoutMs: 60 * 60 * 1000 });
+    transcript = JSON.parse(await readFile(transcriptPath(mediaId), 'utf8')) as Transcript;
+    // Whisper gives a word the pause before it (a line's first word often starts a second early, in the silence), so a
+    // clip cut in that pause lost the word from its captions. Fitted to the voice, every word starts where it's heard.
+    const fitted = await voiceEnvelope(wav).then(
+      (env) => refineWords(transcript, env),
+      () => null,
+    );
+    if (fitted) {
+      transcript = fitted;
+      await writeFile(transcriptPath(mediaId), JSON.stringify(transcript));
+    }
   } finally {
     await rm(wav, { force: true });
   }
-  const transcript = JSON.parse(await readFile(transcriptPath(mediaId), 'utf8')) as Transcript;
   setMedia(mediaId, { transcriptStatus: 'done', transcriptText: transcript.text, transcriptLang: transcript.language });
   emit({ type: 'job', jobType: 'media.transcribe', status: 'done', workspaceId: row.workspaceId, message: `Transcribed ${row.originalName}` });
 }

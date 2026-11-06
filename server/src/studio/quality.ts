@@ -1,7 +1,6 @@
 import { trimDanglingEnd } from '../clipping/bounds';
-import { isScenePreset, SCENE_LIBRARY } from '../../../shared/scene-library';
 import { eq } from 'drizzle-orm';
-import { editDuration, normalizeEdit, timelineWords, type EditSpec, type TimelineWord } from '../../../shared/edit';
+import { editDuration, holdsCaptions, normalizeEdit, timelineWords, type EditSpec, type TimelineWord } from '../../../shared/edit';
 import { measureEdit, QUALITY_BAR, QUALITY_INFO, qualityScore, qualityText, screenEvents, type BrokenLesson, type QualityItem, type QualityReport } from '../../../shared/quality';
 import { askStructured } from '../claude/oneshot';
 import { playbook } from '../claude/plugin';
@@ -32,7 +31,7 @@ function spokenLines(words: TimelineWord[]) {
 
 /** When the captions stand aside for something on screen (a hook card), so the judge doesn't count them there. */
 function captionsHidden(spec: EditSpec) {
-  const quiet = spec.overlays.filter((o) => (o.type === 'scene' && isScenePreset(o.preset) && SCENE_LIBRARY[o.preset].hidesCaptions) || ((o.type === 'text' || o.type === 'graphic') && o.hidesCaptions));
+  const quiet = spec.overlays.filter(holdsCaptions);
   return quiet.length ? `, hidden while ${quiet.map((o) => `${r1(o.start)}–${r1(o.end)} s`).join(', ')} (nothing but that on screen to read then)` : '';
 }
 

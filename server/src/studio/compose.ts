@@ -7,6 +7,7 @@ import {
   editDuration,
   clipGeometry,
   fillGeometry,
+  holdsCaptions,
   speechSpans,
   timelineWords,
   transitionWindows,
@@ -16,7 +17,6 @@ import {
 } from '../../../shared/edit';
 import type { ClipMotion } from '../../../shared/looks';
 import { ARABIC_FONT, BUNDLED_FONTS, type FontSubset } from '../../../shared/fonts';
-import { isScenePreset, SCENE_LIBRARY } from '../../../shared/scene-library';
 import { captionCss, captionHtml, CAPTION_STYLE, captionTweens } from './captions';
 import { animateIn, filterCss, lookStyle, motionState, motionStyle, motionTweens, splitChars, textureLayers } from './motion';
 import { LEAK_LAYER, OUTGOING_ON_TOP, transitionTweens, WHITE_LAYER } from './transitions';
@@ -302,7 +302,7 @@ export function composeEdit(input: ComposeInput) {
     const c = spec.captions;
     // A scene that shows the words itself (an ayah and its meaning) keeps the captions off while it's on.
     // So does a hook card that asks for it: one thing to read at a time.
-    const quiet = spec.overlays.filter((o) => (o.type === 'scene' && isScenePreset(o.preset) && SCENE_LIBRARY[o.preset].hidesCaptions) || ((o.type === 'text' || o.type === 'graphic') && o.hidesCaptions));
+    const quiet = spec.overlays.filter(holdsCaptions);
     const pages = captionPages(words, c, duration).filter((p) => !quiet.some((o) => (p.start + p.end) / 2 >= o.start && (p.start + p.end) / 2 < o.end));
     pages.forEach((p, i) => {
       body.push(`<div id="p${i}" class="clip layer cap" data-start="${n(p.start)}" data-duration="${n(p.end - p.start)}" data-track-index="3"><div class="line"><div class="ci">${captionHtml(c.preset, p, i)}</div></div></div>`);
