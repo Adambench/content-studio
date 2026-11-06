@@ -838,7 +838,7 @@ professionally with Claude. Laptop first (1920 × 1080).
 | Look | Claude edits in its favourite of 2–3 looks; I can switch after the first render |
 | Footage | What I share lands on the video I pick; the card stays where it is until I tell Claude Code to edit it |
 | Look and feel | Mostly greys, one alarm colour only on what needs me, the page as a small dot (Long Story Short's dot violet: its orange looked like Personal brand's amber). Big text, calm spacing, almost no helper sentences |
-| Phone | Only: footage to a video I pick (shared from the gallery, or the app's *Add footage*: pick clips, then the video), and write scripts (Ready to film, Writing, Ideas). Since 2026-11-05 also *Videos*: watch the videos (Review, Editing, Scheduled, Posted; every page) and their rendered versions; no comments or Approve there |
+| Phone | Only: footage to a video I pick (shared from the gallery, or the app's *Add footage*: pick clips, then the video), and write scripts (Ready to film, Writing, Ideas). Since 2026-11-05 also *Videos*: watch the videos (Review, Editing, Scheduled, Posted; every page) and their rendered versions; no comments or Approve there. Since 0.3.3 (2026-11-05) one *Videos* list per page from idea to posted (Review first), and a card shows its script and its video at every stage, like the laptop |
 
 Build (after the mockup):
 - [x] Mockup: Home, a card being written, a card in review, Calendar, the phone (share + scripts), with my real titles (three rounds, approved 2026-11-05)

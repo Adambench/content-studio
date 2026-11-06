@@ -1,5 +1,5 @@
 import { Paperclip } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { COLUMN_LABELS, COLUMN_STAGE, isWritingColumn, WRITING_COLUMNS, type BoardColumn, type WritingColumn } from '@shared/board';
 import { PieceUploads, usePieceUploads } from '@/components/AppChrome';
@@ -137,9 +137,10 @@ export function CardHeader({ piece, column, series, phone = false }: { piece: Pi
 
 /**
  * A card's document: Script, then Notes under it, Hooks and Directions beside it, and the footage I sent for it. The
- * laptop shows it at every stage under the card's header (CardPage); the phone shows it, with the header, while I write.
+ * laptop shows it under the card's header (CardPage); the phone shows it with the header, the video `above` or
+ * `below` it, and Hooks and Directions at the bottom.
  */
-export function WriteView({ piece, draft: shared, phone }: { piece: PieceDetail; draft: CardDraft; phone?: { column: BoardColumn; series: Series | null } }) {
+export function WriteView({ piece, draft: shared, phone }: { piece: PieceDetail; draft: CardDraft; phone?: { column: BoardColumn; series: Series | null; above?: ReactNode; below?: ReactNode } }) {
   const { draft, change, ready } = shared;
   const { help, ask, close } = useHelp(piece.id);
   const [uploading, setUploading] = useState<number | null>(null);
@@ -271,8 +272,12 @@ export function WriteView({ piece, draft: shared, phone }: { piece: PieceDetail;
       <div className="flex h-full flex-col">
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pt-2 pb-8">
           <CardHeader piece={piece} column={phone.column} series={phone.series} phone />
-          {doc}
-          {footageList}
+          {phone.above}
+          <div className={cn('space-y-5', phone.above && 'border-t pt-5')}>
+            {doc}
+            {footageList}
+          </div>
+          {phone.below && <div className="border-t pt-5">{phone.below}</div>}
         </div>
         <div className="pb-safe flex gap-2 border-t bg-sidebar px-4 pt-2.5">
           <div className="flex w-full gap-2 pb-2.5 [&>button]:flex-1">{helpButtons}</div>

@@ -11,13 +11,10 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Spinner } from '@/components/ui/spinner';
 import { api, errorMessage } from '@/lib/api';
-import { pagePath, sectionOf, sectionsFor, writes } from '@/lib/nav';
+import { LIST_ORDER, pagePath, sectionOf, sectionsFor, writes } from '@/lib/nav';
 import { keys, queryClient, useBoardData, usePiece } from '@/lib/queries';
 import type { PieceDetail } from '@/lib/types';
 import { cn } from '@/lib/utils';
-
-/** The sidebar on a page I write for: what waits for me, what's being made, what I'm writing, then what's gone out. */
-const WRITER_ORDER: readonly BoardColumn[] = ['review', 'editing', 'film', 'writing', 'ideas', 'scheduled', 'posted'];
 
 /** The cards of the same page, to jump between them. */
 function Sidebar({ items, current, columns }: { items: BoardItem[]; current: BoardItem; columns: readonly BoardColumn[] }) {
@@ -104,7 +101,7 @@ export function CardPage() {
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[18rem_minmax(0,1fr)]">
-      <Sidebar items={siblings} current={item} columns={writes(kind) ? WRITER_ORDER : VIDEO_COLUMNS} />
+      <Sidebar items={siblings} current={item} columns={writes(kind) ? LIST_ORDER : VIDEO_COLUMNS} />
       <div className="min-h-0 overflow-y-auto">
         <div className="flex items-center px-12 pt-5">
           <Link to={back} className="text-sm text-muted-foreground hover:text-foreground">

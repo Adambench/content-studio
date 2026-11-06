@@ -45,7 +45,7 @@ export const router = createBrowserRouter([
           { path: 'w/:wid/p/:pid', element: <Legacy /> },
           { path: 'w/:wid/p/:pid/edit', element: <Legacy /> },
           { path: 'w/:wid/*', element: <Legacy /> },
-          // The phone's video list (PhoneShell); the laptop's videos are on the board.
+          // The phone's old Videos list (one list at / since 0.3.3); the laptop's videos are on the board.
           { path: 'videos', element: <Navigate to="/" replace /> },
           { path: 'today', element: <Navigate to="/" replace /> },
           { path: 'review', element: <Navigate to="/" replace /> },

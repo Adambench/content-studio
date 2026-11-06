@@ -2,7 +2,7 @@ import { ChevronLeft, Paperclip, Plus, Settings } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link, Navigate, Outlet, useMatch, useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { COLUMN_LABELS, isWritingColumn, WRITING_COLUMNS, type BoardColumn, type BoardItem } from '@shared/board';
+import { COLUMN_LABELS, isWritingColumn, type BoardItem } from '@shared/board';
 import { useVideoVersions, VersionStrip } from '@/components/card/ReviewView';
 import { useDraft } from '@/components/card/useDraft';
 import { WriteView } from '@/components/card/WriteView';
@@ -10,20 +10,17 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { api, errorMessage, mediaFileUrl } from '@/lib/api';
 import { duration } from '@/lib/format';
-import { writes } from '@/lib/nav';
+import { LIST_ORDER, writes } from '@/lib/nav';
 import { isNative, Studio } from '@/lib/native';
 import { keys, queryClient, useBoardData, usePiece } from '@/lib/queries';
 import type { PieceDetail } from '@/lib/types';
+import { createStore, useStore } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
 import { pickedFiles } from '@/pages/SharePage';
 import { uploadSummary, UploadsButton, usePieceUploads } from './AppChrome';
 
-/** The pages on the phone: the ones I write for (Scripts), or every page (Videos, clips too). */
-function usePhonePages(videos: boolean) {
-  const board = useBoardData();
-  const pages = (board.data?.pages ?? []).filter((p) => !p.hidden && (videos || writes(p.kind)));
-  return { board, pages };
-}
+/** The page the phone's list shows (the first page I write for until I pick one), kept when I open a card and come back. */
+const phonePage = createStore('', 'cs.phonePage');
 
 /** Pick clips (Android's picker, or the browser's), then say which video they're for. */
 function AddFootage() {
@@ -90,29 +87,15 @@ function Row({ item }: { item: BoardItem }) {
   );
 }
 
-/** Scripts or Videos, the phone's two lists. */
-function ListSwitch({ videos }: { videos: boolean }) {
-  return (
-    <div className="flex gap-1.5 px-4 pb-1">
-      {[
-        { to: '/', label: 'Scripts', on: !videos },
-        { to: '/videos', label: 'Videos', on: videos },
-      ].map((t) => (
-        <Link key={t.to} to={t.to} replace className={cn('rounded-full px-3.5 py-1.5 text-[15px]', t.on ? 'bg-muted text-foreground' : 'text-muted-foreground')}>
-          {t.label}
-        </Link>
-      ))}
-    </div>
-  );
-}
-
-/** The phone's lists: my scripts (Ready to film first), or the videos Claude made (Review first) to watch. */
-function Scripts({ videos }: { videos: boolean }) {
-  const { board, pages } = usePhonePages(videos);
-  const [wid, setWid] = useState('');
+/** The phone's one list, like the laptop's Videos board: a page's cards from idea to posted, Review first. */
+function Videos() {
+  const board = useBoardData();
+  const wid = useStore(phonePage);
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
-  const page = pages.find((p) => p.id === wid) ?? pages[0];
+  const pages = (board.data?.pages ?? []).filter((p) => !p.hidden);
+  const page = pages.find((p) => p.id === wid) ?? pages.find((p) => writes(p.kind)) ?? pages[0];
+  const writer = !!page && writes(page.kind);
 
   async function add() {
     const t = title.trim();
@@ -133,14 +116,13 @@ function Scripts({ videos }: { videos: boolean }) {
         <Spinner />
       </div>
     );
-  const items = board.data.items.filter((i) => i.workspaceId === page?.id && isWritingColumn(i.column) !== videos);
-  const columns: readonly BoardColumn[] = videos ? ['review', 'editing', 'scheduled', 'posted'] : [...WRITING_COLUMNS].reverse();
+  const items = board.data.items.filter((i) => i.workspaceId === page?.id);
   return (
     <>
       <header className="pt-safe flex items-center gap-2 px-4 pb-2">
         <div className="flex h-14 min-w-0 flex-1 items-center gap-2">
           {pages.length > 1 ? (
-            <select value={page?.id} onChange={(e) => setWid(e.target.value)} className="min-w-0 truncate bg-transparent text-2xl font-semibold outline-none">
+            <select value={page?.id} onChange={(e) => phonePage.set(e.target.value)} className="min-w-0 truncate bg-transparent text-2xl font-semibold outline-none">
               {pages.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -148,12 +130,12 @@ function Scripts({ videos }: { videos: boolean }) {
               ))}
             </select>
           ) : (
-            <h1 className="text-2xl font-semibold">{videos ? 'Videos' : 'Scripts'}</h1>
+            <h1 className="text-2xl font-semibold">Videos</h1>
           )}
         </div>
         <UploadsButton />
         <AddFootage />
-        {!videos && (
+        {writer && (
           <Button size="icon" className="size-10 rounded-full" aria-label="New idea" onClick={() => setAdding(true)}>
             <Plus />
           </Button>
@@ -164,7 +146,6 @@ function Scripts({ videos }: { videos: boolean }) {
           </Link>
         </Button>
       </header>
-      <ListSwitch videos={videos} />
       <div className="pb-safe min-h-0 flex-1 overflow-y-auto px-4 pb-6">
         {adding && (
           <input
@@ -177,8 +158,8 @@ function Scripts({ videos }: { videos: boolean }) {
             className="mb-3 w-full rounded-xl border bg-muted/40 px-4 py-3.5 text-base outline-none"
           />
         )}
-        {columns.map((c) => {
-          const list = items.filter((i) => i.column === c).sort((a, b) => (videos ? b.updatedAt - a.updatedAt : a.position - b.position));
+        {LIST_ORDER.map((c) => {
+          const list = items.filter((i) => i.column === c).sort((a, b) => (isWritingColumn(c) ? a.position - b.position : b.updatedAt - a.updatedAt));
           if (!list.length) return null;
           return (
             <section key={c}>
@@ -191,21 +172,20 @@ function Scripts({ videos }: { videos: boolean }) {
             </section>
           );
         })}
-        {!items.length && !adding && <p className="pt-10 text-center text-muted-foreground">{videos ? 'No videos yet' : 'No scripts yet'}</p>}
+        {!items.length && !adding && <p className="pt-10 text-center text-muted-foreground">No videos yet</p>}
       </div>
     </>
   );
 }
 
-/** A video on the phone, to watch: the newest render, and a tap on an older version plays that one instead. */
+/** A card's video on the phone, to watch: the newest render, and a tap on an older version plays that one instead. */
 function PhoneVideo({ piece }: { piece: PieceDetail }) {
   const { versions, current, loading } = useVideoVersions(piece.id);
   const [picked, setPicked] = useState<string | null>(null);
   const mediaId = picked ?? current?.mediaId;
   const playing = versions.find((v) => v.render?.mediaId === mediaId)?.render ?? current;
   return (
-    <div className="pb-safe h-full space-y-4 overflow-y-auto px-4 pb-8">
-      <h1 className="text-xl font-semibold">{piece.title}</h1>
+    <div className="space-y-4">
       {mediaId ? (
         <>
           <video key={mediaId} src={mediaFileUrl(mediaId)} controls playsInline preload="metadata" className="mx-auto aspect-[9/16] max-h-[72vh] w-full rounded-xl bg-black" />
@@ -222,23 +202,40 @@ function PhoneVideo({ piece }: { piece: PieceDetail }) {
   );
 }
 
-/** A script on the phone: the same document as on the laptop. */
-function PhoneScript({ piece, item }: { piece: PieceDetail; item: BoardItem }) {
+/**
+ * A card on a page I write for, at any stage, as on the laptop: the document and the video, the one the stage needs
+ * first. While I write, the video shows once one was made.
+ */
+function PhoneDoc({ piece, item }: { piece: PieceDetail; item: BoardItem }) {
   const draft = useDraft(piece);
-  return <WriteView piece={piece} draft={draft} phone={{ column: item.column, series: item.series }} />;
+  const { current } = useVideoVersions(piece.id);
+  const writing = isWritingColumn(item.column);
+  const video = <PhoneVideo piece={piece} />;
+  return <WriteView piece={piece} draft={draft} phone={{ column: item.column, series: item.series, above: writing ? undefined : video, below: writing && current ? video : undefined }} />;
 }
 
-/** One script on the phone, or a video to watch. */
+/** A clip (a clipping page's card): its video to watch. */
+function PhoneClip({ piece }: { piece: PieceDetail }) {
+  return (
+    <div className="pb-safe h-full space-y-4 overflow-y-auto px-4 pb-8">
+      <h1 className="text-xl font-semibold">{piece.title}</h1>
+      <PhoneVideo piece={piece} />
+    </div>
+  );
+}
+
+/** One card on the phone. */
 function PhoneCard({ id }: { id: string }) {
   const piece = usePiece(id);
   const board = useBoardData();
   const item = board.data?.items.find((i) => i.id === id);
+  const kind = board.data?.pages.find((p) => p.id === item?.workspaceId)?.kind ?? 'personal';
   return (
     <>
       <header className="pt-safe flex items-center gap-2 px-2">
         <div className="flex h-14 flex-1 items-center">
           <Button variant="ghost" size="icon" className="size-10" aria-label="Back" asChild>
-            <Link to={item && !isWritingColumn(item.column) ? '/videos' : '/'}>
+            <Link to="/">
               <ChevronLeft className="size-6" />
             </Link>
           </Button>
@@ -248,10 +245,10 @@ function PhoneCard({ id }: { id: string }) {
       <div className="min-h-0 flex-1">
         {!piece.data || !item ? (
           <div className="grid h-full place-items-center">{piece.isError ? <p className="text-muted-foreground">This card is gone.</p> : <Spinner />}</div>
-        ) : isWritingColumn(item.column) ? (
-          <PhoneScript key={id} piece={piece.data} item={item} />
+        ) : writes(kind) ? (
+          <PhoneDoc key={id} piece={piece.data} item={item} />
         ) : (
-          <PhoneVideo key={id} piece={piece.data} />
+          <PhoneClip key={id} piece={piece.data} />
         )}
       </div>
     </>
@@ -264,14 +261,13 @@ function PhoneCard({ id }: { id: string }) {
  */
 export function PhoneShell() {
   const home = useMatch('/');
-  const videos = useMatch('/videos');
   const card = useMatch('/c/:id');
   const share = useMatch('/share');
   const settings = useMatch('/settings/*');
   const passthrough = share || settings;
   return (
     <div className="flex h-full flex-col">
-      {home || videos ? <Scripts key={videos ? 'videos' : 'scripts'} videos={!!videos} /> : card?.params.id ? <PhoneCard id={card.params.id} /> : passthrough ? <Outlet /> : <Navigate to="/" replace />}
+      {home ? <Videos /> : card?.params.id ? <PhoneCard id={card.params.id} /> : passthrough ? <Outlet /> : <Navigate to="/" replace />}
     </div>
   );
 }
