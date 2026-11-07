@@ -1,9 +1,10 @@
-import { Paperclip } from 'lucide-react';
+import { Paperclip, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { COLUMN_LABELS, COLUMN_STAGE, isWritingColumn, WRITING_COLUMNS, type BoardColumn, type WritingColumn } from '@shared/board';
 import { PieceUploads, usePieceUploads } from '@/components/AppChrome';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Spinner } from '@/components/ui/spinner';
@@ -12,7 +13,7 @@ import { duration } from '@/lib/format';
 import { isApp, pickAndUpload } from '@/lib/native';
 import { seriesPath } from '@/lib/nav';
 import { keys, queryClient, useSeries } from '@/lib/queries';
-import type { PieceDetail } from '@/lib/types';
+import type { Media, PieceDetail } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { renameCard, type CardDraft } from './useDraft';
 
@@ -176,6 +177,7 @@ export function WriteView({ piece, draft: shared, phone }: { piece: PieceDetail;
   const { draft, change, ready } = shared;
   const { help, ask, close } = useHelp(piece.id);
   const [uploading, setUploading] = useState<number | null>(null);
+  const [removing, setRemoving] = useState<Media | null>(null);
   const file = useRef<HTMLInputElement>(null);
 
   const labels = draft.labels ?? { script: 'Script', notes: 'Notes' };
@@ -212,6 +214,17 @@ export function WriteView({ piece, draft: shared, phone }: { piece: PieceDetail;
       toast.error(errorMessage(err));
     } finally {
       setUploading(null);
+    }
+  }
+
+  async function removeFootage(m: Media) {
+    try {
+      await api(`/media/${m.id}`, { method: 'DELETE' });
+      void queryClient.invalidateQueries({ queryKey: keys.piece(piece.id) });
+      void queryClient.invalidateQueries({ queryKey: keys.boardAll });
+      toast(`“${m.originalName}” removed`);
+    } catch (err) {
+      toast.error(errorMessage(err));
     }
   }
 
@@ -285,15 +298,32 @@ export function WriteView({ piece, draft: shared, phone }: { piece: PieceDetail;
       {footage.length ? (
         <ul className="flex flex-wrap gap-2">
           {footage.map((m) => (
-            <li key={m.id} className="rounded-md bg-muted px-3 py-1.5 text-sm text-muted-foreground">
+            <li key={m.id} className="flex items-center gap-1 rounded-md bg-muted py-1 pr-1 pl-3 text-sm text-muted-foreground">
               {m.originalName}
-              {m.durationMs ? <span className="ml-2 tabular-nums">{duration(m.durationMs)}</span> : null}
+              {m.durationMs ? <span className="ml-1 tabular-nums">{duration(m.durationMs)}</span> : null}
+              <Button variant="ghost" size={phone ? 'icon-sm' : 'icon-xs'} aria-label={`Remove ${m.originalName}`} onClick={() => setRemoving(m)}>
+                <X />
+              </Button>
             </li>
           ))}
         </ul>
       ) : sending.length ? null : (
         <p className="text-[15px] text-muted-foreground">None yet</p>
       )}
+      <AlertDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove “{removing?.originalName}”?</AlertDialogTitle>
+            <AlertDialogDescription>The file goes. Renders already made stay.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => removing && void removeFootage(removing)}>
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 
