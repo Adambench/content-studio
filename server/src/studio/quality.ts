@@ -16,17 +16,52 @@ import { onCancel, setRender } from './render';
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
-/** What's said, in lines with their times: a new line at a pause or every ~14 words. */
+/**
+ * What's said, in lines with their times: a new line at a pause or every ~14 words. A cut between two clips is marked
+ * ✂ where it falls in the words, so the judge reads whether it lands between sentences instead of guessing from the
+ * word pace (a line wrapping at 14 words looked like a cut mid-sentence).
+ */
 function spokenLines(words: TimelineWord[]) {
   const lines: { start: number; end: number; text: string[] }[] = [];
+  let clip: string | undefined;
   for (const w of words) {
     const last = lines[lines.length - 1];
+    const word = clip !== undefined && w.clipId !== clip ? `✂ ${w.text}` : w.text;
+    clip = w.clipId;
     if (last && w.start - last.end < 0.5 && last.text.length < 14) {
-      last.text.push(w.text);
+      last.text.push(word);
       last.end = w.end;
-    } else lines.push({ start: w.start, end: w.end, text: [w.text] });
+    } else lines.push({ start: w.start, end: w.end, text: [word] });
   }
   return lines.map((l) => `[${r1(l.start)}–${r1(l.end)}] ${l.text.join(' ')}`);
+}
+
+/**
+ * The words a scene puts on screen, each from when it comes in (its first tween from opacity 0, on it or a box it
+ * sits in) until it goes (a tween to opacity 0 on it or its box, else the scene's end): a scene's text is text on
+ * screen too, and scenes that overlap are on screen together.
+ */
+function sceneText(o: Extract<EditSpec['overlays'][number], { type: 'scene' }>) {
+  const byId = new Map(o.elements.map((e) => [e.id, e]));
+  const chain = (id: string) => {
+    const ids: string[] = [];
+    for (let e = byId.get(id); e && !ids.includes(e.id); e = e.parent ? byId.get(e.parent) : undefined) ids.push(e.id);
+    return ids;
+  };
+  const on = (id: string) => o.tweens.filter((t) => t.targets.split(',').some((x) => x.trim().split('.')[0] === id));
+  // Shown once it and every box it sits in have come in; gone when the first of them fades out after that.
+  const cameIn = (id: string) => Math.min(Infinity, ...on(id).filter((t) => t.from && Number(t.from.opacity) === 0 && Number(t.to.opacity ?? 1) > 0).map((t) => t.at));
+  const shown = (id: string) => Math.max(0, ...chain(id).map((x) => (Number.isFinite(cameIn(x)) ? cameIn(x) : 0)));
+  const gone = (id: string, from: number) => Math.min(o.end - o.start, ...chain(id).flatMap((x) => on(x).filter((t) => t.at > from && Number(t.to.opacity) === 0).map((t) => t.at + t.duration)));
+  return o.elements
+    .filter((e) => e.kind === 'text' && e.text?.trim())
+    .map((e) => {
+      const at = shown(e.id);
+      return { at: o.start + at, until: o.start + gone(e.id, at), text: e.text!.replace(/\*/g, '').replace(/\s+/g, ' ').trim() };
+    })
+    .filter((t) => t.until > t.at)
+    .sort((a, b) => a.at - b.at)
+    .map((t) => `“${t.text.slice(0, 40)}” ${r1(t.at)}–${r1(t.until)} s`);
 }
 
 /** When the captions stand aside for something on screen (a hook card), so the judge doesn't count them there. */
@@ -36,7 +71,7 @@ function captionsHidden(spec: EditSpec) {
 }
 
 /** The edit as the judge reads it: the story, what's said and what appears on screen, second by second. */
-function storyboard(spec: EditSpec, words: TimelineWord[], measured: QualityItem[]) {
+export function storyboard(spec: EditSpec, words: TimelineWord[], measured: QualityItem[]) {
   const duration = editDuration(spec);
   const rec = spec.recipe;
   const events = screenEvents(spec);
@@ -44,7 +79,7 @@ function storyboard(spec: EditSpec, words: TimelineWord[], measured: QualityItem
     `Length: ${r1(duration)} s, ${spec.format}.${rec ? ` A ${rec.kind} format video${rec.kind === 'story' ? ` (the post card reads “${rec.title}” until ${r1(rec.titleEnd)} s)` : ''}.` : ''}`,
     `Story named in the edit: promise “${spec.story.promise || '(not named)'}”; payoff “${spec.story.payoff || '(not named)'}”; payoff at ${spec.story.payoffAt === null ? '(not placed)' : `${r1(spec.story.payoffAt)} s`}.`,
     `Captions: ${spec.captions.enabled ? `on (${spec.captions.preset}, ${spec.captions.maxWords} words at a time)${captionsHidden(spec)}` : 'off'}.`,
-    `What's said (seconds on the finished video):\n${spokenLines(words).join('\n') || '(nothing: no speech)'}`,
+    `What's said (seconds on the finished video; ✂ = a cut to the next clip, exactly where it falls in the words):\n${spokenLines(words).join('\n') || '(nothing: no speech)'}`,
     `What appears on screen:\n${
       events
         .slice(0, 80)
@@ -52,9 +87,13 @@ function storyboard(spec: EditSpec, words: TimelineWord[], measured: QualityItem
         .join('\n') || '(nothing changes: one shot)'
     }\nText on screen: ${
       spec.overlays
-        .filter((o) => o.type === 'text' || o.type === 'graphic')
+        .filter((o) => o.type === 'text' || o.type === 'graphic' || o.type === 'scene')
         .slice(0, 30)
-        .map((o) => `${r1(o.start)}–${r1(o.end)} s ${o.type === 'graphic' ? o.template : o.style} “${[o.text, o.type === 'graphic' ? o.sub : '', ...(o.type === 'graphic' ? o.items : [])].filter(Boolean).join(' / ')}”`)
+        .map((o) =>
+          o.type === 'scene'
+            ? `${r1(o.start)}–${r1(o.end)} s scene “${o.name}”: ${sceneText(o).join(', ') || '(no words)'}`
+            : `${r1(o.start)}–${r1(o.end)} s ${o.type === 'graphic' ? o.template : o.style} “${[o.text, o.type === 'graphic' ? o.sub : '', ...(o.type === 'graphic' ? o.items : [])].filter(Boolean).join(' / ')}”`,
+        )
         .join('; ') || '(none)'
     }`,
     `Measured:\n${measured.map((i) => `- ${QUALITY_INFO[i.criterion].label}: ${i.score}/10 (${i.measured})`).join('\n')}`,
