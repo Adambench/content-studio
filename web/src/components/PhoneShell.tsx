@@ -1,4 +1,4 @@
-import { ChevronLeft, Paperclip, Plus, Settings } from 'lucide-react';
+import { Check, ChevronLeft, Download, Paperclip, Plus, Settings } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link, Navigate, Outlet, useMatch, useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -8,13 +8,14 @@ import { useDraft } from '@/components/card/useDraft';
 import { WriteView } from '@/components/card/WriteView';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { api, errorMessage, mediaFileUrl } from '@/lib/api';
+import { api, ApiError, errorMessage, mediaFileUrl } from '@/lib/api';
+import { downloadVideo, savedVideoUrl, useDownload, videoName } from '@/lib/downloads';
 import { duration } from '@/lib/format';
 import { LIST_ORDER, writes } from '@/lib/nav';
 import { isNative, Studio } from '@/lib/native';
 import { keys, queryClient, useBoardData, usePiece } from '@/lib/queries';
 import type { PieceDetail } from '@/lib/types';
-import { createStore, useStore } from '@/lib/ui-state';
+import { createStore, serverReachable, useStore } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
 import { pickedFiles } from '@/pages/SharePage';
 import { uploadSummary, UploadsButton, usePieceUploads } from './AppChrome';
@@ -112,9 +113,7 @@ function Videos() {
 
   if (!board.data)
     return (
-      <div className="grid flex-1 place-items-center">
-        <Spinner />
-      </div>
+      <div className="grid flex-1 place-items-center text-muted-foreground">{board.isError || board.isPaused ? 'Can’t reach your computer' : <Spinner />}</div>
     );
   const items = board.data.items.filter((i) => i.workspaceId === page?.id);
   return (
@@ -178,21 +177,69 @@ function Videos() {
   );
 }
 
-/** A card's video on the phone, to watch: the newest render, and a tap on an older version plays that one instead. */
+/** Save the video playing to the phone (the gallery), and how that's going. */
+function SaveVideo({ mediaId, name }: { mediaId: string; name: string }) {
+  const saved = useDownload(mediaId);
+  const reachable = useStore(serverReachable);
+  const [starting, setStarting] = useState(false);
+  if (saved?.state === 'done')
+    return (
+      <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+        <Check className="size-4" /> On this phone
+      </span>
+    );
+  if (saved?.state === 'running')
+    return (
+      <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground tabular-nums">
+        <Spinner /> {Math.round(saved.progress * 100)}%
+      </span>
+    );
+  if (!reachable) return null;
+  async function start() {
+    setStarting(true);
+    try {
+      await downloadVideo(mediaId, name);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setStarting(false);
+    }
+  }
+  return (
+    <Button variant="ghost" size="sm" className={cn('-mr-2 text-[13px]', saved?.state === 'failed' ? 'text-destructive' : 'text-muted-foreground')} onClick={start} disabled={starting}>
+      {starting ? <Spinner /> : <Download />} {saved?.state === 'failed' ? 'Download again' : 'Download'}
+    </Button>
+  );
+}
+
+/**
+ * A card's video on the phone, to watch: the newest render, and a tap on an older version plays that one instead.
+ * A video saved to the phone plays from there; without the computer, only those play.
+ */
 function PhoneVideo({ piece }: { piece: PieceDetail }) {
   const { versions, current, loading } = useVideoVersions(piece.id);
   const [picked, setPicked] = useState<string | null>(null);
+  const reachable = useStore(serverReachable);
   const mediaId = picked ?? current?.mediaId;
+  const saved = useDownload(mediaId);
   const playing = versions.find((v) => v.render?.mediaId === mediaId)?.render ?? current;
+  const src = !mediaId ? null : saved?.state === 'done' ? savedVideoUrl(mediaId) : reachable ? mediaFileUrl(mediaId) : null;
   return (
     <div className="space-y-4">
       {mediaId ? (
         <>
-          <video key={mediaId} src={mediaFileUrl(mediaId)} controls playsInline preload="metadata" className="mx-auto aspect-[9/16] max-h-[72vh] w-full rounded-xl bg-black" />
-          <p className="text-[13px] text-muted-foreground">
-            v{playing?.versionNumber ?? '?'}
-            {playing?.id === current?.id && ' · now'}
-          </p>
+          {src ? (
+            <video key={src} src={src} controls playsInline preload="metadata" className="mx-auto aspect-[9/16] max-h-[72vh] w-full rounded-xl bg-black" />
+          ) : (
+            <div className="grid aspect-[9/16] max-h-[72vh] w-full place-items-center rounded-xl bg-muted px-8 text-center text-muted-foreground">Not on this phone: download it while your computer is reachable</div>
+          )}
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[13px] text-muted-foreground">
+              v{playing?.versionNumber ?? '?'}
+              {playing?.id === current?.id && ' · now'}
+            </p>
+            <SaveVideo mediaId={mediaId} name={videoName(piece.title, playing?.versionNumber)} />
+          </div>
           <VersionStrip versions={versions} current={current} selected={picked} onPick={setPicked} />
         </>
       ) : (
@@ -244,7 +291,15 @@ function PhoneCard({ id }: { id: string }) {
       </header>
       <div className="min-h-0 flex-1">
         {!piece.data || !item ? (
-          <div className="grid h-full place-items-center">{piece.isError ? <p className="text-muted-foreground">This card is gone.</p> : <Spinner />}</div>
+          <div className="grid h-full place-items-center">
+            {piece.error instanceof ApiError && piece.error.status === 404 ? (
+              <p className="text-muted-foreground">This card is gone.</p>
+            ) : piece.isError || piece.isPaused || board.isPaused ? (
+              <p className="text-muted-foreground">Can’t reach your computer</p>
+            ) : (
+              <Spinner />
+            )}
+          </div>
         ) : writes(kind) ? (
           <PhoneDoc key={id} piece={piece.data} item={item} />
         ) : (

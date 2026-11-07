@@ -87,7 +87,11 @@ export async function mediaRoutes(app: FastifyInstance) {
     const row = getMedia(req.params.id);
     const path = mediaPath(row);
     reply.header('Cache-Control', 'private, max-age=31536000, immutable');
-    if (req.query.download) reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(row.originalName)}`);
+    if (req.query.download) {
+      // A plain name for clients that don't read the UTF-8 one (a render is called "<title> · v3.mp4").
+      const plain = row.originalName.replace(/[^\x20-\x7e]+/g, '-').replace(/["\\/]/g, '-');
+      reply.header('Content-Disposition', `attachment; filename="${plain}"; filename*=UTF-8''${encodeURIComponent(row.originalName).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`);
+    }
     return reply.type(row.mime).sendFile(row.fileName, dirname(path));
   });
 

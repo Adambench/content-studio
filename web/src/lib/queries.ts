@@ -1,4 +1,4 @@
-import { QueryClient, useQuery } from '@tanstack/react-query';
+import { QueryClient, queryOptions, useQuery } from '@tanstack/react-query';
 import { api } from './api';
 import type { WorkerInfo } from '@shared/compute';
 import type { PairedDevice } from '@shared/devices';
@@ -82,7 +82,8 @@ export const useCampaignLinks = (wid: string) => useQuery({ queryKey: keys.campa
 export const useAuth = () => useQuery({ queryKey: keys.auth, queryFn: () => api<AuthStatus>('/auth/status'), staleTime: Infinity });
 export const useWorkspaces = () => useQuery({ queryKey: keys.workspaces, queryFn: () => api<Workspace[]>('/workspaces') });
 export const useWorkspace = (id: string) => useQuery({ queryKey: keys.workspace(id), queryFn: () => api<Workspace>(`/workspaces/${id}`) });
-export const usePiece = (id: string) => useQuery({ queryKey: keys.piece(id), queryFn: () => api<PieceDetail>(`/pieces/${id}`), enabled: !!id });
+export const pieceQuery = (id: string) => queryOptions({ queryKey: keys.piece(id), queryFn: () => api<PieceDetail>(`/pieces/${id}`) });
+export const usePiece = (id: string) => useQuery({ ...pieceQuery(id), enabled: !!id });
 
 /** Comments pinned to moments of the finished video. While some are open it looks again every 20 s: Claude Code answers them straight in the database. */
 export const useNotes = (pieceId: string) =>
@@ -92,9 +93,11 @@ export const useNotes = (pieceId: string) =>
     enabled: !!pieceId,
     refetchInterval: (q) => (q.state.data?.some((n) => n.status === 'open') ? 20_000 : false),
   });
-export const useRenders = (pieceId: string) => useQuery({ queryKey: keys.renders(pieceId), queryFn: () => api<RenderRow[]>(`/pieces/${pieceId}/renders`) });
+export const rendersQuery = (pieceId: string) => queryOptions({ queryKey: keys.renders(pieceId), queryFn: () => api<RenderRow[]>(`/pieces/${pieceId}/renders`) });
+export const useRenders = (pieceId: string) => useQuery(rendersQuery(pieceId));
 /** Every saved version of a piece's edit (under the renders key, so a render's events refresh it too). */
-export const useVersions = (pieceId: string) => useQuery({ queryKey: [...keys.renders(pieceId), 'versions'], queryFn: () => api<VersionRow[]>(`/pieces/${pieceId}/versions`) });
+export const versionsQuery = (pieceId: string) => queryOptions({ queryKey: [...keys.renders(pieceId), 'versions'], queryFn: () => api<VersionRow[]>(`/pieces/${pieceId}/versions`) });
+export const useVersions = (pieceId: string) => useQuery(versionsQuery(pieceId));
 
 
 export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: () => api<AppSettings>('/settings') });

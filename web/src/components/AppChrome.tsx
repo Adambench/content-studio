@@ -36,7 +36,7 @@ export function AppBanners() {
     return (
       <div className="flex items-center gap-2 border-b bg-muted/60 px-3 py-2 text-xs" role="status">
         <CloudOff className="size-4 shrink-0 text-muted-foreground" />
-        <span className="mr-auto">Can’t reach your computer. Captures and uploads wait on this phone and go when it’s back.</span>
+        <span className="mr-auto">Can’t reach your computer. What you write and send waits on this phone and goes when it’s back.</span>
         <Button size="sm" variant="ghost" className="h-7 shrink-0" onClick={retry} disabled={checking}>
           {checking ? <Spinner /> : <RefreshCw />} Retry
         </Button>

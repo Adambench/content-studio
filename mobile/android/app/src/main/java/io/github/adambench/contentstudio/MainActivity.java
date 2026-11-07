@@ -15,5 +15,7 @@ public class MainActivity extends BridgeActivity {
         // The UI draws under the system bars (and pads itself with their insets); light icons on the dark UI. After
         // super.onCreate, which switches from the launch theme: touching the window before that would keep its title bar.
         EdgeToEdge.enable(this, SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT));
+        // Videos saved to the phone play from there (Downloads).
+        if (getBridge() != null) getBridge().setWebViewClient(new StudioWebViewClient(getBridge()));
     }
 }

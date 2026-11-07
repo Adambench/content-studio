@@ -21,7 +21,8 @@ section you need.
   columns from stages in `shared/board.ts`); a card opens at `/c/:id` (`pages/CardPage.tsx`: at every stage the Script
   + Notes document and the render + comments + Approve, the one the stage needs first; one shared `useDraft`). A series
   (`pages/SeriesPage.tsx`, `services/series.ts`) is a name, an About every episode follows, and cards numbered in its
-  order (`pieces.seriesId`, `episode`). The phone gets `components/PhoneShell.tsx` only.
+  order (`pieces.seriesId`, `episode`). The phone gets `components/PhoneShell.tsx` only; offline it reads its copy and queues drafts (`lib/offline.ts`), and
+  plays videos it downloaded (`lib/downloads.ts`).
   `isDesktop` (`lib/desktop.ts`), `isApp`/`isNative` (`lib/native.ts`, the `vite --mode app` build).
 - `mobile/` — Capacitor 8, committed `android/`, one native plugin `StudioPlugin` (Java). CI builds APKs.
 - `shared/` — types for both sides (`types.ts`, `edit.ts`, `campaigns.ts`, `clipping.ts`, …).

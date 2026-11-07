@@ -3,7 +3,8 @@ import { Capacitor, registerPlugin, WebPlugin, type PluginListenerHandle } from 
 import { PushNotifications } from '@capacitor/push-notifications';
 import { API_VERSION, appLink, type Health } from '@shared/devices';
 import { api, setConnection } from './api';
-import { keys, queryClient } from './queries';
+import { clearOffline, restoreOffline, sendOutbox } from './offline';
+import { queryClient } from './queries';
 import { createStore, serverReachable } from './ui-state';
 
 /*
@@ -34,6 +35,8 @@ export type UploadItem = {
   createdAt: number;
 };
 export type SharePayload = { id: string; files: QueuedFile[]; text: string | null };
+/** A video saved to the phone (Movies/Content Studio, through Android's downloads). */
+export type DownloadItem = { mediaId: string; state: 'running' | 'done' | 'failed'; progress: number };
 export type FirebaseOptions = { applicationId: string; apiKey: string; projectId: string; gcmSenderId: string; storageBucket?: string };
 type UploadTarget = { workspaceId: string; pieceId?: string | null; assetType?: string | null; source: 'upload' | 'capture' | 'share' };
 
@@ -58,6 +61,9 @@ type StudioPlugin = {
   retryUpload(o: { id: string }): Promise<void>;
   removeUpload(o: { id: string }): Promise<void>;
   clearFinished(): Promise<void>;
+  /** Save a video to the phone (the gallery's Movies/Content Studio); it then plays from there, offline too. App only (lib/downloads.ts). */
+  download(o: { mediaId: string; name: string }): Promise<void>;
+  listDownloads(): Promise<{ downloads: DownloadItem[] }>;
   canLock(): Promise<{ available: boolean }>;
   unlock(o: { title: string; subtitle?: string }): Promise<{ ok: boolean }>;
   addListener(event: 'share', fn: (s: SharePayload) => void): Promise<PluginListenerHandle>;
@@ -130,6 +136,7 @@ export function checkServer() {
     .then((health) => {
       if (health) compatibility.set({ state: health.api > API_VERSION ? 'app-old' : health.api < API_VERSION ? 'server-old' : 'ok', server: health });
       if (serverReachable.get() !== !!health) serverReachable.set(!!health);
+      if (health) void sendOutbox();
       return health;
     })
     .finally(() => (checking = null));
@@ -146,8 +153,8 @@ export async function pair(server: string, code: string) {
   if (!res.ok || !body.token) throw new Error(body.error ?? `Pairing failed (${res.status}).`);
   await Studio.setPairing({ server, token: body.token });
   queryClient.clear();
-  clearOfflineCache();
-  restoreOfflineCache();
+  await clearOffline();
+  await restoreOffline();
   setConnection(server, body.token);
   pairing.set({ server, token: body.token });
   compatibility.set({ state: health.api > API_VERSION ? 'app-old' : health.api < API_VERSION ? 'server-old' : 'ok', server: health });
@@ -164,7 +171,7 @@ export async function unpair({ revoked = false } = {}) {
   setConnection('', null);
   pairing.set(null);
   queryClient.clear();
-  clearOfflineCache();
+  await clearOffline();
 }
 
 // ---------- notifications (FCM) ----------
@@ -244,33 +251,6 @@ export const openExternal = (url: string) => (isNative ? Studio.openUrl({ url })
 
 // ---------- start-up ----------
 
-// Kept on the phone so capture and the share sheet can pick a workspace while the computer is out of reach.
-const OFFLINE_QUERIES = [keys.workspaces, keys.settings];
-const cacheKey = (key: readonly unknown[]) => `cs.cache.${key.join('.')}`;
-
-let persisting = false;
-
-function restoreOfflineCache() {
-  for (const key of OFFLINE_QUERIES) {
-    try {
-      const raw = localStorage.getItem(cacheKey(key));
-      // Marked as old, so it's refetched as soon as the computer answers.
-      if (raw) queryClient.setQueryData(key, JSON.parse(raw), { updatedAt: 0 });
-    } catch {
-      /* ignore */
-    }
-  }
-  if (persisting) return;
-  persisting = true;
-  queryClient.getQueryCache().subscribe((e) => {
-    if (e.type !== 'updated' || e.action.type !== 'success') return;
-    const key = OFFLINE_QUERIES.find((k) => cacheKey(k) === cacheKey(e.query.queryKey));
-    if (key) localStorage.setItem(cacheKey(key), JSON.stringify(e.query.state.data));
-  });
-}
-
-const clearOfflineCache = () => OFFLINE_QUERIES.forEach((k) => localStorage.removeItem(cacheKey(k)));
-
 /** Runs once before the UI renders in the app build. */
 export async function startApp() {
   if (!isApp) return;
@@ -278,7 +258,7 @@ export async function startApp() {
   if (stored.server && stored.token) {
     setConnection(stored.server, stored.token);
     pairing.set({ server: stored.server, token: stored.token });
-    restoreOfflineCache();
+    await restoreOffline();
     if (lockEnabled.get()) locked.set(true);
     void checkServer();
   } else pairing.set(null);

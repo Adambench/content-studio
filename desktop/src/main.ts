@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, extname, join } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, session, shell, Tray, type MenuItemConstructorOptions } from 'electron';
 import type { BridgeReply, BridgeRequest } from '../../shared/sites';
 import { handleSiteRequest, initSites, SiteError } from './sites';
@@ -311,6 +311,31 @@ function registerIpc() {
   });
 }
 
+// ---------- downloads ----------
+
+/** A free name in the folder: "name.mp4", else "name (2).mp4", … */
+function freePath(dir: string, name: string) {
+  const ext = extname(name);
+  const stem = basename(name, ext);
+  let path = join(dir, name);
+  for (let n = 2; existsSync(path); n++) path = join(dir, `${stem} (${n})${ext}`);
+  return path;
+}
+
+/** A video downloaded from a card goes straight to Downloads, and a notification says so (a click shows it in its folder). */
+function saveDownloads() {
+  session.defaultSession.on('will-download', (_e, item) => {
+    const path = freePath(app.getPath('downloads'), item.getFilename());
+    item.setSavePath(path);
+    item.once('done', (_e, state) => {
+      if (state !== 'completed') return;
+      const notification = new Notification({ title: 'Downloaded', body: basename(path), icon: iconPath });
+      notification.on('click', () => shell.showItemInFolder(path));
+      notification.show();
+    });
+  });
+}
+
 // ---------- startup ----------
 
 app.on('before-quit', () => {
@@ -344,6 +369,7 @@ app.whenReady().then(async () => {
     callback(isAppUrl(wc.getURL()) && ['media', 'notifications', 'clipboard-sanitized-write', 'fullscreen'].includes(permission));
   });
   registerIpc();
+  saveDownloads();
   initSites({ dataDir, iconPath, onChange: () => server?.connected && server.send({ event: 'sites' }) });
 
   try {

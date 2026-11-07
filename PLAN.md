@@ -853,3 +853,13 @@ Build (after the mockup):
   (what every episode follows; Hooks and Directions read it with the other episodes' titles) and its episodes, cards
   numbered in its order (drag to reorder, *+ New episode*; a card's header picks its series). The old name on a card
   became a series, its About from the mind map's series card. Claude Code writes episodes with `npm run series`
+- [x] Offline phone and downloads (2026-11-07, Android 0.3.4): the app keeps the board, every card on it (script,
+  notes, footage) and their versions on the phone (IndexedDB, `web/src/lib/offline.ts`, fetched ahead while the computer
+  answers), so it opens and reads without the computer; what I write meanwhile waits in an outbox and goes when it's
+  back (if Claude or the laptop changed that draft meanwhile, theirs is saved as a version first: *Before the phone's
+  offline changes*). *Download* under a video: the phone saves it through Android's downloads into the gallery
+  (Movies/Content Studio) and plays its own copy afterwards, offline too (`Downloads.java`, served with ranges at
+  `/_studio_download_/<mediaId>` by `StudioWebViewClient`); the laptop's icon under each player saves to Downloads (the
+  desktop app with no dialog, a notification shows it in its folder). Tried in headless Chrome against a test server:
+  list and card offline, outbox with a conflict, the file's name. Not tried on the phone itself: the Android download
+  and offline playback

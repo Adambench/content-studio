@@ -1,11 +1,11 @@
-import { Copy } from 'lucide-react';
+import { Copy, Download } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { BoardItem } from '@shared/board';
 import { NoteComposer, NoteList } from '@/components/package/VideoNotes';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { api, errorMessage, mediaFileUrl } from '@/lib/api';
+import { api, errorMessage, fileUrl, mediaFileUrl } from '@/lib/api';
 import { postWhen } from '@/lib/format';
 import { keys, queryClient, useApprovePlan, useNotes, usePackage, usePiecePosts, useRenders, useVersions } from '@/lib/queries';
 import type { PieceDetail, RenderRow, VersionRow } from '@/lib/types';
@@ -23,7 +23,15 @@ export function Player({ mediaId, label, onVideo, className }: { mediaId: string
   return (
     <figure className={cn('space-y-2', className)}>
       <video ref={onVideo} src={mediaFileUrl(mediaId)} controls playsInline preload="metadata" className="aspect-[9/16] h-[min(66vh,760px)] rounded-xl bg-black" />
-      <figcaption className="text-[13px] text-muted-foreground">{label}</figcaption>
+      <figcaption className="flex items-center justify-between text-[13px] text-muted-foreground">
+        {label}
+        {/* The file goes to Downloads (the desktop app says so when it's there). */}
+        <Button variant="ghost" size="icon-xs" className="text-muted-foreground" aria-label="Download" title="Download" asChild>
+          <a href={fileUrl(`/media/${mediaId}/file?download=1`)} download>
+            <Download />
+          </a>
+        </Button>
+      </figcaption>
     </figure>
   );
 }

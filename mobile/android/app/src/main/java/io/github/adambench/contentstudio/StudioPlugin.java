@@ -434,6 +434,35 @@ public class StudioPlugin extends Plugin {
 
     // ---------- the lock ----------
 
+    // ---------- saving videos to the phone ----------
+
+    @PluginMethod
+    public void download(PluginCall call) {
+        String mediaId = call.getString("mediaId");
+        if (mediaId == null || mediaId.isEmpty()) {
+            call.reject("mediaId is required");
+            return;
+        }
+        Pairing pairing = Pairing.read(getContext());
+        if (pairing == null) {
+            call.reject("Pair the app with your computer first.");
+            return;
+        }
+        try {
+            Downloads.start(getContext(), pairing, mediaId, call.getString("name", "Video.mp4"));
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Couldn’t start the download: " + e.getMessage(), e);
+        }
+    }
+
+    @PluginMethod
+    public void listDownloads(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("downloads", Downloads.list(getContext()));
+        call.resolve(result);
+    }
+
     @PluginMethod
     public void canLock(PluginCall call) {
         JSObject result = new JSObject();
