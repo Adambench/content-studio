@@ -15,7 +15,8 @@ import {
   type EditClip,
   type EditSpec,
 } from '../../../shared/edit';
-import type { ClipMotion } from '../../../shared/looks';
+import { MOTION_SCALE, type ClipMotion } from '../../../shared/looks';
+import type { SpeakerScan } from './reframe';
 import { ARABIC_FONT, BUNDLED_FONTS, type FontSubset } from '../../../shared/fonts';
 import { captionCss, captionHtml, CAPTION_STYLE, captionTweens } from './captions';
 import { animateIn, filterCss, lookStyle, motionState, motionStyle, motionTweens, splitChars, textureLayers } from './motion';
@@ -60,6 +61,8 @@ export type ComposeInput = {
   mascot?: MascotId | null;
   /** How loud the voice is as cut (LUFS, the render measures it): the sounds and the nasheed are set against it. */
   voiceLufs?: number | null;
+  /** The faces in the clips' videos (their kept scans, `keptFaces`): the captions go under them. */
+  faces?: FaceShots;
   /**
    * The Android app's WebView shows the preview from another origin: media is requested with CORS (so the runtime can
    * route audio through Web Audio), and videos get a blank poster instead of the WebView's grey play button.
@@ -99,6 +102,57 @@ const ZOOM_MOVES: ClipMotion[] = ['push-in', 'pull-out', 'punch', 'pulse'];
 function movePivot(clip: Pick<EditClip, 'focusX' | 'focusY' | 'fit' | 'motion'>, g: { left: number; top: number; width: number; height: number }, W: number, H: number, framed: boolean) {
   if (framed || clip.fit === 'whole' || !ZOOM_MOVES.includes(clip.motion)) return { x: W / 2, y: H / 2 };
   return { x: Math.min(W, Math.max(0, g.left + clip.focusX * g.width)), y: Math.min(H, Math.max(0, g.top + clip.focusY * g.height)) };
+}
+
+/** The faces each video's scan found (reframe.ts), shot by shot: the captions keep clear of them. */
+export type FaceShots = Map<string, Pick<SpeakerScan['shots'][number], 'start' | 'end' | 'samples' | 'tracks'>[]>;
+
+/** The lowest the caption line goes to get under a face: Instagram's own caption and buttons sit below it. */
+export const CAPTIONS_LOWEST = 0.8;
+
+/**
+ * Where the caption line sits (0–1 down the frame): its own place, or lower, just under the chin of the lowest face a
+ * clip shows while captions are on (a punch-in moves a face down), never lower than CAPTIONS_LOWEST. Captions on a
+ * mouth hide the person talking.
+ */
+export function captionsClearOfFaces(spec: EditSpec, faces: FaceShots | undefined, sizeOf: (mediaId: string) => { w: number; h: number }) {
+  const c = spec.captions;
+  if (!faces?.size) return c.position;
+  const { width: W, height: H } = EDIT_FORMATS[spec.format];
+  const style = CAPTION_STYLE[c.preset];
+  // Half a line of words (with a box's padding), then a little air under the chin.
+  const half = style.size * c.size * (style.line / 2 + 0.25);
+  const air = 0.01 * H;
+  const quiet = spec.overlays.filter(holdsCaptions);
+  const starts = clipStarts(spec);
+  let lowest = 0;
+  spec.clips.forEach((clip, i) => {
+    const shots = faces.get(clip.mediaId);
+    if (!shots) return;
+    const start = starts[i];
+    const end = start + clipLength(clip);
+    // No captions all through it (a hook card, a scene that shows the words): nothing to keep clear of.
+    if (quiet.some((o) => o.start <= start + 0.05 && o.end >= end - 0.05)) return;
+    const { w, h } = sizeOf(clip.mediaId);
+    const g = clipGeometry(clip, w, h, W, H);
+    const pivot = movePivot(clip, g, W, H, false);
+    const [from, to] = MOTION_SCALE[clip.motion];
+    // A snap zoom is over in a moment: the frame it settles on counts. Any other move counts where it's closest.
+    const scale = clip.motion === 'punch' ? to : Math.max(from, to);
+    for (const shot of shots) {
+      if (shot.end <= clip.in || shot.start >= clip.out) continue;
+      for (const t of shot.tracks) {
+        if (t.n < Math.max(2, shot.samples * 0.3)) continue;
+        const x = g.left + t.x * g.width;
+        if (x < 0 || x > W) continue;
+        // The scan's box ends at the chin; a little more for a nod while talking (it's the shot's middle place).
+        const chin = g.top + (t.y + t.h * 0.58) * g.height;
+        lowest = Math.max(lowest, pivot.y + (chin - pivot.y) * scale);
+      }
+    }
+  });
+  if (!lowest) return c.position;
+  return Math.max(c.position, Math.min(CAPTIONS_LOWEST, Math.round(((lowest + air + half) / H) * 1000) / 1000));
 }
 
 export function composeEdit(input: ComposeInput) {
@@ -301,7 +355,7 @@ export function composeEdit(input: ComposeInput) {
   // ---------- captions ----------
   const words = timelineWords(spec, input.transcripts);
   if (spec.captions.enabled && words.length) {
-    const c = spec.captions;
+    const c = { ...spec.captions, position: captionsClearOfFaces(spec, input.faces, sizeOf) };
     // A scene that shows the words itself (an ayah and its meaning) keeps the captions off while it's on.
     // So does a hook card that asks for it: one thing to read at a time.
     const quiet = spec.overlays.filter(holdsCaptions);

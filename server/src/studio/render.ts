@@ -16,6 +16,7 @@ import { findBinary } from '../lib/bin';
 import { emit } from '../lib/events';
 import { cutSegment, gradeImage, loudness, normalizeLoudness, probe } from '../lib/ffmpeg';
 import { checkCuts, exactPlan, handlePlay } from './exact-cuts';
+import { keptFaces } from './reframe';
 import { badRequest, HttpError, notFound } from '../lib/http';
 import { notify } from '../lib/push';
 import { enqueue } from '../jobs/queue';
@@ -325,6 +326,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
         scripts: GSAP_FILES,
         preview: false,
         voiceLufs,
+        faces: await keptFaces(drawn.clips),
       });
       await writeFile(join(dir, 'index.html'), html);
 

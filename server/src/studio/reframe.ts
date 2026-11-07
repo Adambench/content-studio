@@ -17,6 +17,7 @@ import { clipToolsInstalled } from '../services/cliptools';
 import { getMedia, mediaPath } from '../services/media';
 import { getEdit, saveEditVersion } from './edits';
 import { runTool } from '../compute/run';
+import type { FaceShots } from './compose';
 
 export type SpeakerScan = {
   /** 2: camera changes read from every frame, exact to the frame (older scans are made again). */
@@ -81,6 +82,16 @@ export async function scanSpeakers(file: string, opts: { track?: string; addCuts
 }
 
 const scanCache = (mediaId: string) => join(config.framesDir, `speakers-${mediaId}.json`);
+
+/** The faces in an edit's videos, from the scans kept (none is made here): the captions go under them. */
+export async function keptFaces(clips: { mediaId: string }[]): Promise<FaceShots> {
+  const out: FaceShots = new Map();
+  for (const id of new Set(clips.map((c) => c.mediaId))) {
+    const scan = await readFile(scanCache(id), 'utf8').then((t) => JSON.parse(t) as SpeakerScan, () => null);
+    if (scan?.shots) out.set(id, scan.shots);
+  }
+  return out;
+}
 
 /**
  * A library video's scan, kept beside its frames so the same footage isn't scanned twice (a scan from before camera

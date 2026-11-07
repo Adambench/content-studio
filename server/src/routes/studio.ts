@@ -21,6 +21,7 @@ import { BUNDLED_FONTS, composeEdit } from '../studio/compose';
 import { lookupAyat } from '../islamic/quran';
 import { createEdit, editDetail, findEditForPiece, getEdit, listEditVersions, listRenders, restoreEditVersion, saveEditVersion, specMedia, specTranscripts, updateEditWorking } from '../studio/edits';
 import { proxyPath } from '../studio/proxy';
+import { keptFaces } from '../studio/reframe';
 import { checkEdit } from '../studio/quality';
 import { addNote, deleteNote, listNotes, markReviewed, updateNote } from '../studio/notes';
 import { NOTE_MAX, NOTE_STATUSES } from '../../../shared/notes';
@@ -185,6 +186,7 @@ export async function studioRoutes(app: FastifyInstance) {
       mascot: getWorkspace(edit.workspaceId).mascot,
       media: new Map(rows.map((m) => [m.id, m])),
       transcripts: await specTranscripts(spec, rows),
+      faces: await keptFaces(spec.clips),
       clipSource: (i) => source(spec.clips[i].mediaId, spec.clips[i].in),
       brollSource: (i) => {
         const o = spec.overlays[i];

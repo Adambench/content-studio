@@ -29,7 +29,9 @@ Keep text, faces and anything important out of the platforms' buttons and captio
 | Reels | ~130 px | ~600 px | ~150 px | ~60 px |
 | Shorts | ~130 px | ~30 % of the height | ~120 px | ~60 px |
 
-The middle of the frame is safe everywhere. Keep the speaker's eyes in the upper third.
+The middle of the frame is safe everywhere. Keep the speaker's eyes in the upper third. Captions never cover the face:
+when it fills the middle (a selfie), they go under the chin even if that's inside the bottom zone, their line no
+lower than 80 % of the height (the render places them so).
 
 ## TikTok
 
