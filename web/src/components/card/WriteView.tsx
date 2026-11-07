@@ -1,5 +1,6 @@
 import { Paperclip } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { COLUMN_LABELS, COLUMN_STAGE, isWritingColumn, WRITING_COLUMNS, type BoardColumn, type WritingColumn } from '@shared/board';
 import { PieceUploads, usePieceUploads } from '@/components/AppChrome';
@@ -9,7 +10,8 @@ import { Spinner } from '@/components/ui/spinner';
 import { api, errorMessage, uploadFiles } from '@/lib/api';
 import { duration } from '@/lib/format';
 import { isApp, pickAndUpload } from '@/lib/native';
-import { keys, queryClient } from '@/lib/queries';
+import { seriesPath } from '@/lib/nav';
+import { keys, queryClient, useSeries } from '@/lib/queries';
 import type { PieceDetail } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { renameCard, type CardDraft } from './useDraft';
@@ -86,12 +88,24 @@ function HelpList({ help, onTake }: { help: Help; onTake: (s: string) => void })
 
 const FOOTAGE = new Set(['upload', 'share', 'capture']);
 
-type Series = { name: string; episode: number };
+type Series = { id: string; name: string; episode: number };
 
-/** A card's title (renamed in place) and, while I'm writing it, the column it's in; its series if it has one. */
+/** A card's title (renamed in place) and, while I'm writing it, the column it's in; its series, picked on the laptop once the page has one. */
 export function CardHeader({ piece, column, series, phone = false }: { piece: PieceDetail; column: BoardColumn; series: Series | null; phone?: boolean }) {
   const [title, setTitle] = useState(piece.title);
   useEffect(() => setTitle(piece.title), [piece.title]);
+  const loaded = useSeries(phone ? '' : piece.workspaceId).data ?? [];
+  const pageSeries = series && !loaded.some((s) => s.id === series.id) ? [series, ...loaded] : loaded;
+
+  async function pickSeries(seriesId: string) {
+    try {
+      await api(`/pieces/${piece.id}`, { method: 'PATCH', body: { seriesId: seriesId || null } });
+      void queryClient.invalidateQueries({ queryKey: keys.boardAll });
+      void queryClient.invalidateQueries({ queryKey: ['series'] });
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
 
   async function moveTo(c: WritingColumn) {
     try {
@@ -113,7 +127,7 @@ export function CardHeader({ piece, column, series, phone = false }: { piece: Pi
         aria-label="Title"
         className={cn('w-full bg-transparent font-semibold tracking-tight outline-none', phone ? 'text-2xl' : 'text-3xl')}
       />
-      {(isWritingColumn(column) || series) && (
+      {(isWritingColumn(column) || series || pageSeries.length > 0) && (
         <div className="flex flex-wrap items-center gap-3">
           {isWritingColumn(column) && (
             <select value={column} onChange={(e) => void moveTo(e.target.value as WritingColumn)} aria-label="Column" className="h-9 rounded-lg border bg-card px-2.5 text-sm">
@@ -124,10 +138,28 @@ export function CardHeader({ piece, column, series, phone = false }: { piece: Pi
               ))}
             </select>
           )}
-          {series && (
-            <span className="text-sm text-muted-foreground">
-              {series.name} · Ep {series.episode}
-            </span>
+          {!phone && (series || pageSeries.length > 0) ? (
+            <>
+              <select value={series?.id ?? ''} onChange={(e) => void pickSeries(e.target.value)} aria-label="Series" className="h-9 max-w-64 rounded-lg border bg-card px-2.5 text-sm">
+                <option value="">No series</option>
+                {pageSeries.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              {series && (
+                <Link to={seriesPath(piece.workspaceId, series.id)} className="text-sm text-muted-foreground hover:text-foreground">
+                  Ep {series.episode}
+                </Link>
+              )}
+            </>
+          ) : (
+            series && (
+              <span className="text-sm text-muted-foreground">
+                {series.name} · Ep {series.episode}
+              </span>
+            )
           )}
         </div>
       )}

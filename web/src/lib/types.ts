@@ -4,7 +4,6 @@ import type { DayPart, PostStats, ReviewBody, ReviewStatus, WeeklyReviewSetting 
 import type { EditSpec, EditTemplate } from '@shared/edit';
 import type { MascotId } from '@shared/mascots';
 import type { QualityReport } from '@shared/quality';
-import type { ReviewState } from '@shared/review';
 import type { PieceDirections } from '@shared/direction';
 import type { AccountSettings, AccountStatus, PostCopy, PostFormat, PostOptions, PostProblem, PostStatus, PublishPlatform, QueueSlot } from '@shared/publish';
 import type { AssetType, ChatPart, ClaudeUsage, DraftContent, InboxSuggestion, MediaKind, MediaSource, ModuleId, ProxyStatus, RenderStatus, Stage, Transcript, TranscriptStatus, WorkspaceColor, WorkspaceKind } from '@shared/types';
@@ -32,33 +31,6 @@ export type Workspace = {
   /** Footage waiting in the Inbox (not in a video yet). */
   inboxCount?: number;
   pendingEdits?: number;
-};
-
-export type BoardCard = {
-  id: string;
-  title: string;
-  stage: string;
-  position: number;
-  tags: string[];
-  updatedAt: number;
-  hook: string;
-  alternatives: number;
-  mediaCount: number;
-  thumbMediaId: string | null;
-  /** It has a finished video. */
-  rendered: boolean;
-  lastAuthor: 'you' | 'claude' | null;
-  nextPostAt: number | null;
-  postedCount: number;
-  postAttention: boolean;
-  /** Latest views across its posts, once any are in. */
-  views: number | null;
-  /** Whether I've watched its newest render (null: nothing to watch, or out already with nothing said). */
-  review: ReviewState | null;
-  openComments: number;
-  /** The Ideas card it came from, and the series it's an episode of. */
-  ideaId: string | null;
-  series: { id: string; name: string; episode: number } | null;
 };
 
 export type VersionMeta = { id: string; number: number; author: 'you' | 'claude'; message: string; createdAt: number };
@@ -116,8 +88,9 @@ export type PieceDetail = {
   directions?: PieceDirections | null;
   /** The render I said looks good. */
   reviewedMediaId: string | null;
-  /** The Ideas card it came from. */
-  idea?: { id: string; workspaceId: string; series: { id: string; name: string; episode: number } | null } | null;
+  /** The series it's an episode of, and its number there. */
+  seriesId: string | null;
+  episode: number | null;
 };
 
 export type Version = VersionMeta & { branchId: string; pieceId: string; parentId: string | null; content: DraftContent };

@@ -11,7 +11,7 @@ import { BOARD_STAGES, normalizeDraft } from '../../../shared/types';
 import { config } from '../config';
 import { getSetting, setSetting } from '../lib/settings';
 import { createPiece, saveVersion } from '../services/pieces';
-import { db, now, rawDb, schema } from './index';
+import { db, newId, now, rawDb, schema } from './index';
 
 type Idea = typeof schema.ideas.$inferSelect;
 
@@ -55,7 +55,7 @@ function moveIdeas(workspaceId: string) {
 
   let n = 0;
   let position = Date.now();
-  const move = (i: Idea, series?: { name: string; episode: number }) => {
+  const move = (i: Idea, series?: { id: string; episode: number }) => {
     const title = i.title.trim().replace(/^"(.*)"$/, '$1') || 'Untitled';
     const script = (i.script ?? '').replace(/\s+$/, '');
     const notes = [(i.body ?? '').trim(), ...bullets(i.id)].filter(Boolean).join('\n');
@@ -69,13 +69,13 @@ function moveIdeas(workspaceId: string) {
         saveVersion(branch.id, { author: 'you', message: 'Your script and notes, from Ideas', content: { ...draft, hook: '', script: script || draft.script, notes } });
       }
       db.update(schema.pieces)
-        .set({ title, series: series?.name ?? null, episode: series?.episode ?? null, updatedAt: now() })
+        .set({ title, seriesId: series?.id ?? null, episode: series?.episode ?? null, updatedAt: now() })
         .where(eq(schema.pieces.id, piece.id))
         .run();
     } else {
       const { pieceId } = createPiece(workspaceId, { title, stage: script ? 'script' : 'idea', content: { script, notes }, author: 'you', message: 'From Ideas' });
       db.update(schema.pieces)
-        .set({ series: series?.name ?? null, episode: series?.episode ?? null, position: position++ })
+        .set({ seriesId: series?.id ?? null, episode: series?.episode ?? null, position: position++ })
         .where(eq(schema.pieces.id, pieceId))
         .run();
     }
@@ -84,8 +84,9 @@ function moveIdeas(workspaceId: string) {
 
   for (const root of (kids.get('') ?? []).filter(mine)) {
     if (root.kind === 'series') {
-      const name = root.title.trim();
-      (kids.get(root.id) ?? []).filter(mine).forEach((ep, k) => move(ep, { name, episode: k + 1 }));
+      const id = newId();
+      db.insert(schema.series).values({ id, workspaceId, name: root.title.trim() || 'Series', about: (root.format ?? '').trim(), position: now() }).run();
+      (kids.get(root.id) ?? []).filter(mine).forEach((ep, k) => move(ep, { id, episode: k + 1 }));
     } else move(root);
   }
   return n;

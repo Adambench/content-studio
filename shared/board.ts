@@ -73,10 +73,16 @@ export type BoardItem = {
   failed: string | null;
   /** When it went out, or was due to (the queue time). */
   postedAt: number | null;
-  series: { name: string; episode: number } | null;
+  series: { id: string; name: string; episode: number } | null;
   /** Clips I shared for it. */
   footage: number;
 };
+
+/** An episode of a series: a card, numbered by its place in the series. */
+export type SeriesEpisode = { id: string; title: string; episode: number; column: BoardColumn };
+
+/** A series on a page: what every episode follows (Claude reads it when writing one), and its episodes in order. */
+export type Series = { id: string; workspaceId: string; name: string; about: string; episodes: SeriesEpisode[] };
 
 /** A page as the board and the top bar show it. */
 export type BoardPage = { id: string; name: string; color: string; kind: string; hidden: boolean };

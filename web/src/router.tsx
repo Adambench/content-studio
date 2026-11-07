@@ -9,6 +9,7 @@ import { KnowledgePage } from '@/pages/KnowledgePage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NewWorkspacePage } from '@/pages/NewWorkspacePage';
 import { PairPage } from '@/pages/PairPage';
+import { SeriesPage } from '@/pages/SeriesPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { SharePage } from '@/pages/SharePage';
 import { ToolboxPage } from '@/pages/ToolboxPage';
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
           { index: true, element: <HomePage /> },
           { path: 'p/:wid', element: <SectionPage /> },
           { path: 'p/:wid/:section', element: <SectionPage /> },
+          { path: 'p/:wid/series/:sid', element: <SeriesPage /> },
           { path: 'c/:id', element: <CardPage /> },
           { path: 'knowledge', element: <KnowledgePage /> },
           { path: 'toolbox', element: <ToolboxPage /> },

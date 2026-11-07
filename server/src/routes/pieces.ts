@@ -9,6 +9,7 @@ import { deleteMedia } from '../services/media';
 import { createBranch, createPiece, getBranch, getPiece, getPieceDetail, getWorkspace, restoreVersion, saveVersion, updateWorking } from '../services/pieces';
 import { chooseDirection, requestPitch } from '../studio/directions';
 import { reviewStates } from '../studio/notes';
+import { setPieceSeries } from '../services/series';
 
 const draftSchema = z.object({
   hook: z.string(),
@@ -41,11 +42,15 @@ export async function pieceRoutes(app: FastifyInstance) {
         position: z.number().optional(),
         tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
         activeBranchId: z.string().optional(),
+        /** The series it's an episode of (it becomes the next one), or null to take it out. */
+        seriesId: z.string().nullable().optional(),
       })
       .parse(req.body);
     if (body.stage && !getWorkspace(piece.workspaceId).stages.some((s) => s.id === body.stage)) throw badRequest('Unknown stage.');
     if (body.activeBranchId && getBranch(body.activeBranchId).pieceId !== piece.id) throw badRequest('That alternative belongs to another piece.');
-    db.update(schema.pieces).set({ ...body, updatedAt: now() }).where(eq(schema.pieces.id, piece.id)).run();
+    const { seriesId, ...rest } = body;
+    if (seriesId !== undefined) setPieceSeries(piece.id, seriesId);
+    db.update(schema.pieces).set({ ...rest, updatedAt: now() }).where(eq(schema.pieces.id, piece.id)).run();
     emit({ type: 'changed', entity: 'pieces', workspaceId: piece.workspaceId, id: piece.id });
     return { ok: true };
   });

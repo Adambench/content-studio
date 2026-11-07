@@ -8,6 +8,7 @@ import { lastSection, pagePath, sectionsFor, writes, type SectionId } from '@/li
 import { useBoardData } from '@/lib/queries';
 import { useStore } from '@/lib/ui-state';
 import { PageCalendar } from './CalendarPage';
+import { SeriesList } from './SeriesPage';
 
 function Loading() {
   return (
@@ -26,7 +27,7 @@ export function HomePage() {
   return <Board items={board.data.items} columns={BOARD_COLUMNS} pages={board.data.pages} addTo={writer?.id} />;
 }
 
-/** A page's section: its Videos board (idea to posted) or Clips board, its campaign links, or its calendar. */
+/** A page's section: its Videos board (idea to posted) or Clips board, its series, its campaign links, or its calendar. */
 export function SectionPage() {
   const { wid = '', section } = useParams();
   const board = useBoardData();
@@ -48,6 +49,8 @@ export function SectionPage() {
   switch (here.id) {
     case 'videos':
       return <Board items={items} columns={BOARD_COLUMNS} pages={board.data.pages} addTo={wid} />;
+    case 'series':
+      return <SeriesList wid={wid} />;
     case 'clips':
       return <Board items={items} columns={VIDEO_COLUMNS} pages={board.data.pages} />;
     case 'campaigns':

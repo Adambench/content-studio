@@ -39,6 +39,8 @@ function apply(event: LiveEvent) {
   if (event.type === 'branch') refreshSoon(keys.review);
   if (event.type === 'changed' && BOARD_ENTITIES.includes(event.entity)) refreshSoon(keys.boardAll);
   if (event.type === 'changed' && event.entity === 'campaigns') inv(['campaign-links']);
+  // A series lists its episodes' titles and columns.
+  if (event.type === 'changed' && (event.entity === 'series' || event.entity === 'pieces')) refreshSoon(['series']);
   if (event.type === 'changed') {
     const wid = event.workspaceId;
     switch (event.entity) {

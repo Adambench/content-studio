@@ -7,7 +7,7 @@ import type { PageStyle, ReferenceVideo } from '@shared/references';
 import type { Toolbox } from '@shared/toolbox';
 import type { VideoNote } from '@shared/notes';
 import type { ReviewClip } from '@shared/clipping';
-import type { BoardData, CampaignLink } from '@shared/board';
+import type { BoardData, CampaignLink, Series } from '@shared/board';
 import type { ApprovePlan } from '@shared/dashboard';
 import type { SitesStatus } from '@shared/sites';
 import type { Account, AppSettings, PieceDetail, Post, PublishingSetup, RenderRow, SystemStatus, VersionRow, Workspace } from './types';
@@ -22,6 +22,9 @@ export const keys = {
   /** Every page's cards (Home and the pages' sections). */
   boardAll: ['board-all'] as const,
   campaignLinks: (wid: string) => ['campaign-links', wid] as const,
+  /** A page's series, and one series. */
+  series: (wid: string) => ['series', 'page', wid] as const,
+  oneSeries: (id: string) => ['series', 'one', id] as const,
   auth: ['auth'] as const,
   workspaces: ['workspaces'] as const,
   workspace: (id: string) => ['workspace', id] as const,
@@ -73,6 +76,8 @@ export const keys = {
 
 export type AuthStatus = { setupRequired: boolean; authenticated: boolean; desktopManaged: boolean };
 export const useBoardData = () => useQuery({ queryKey: keys.boardAll, queryFn: () => api<BoardData>('/board') });
+export const useSeries = (wid: string) => useQuery({ queryKey: keys.series(wid), queryFn: () => api<Series[]>(`/workspaces/${wid}/series`), enabled: !!wid });
+export const useOneSeries = (id: string) => useQuery({ queryKey: keys.oneSeries(id), queryFn: () => api<Series>(`/series/${id}`), enabled: !!id });
 export const useCampaignLinks = (wid: string) => useQuery({ queryKey: keys.campaignLinks(wid), queryFn: () => api<CampaignLink[]>(`/workspaces/${wid}/campaign-links`), enabled: !!wid });
 export const useAuth = () => useQuery({ queryKey: keys.auth, queryFn: () => api<AuthStatus>('/auth/status'), staleTime: Infinity });
 export const useWorkspaces = () => useQuery({ queryKey: keys.workspaces, queryFn: () => api<Workspace[]>('/workspaces') });

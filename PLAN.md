@@ -54,7 +54,7 @@ clipping data; the three clipping pages start clean.
 | Audience | All Muslims |
 | Sources | The Quran, sahih hadith and well-known scholars, always cited on screen; no fatwas |
 | Mix | 1 a day: about half lecture clips, half originals. Modules: ideas & scripts, clipping, research |
-| Originals | I pick the ayah, hadith or story; Claude writes the script, with citations. My own voice (a voice memo); no AI voice |
+| Originals | Claude writes the scripts, mostly picking the ayah, hadith or story too (2026-11-07), with citations, and plans the visuals in Notes. I record my voice (a voice memo); my face is never seen; no AI voice |
 | Lecture clips | Only channels that allow clips (they say so, or Creative Commons), the speaker always named on screen. The lecture footage when it's strong, else the voice over scenery, picked per clip. Any music in the source removed |
 | Ayat | Arabic on screen with the English meaning; the voice speaks English only (no recitation audio) |
 | Look | Picked per video: Islamic geometry (gold on deep green or navy, calligraphy), night and lantern light, empty landscapes. Clean sentence captions |
@@ -248,7 +248,8 @@ versionCode from the tag (`v1.2.3` → 10203).
 - Still open from the account review: the personal brand's name; the third clipping page. Read each page's Settings →
   Brand guide once and fix anything off. Mascots (shared/mascots.ts): tell Claude Code each page's (Personal brand: the
   founder, Blox Moments: Blok, Long Story Short: the host).
-- Gentle Return is hidden (Phase 14); its Islamic features stay in the code for when it comes back.
+- Gentle Return's first series, *Islamic life hacks* (2026-11-07): read the three episodes' scripts, check every hadith
+  and its number (marked in Notes), then record each one as a voice memo and send it to its card.
 - Phase 0 on Meta's site (Instagram API with Unified login), then connect the real accounts.
 - Settings → Clip tools → Install in the real app (~3 min, 1.4 GB), then a real campaign source through to Review.
   Listen to the first clips from a source with background music (the music check was only tried on stand-ins).
@@ -825,7 +826,7 @@ professionally with Claude. Laptop first (1920 × 1080).
 
 | Topic | Decision |
 |---|---|
-| Pages | Personal brand, Long Story Short, Blox Moments. Gentle Return hidden (its Islamic features stay in the code) |
+| Pages | Personal brand, Long Story Short, Blox Moments. Gentle Return hidden (its Islamic features stay in the code); shown again by 2026-11-06, Claude writing its scripts |
 | Unneeded features | Code deleted, not hidden; their data stays in the database (no tables dropped) |
 | Deleted | In-app chat; Ideas mind map (and Expand/Angles/Challenge/Episodes); Notes page (I move the notebook to Obsidian); Saved pile and the phone's *Save to Ideas*; Inbox; Capture; Research and Find; Campaigns and Brand screens; Analytics and all statistics (I read them on Instagram), the weekly review; the Edit studio; search; AI pictures and clips (home PC and kie.ai); the self-hosted model; the cloned voice; the AI voice and UGC; Claude's breakdown of references; TikTok, YouTube and X posting |
 | Kept | Calendar, Knowledge, Toolbox, Settings (as now, minus deleted features). Campaigns: rules keep steering clips, I submit on Content Rewards' site; a clipping page's *Campaigns* section is only the list of links I drop for Claude to check when making its videos (paste, remove; "Ended" once the budget is used up) |
@@ -848,3 +849,7 @@ Build (after the mockup):
 - [x] Home board; card page; review page with the one Approve (tried on a copy: approve → Sat 12:30, Undo; a real Hooks call, 8 s)
 - [x] Phone app: share to a video, Add footage, scripts; `API_VERSION` 4; Android 0.3.0 (CI builds it)
 - [x] Every version on a card (older ones render on a click, dated with their version so Approve and publishing keep the newest); the phone's *Videos* (2026-11-05, Android 0.3.2)
+- [x] Series (2026-11-07): a page that writes its videos has *Videos · Series · Calendar*. A series is a name, an About
+  (what every episode follows; Hooks and Directions read it with the other episodes' titles) and its episodes, cards
+  numbered in its order (drag to reorder, *+ New episode*; a card's header picks its series). The old name on a card
+  became a series, its About from the mind map's series card. Claude Code writes episodes with `npm run series`

@@ -17,9 +17,11 @@ section you need.
   (Instagram), `campaigns/`, `clipping/`, `knowledge/` (the playbook as editable rules, references), `toolbox/` (what's
   installed and used, installing skills, the weekly scout), `jobs/` (queue), `db/phase14.ts` (the one-off move).
 - `web/` — React UI. Top bar: Home, then one tab per page; under a page its sections (`lib/nav.ts`: Videos ·
-  Calendar, or Campaigns · Clips · Calendar). Home and the sections are one board (`components/board/Board.tsx`,
+  Series · Calendar, or Campaigns · Clips · Calendar). Home and the sections are one board (`components/board/Board.tsx`,
   columns from stages in `shared/board.ts`); a card opens at `/c/:id` (`pages/CardPage.tsx`: at every stage the Script
-  + Notes document and the render + comments + Approve, the one the stage needs first; one shared `useDraft`). The phone gets `components/PhoneShell.tsx` only.
+  + Notes document and the render + comments + Approve, the one the stage needs first; one shared `useDraft`). A series
+  (`pages/SeriesPage.tsx`, `services/series.ts`) is a name, an About every episode follows, and cards numbered in its
+  order (`pieces.seriesId`, `episode`). The phone gets `components/PhoneShell.tsx` only.
   `isDesktop` (`lib/desktop.ts`), `isApp`/`isNative` (`lib/native.ts`, the `vite --mode app` build).
 - `mobile/` — Capacitor 8, committed `android/`, one native plugin `StudioPlugin` (Java). CI builds APKs.
 - `shared/` — types for both sides (`types.ts`, `edit.ts`, `campaigns.ts`, `clipping.ts`, …).
@@ -44,7 +46,8 @@ section you need.
   chat, no other AI buttons, no stats screens; few words, quiet colours, one alarm colour (`destructive`) only on what
   needs me. Ask before adding a feature, a button or a screen.
 - **Claude never rewrites my scripts**: Hooks are other first lines to take or leave, Directions go under Notes, each on
-  my click. A card's document is `script` (what I say) then `notes` (the effects I want); I can rename both headings
+  my click. Gentle Return (the Islamic page) is the exception: Claude writes its scripts and plans their visuals in Notes
+  (`npm run series`), I record the voice (my face is never seen), and changes I make there are mine. A card's document is `script` (what I say) then `notes` (the effects I want); I can rename both headings
   (`DraftContent.labels`).
 - **Claude's tools are scoped to one workspace** (`buildTools(workspaceId)`), every tool checks ownership. The in-app
   agent (`claude/agent.ts`) only fixes an edit that fails the check before its render; I talk to Claude in Claude Code.
@@ -99,6 +102,9 @@ section you need.
   leaves it open; `lessons` lists them). A clip whose story starts earlier or ends later than its cut:
   `npm run notes -- source <pieceId>` (the source's words around it), then `recut <pieceId> <start> <end>` (the running
   app makes it again on the same card, comments kept, and renders it).
+- `npm run series` — every page's series with its episodes; `-- <seriesId>` with their scripts; `new <page> "<name>"
+  ["<about>"]`, `about`, `episode <seriesId> "<title>" --script <file> --notes <file> [--film]` (Claude's, as a
+  version), `write <pieceId> …`, `add <pieceId> <seriesId|none>`, `order <seriesId> <pieceId>…`.
 - `npm run db:generate -w server` after editing `server/src/db/schema.ts` (migrations run on startup). drizzle-kit
   drops `ON DELETE` from foreign keys it adds with `ALTER TABLE`: check the SQL.
 - `npm run android` — app UI build + `cap sync`. APKs: CI, or JDK 21 + SDK (`cd mobile/android && ./gradlew assembleDebug`)

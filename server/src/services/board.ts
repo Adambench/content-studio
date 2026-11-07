@@ -55,6 +55,8 @@ function boardItems(workspaceIds: string[]): BoardItem[] {
     .all();
 
   const review = reviewStates(pieces);
+  const seriesIds = [...new Set(pieces.map((p) => p.seriesId).filter((s): s is string => !!s))];
+  const seriesNames = new Map(seriesIds.length ? db.select({ id: schema.series.id, name: schema.series.name }).from(schema.series).where(inArray(schema.series.id, seriesIds)).all().map((s) => [s.id, s.name]) : []);
   return pieces.map((p): BoardItem => {
     const own = posts.filter((x) => x.pieceId === p.id);
     const upcoming = own.filter((x) => x.status === 'scheduled' || x.status === 'publishing').map((x) => x.at);
@@ -75,7 +77,7 @@ function boardItems(workspaceIds: string[]): BoardItem[] {
       nextPostAt: upcoming.length ? Math.min(...upcoming) : null,
       failed,
       postedAt: published ? (published.publishedAt ?? published.at) : null,
-      series: p.series ? { name: p.series, episode: p.episode ?? 1 } : null,
+      series: p.seriesId && seriesNames.has(p.seriesId) ? { id: p.seriesId, name: seriesNames.get(p.seriesId)!, episode: p.episode ?? 1 } : null,
       footage: footage.get(p.id) ?? 0,
     };
   });

@@ -83,13 +83,29 @@ export const pieces = sqliteTable(
     directions: text('directions', { mode: 'json' }).$type<PieceDirections | null>(),
     /** The render I said looks good (shared/review.ts): a newer render asks for another look. */
     reviewedMediaId: text('reviewed_media_id'),
-    /** The series it's an episode of, and its number in it. */
-    series: text('series'),
+    /** The series it's an episode of, and its number in it (1, 2, … in the series' order). */
+    seriesId: text('series_id').references((): AnySQLiteColumn => series.id, { onDelete: 'set null' }),
     episode: integer('episode'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index('pieces_workspace_idx').on(t.workspaceId), index('pieces_campaign_idx').on(t.campaignId)],
+  (t) => [index('pieces_workspace_idx').on(t.workspaceId), index('pieces_campaign_idx').on(t.campaignId), index('pieces_series_idx').on(t.seriesId)],
+);
+
+/** A series on a page: what every episode follows, and its episodes (the cards with its `seriesId`, by `episode`). */
+export const series = sqliteTable(
+  'series',
+  {
+    id: id(),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    /** The premise and format every episode follows (Claude reads it when writing or helping with one). */
+    about: text('about').notNull().default(''),
+    position: real('position').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('series_workspace_idx').on(t.workspaceId)],
 );
 
 /** An alternative take on a piece. `working` is the live draft; versions snapshot it. */

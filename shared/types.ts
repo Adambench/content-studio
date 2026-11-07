@@ -254,7 +254,7 @@ export type ClaudeUsage = {
 export type LiveEvent =
   | {
       type: 'changed';
-      entity: 'workspaces' | 'pieces' | 'media' | 'threads' | 'settings' | 'edits' | 'renders' | 'accounts' | 'posts' | 'stats' | 'reviews' | 'devices' | 'sites' | 'campaigns' | 'submissions' | 'research' | 'finder' | 'compute' | 'ideas' | 'knowledge' | 'references' | 'toolbox' | 'notes' | 'notebook';
+      entity: 'workspaces' | 'pieces' | 'media' | 'threads' | 'settings' | 'edits' | 'renders' | 'accounts' | 'posts' | 'stats' | 'reviews' | 'devices' | 'sites' | 'campaigns' | 'submissions' | 'research' | 'finder' | 'compute' | 'ideas' | 'knowledge' | 'references' | 'toolbox' | 'notes' | 'notebook' | 'series';
       workspaceId?: string;
       id?: string;
       pieceId?: string;

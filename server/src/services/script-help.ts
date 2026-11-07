@@ -11,6 +11,7 @@ import { db, schema } from '../db';
 import { badRequest } from '../lib/http';
 import { countUse } from '../toolbox/uses';
 import { getPiece, getWorkspace } from './pieces';
+import { seriesText } from './series';
 
 const skillCache = new Map<string, string>();
 
@@ -43,6 +44,9 @@ function about(ws: ReturnType<typeof getWorkspace>) {
   return [`Page: ${ws.name}`, ws.niche && `Niche: ${ws.niche}`, ws.brandGuide && `Brand guide:\n${ws.brandGuide}`, ws.voiceMemory && `How I write:\n${ws.voiceMemory}`].filter(Boolean).join('\n\n');
 }
 
+/** How the words reach the viewer: on camera, or (an Islamic page) the creator's recorded voice over visuals. */
+const spoken = (ws: ReturnType<typeof getWorkspace>) => (ws.kind === 'islamic' ? 'spoken in their own recorded voice over visuals (their face is never seen)' : 'spoken on camera');
+
 const threeOf = (key: string) => ({
   type: 'object',
   properties: { [key]: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 3 } },
@@ -64,11 +68,11 @@ export async function hookOptions(pieceId: string): Promise<string[]> {
     playbook('hooks', 'halal'),
     skill('viral-hooks'),
     skill('content-principles'),
-    'You help a creator with the first line of a short vertical video they wrote themselves. They write every word: never rewrite the script. Offer exactly 3 alternative first lines (hooks) they can take or leave: in their voice, true to what the script says (no claim it does not make), spoken on camera, each under 20 words, each a different kind of hook. Plain text: no quotes, emoji or hashtags.',
+    `You help a creator with the first line of a short vertical video${ws.kind === 'islamic' ? '' : ' they wrote themselves'}. Never rewrite the script. Offer exactly 3 alternative first lines (hooks) they can take or leave: in their voice, true to what the script says (no claim it does not make), ${spoken(ws)}, each under 20 words, each a different kind of hook. In a series, every hook keeps the series' format. Plain text: no quotes, emoji or hashtags.`,
   ]
     .filter(Boolean)
     .join('\n\n---\n\n');
-  const prompt = [about(ws), `Title: ${piece.title}`, `Script (its first line is the hook now):\n${draft.script}`, draft.notes.trim() && `Their notes (effects and edit wishes):\n${draft.notes}`]
+  const prompt = [about(ws), seriesText(pieceId), `Title: ${piece.title}`, `Script (its first line is the hook now):\n${draft.script}`, draft.notes.trim() && `Their notes (effects and edit wishes):\n${draft.notes}`]
     .filter(Boolean)
     .join('\n\n');
   const res = await askStructured<{ hooks: string[] }>({ task: 'ideas', now: true, system, prompt, schema: threeOf('hooks') });
@@ -82,11 +86,11 @@ export async function scriptDirections(pieceId: string): Promise<string[]> {
     playbook('content-model', 'hooks', 'retention', 'halal'),
     skill('viral-short-form'),
     skill('content-principles'),
-    'You help a creator decide how to build a short vertical video they write and film themselves. Offer exactly 3 directions: different angles or structures for it (how it opens, what carries the middle, how it ends), each one line under 25 words that starts with a 2–3 word name and a colon. Concrete to this idea, never generic advice. Do not write the script.',
+    `You help a creator decide how to build a short vertical video ${ws.kind === 'islamic' ? 'they record in their own voice (their face is never seen)' : 'they write and film themselves'}. Offer exactly 3 directions: different angles or structures for it (how it opens, what carries the middle, how it ends), each one line under 25 words that starts with a 2–3 word name and a colon. Concrete to this idea, never generic advice; in a series, true to its format. Do not write the script.`,
   ]
     .filter(Boolean)
     .join('\n\n---\n\n');
-  const prompt = [about(ws), `Title: ${piece.title}`, draft.script.trim() ? `Script so far:\n${draft.script}` : 'No script yet.', draft.notes.trim() && `Their notes:\n${draft.notes}`]
+  const prompt = [about(ws), seriesText(pieceId), `Title: ${piece.title}`, draft.script.trim() ? `Script so far:\n${draft.script}` : 'No script yet.', draft.notes.trim() && `Their notes:\n${draft.notes}`]
     .filter(Boolean)
     .join('\n\n');
   const res = await askStructured<{ directions: string[] }>({ task: 'ideas', now: true, system, prompt, schema: threeOf('directions') });

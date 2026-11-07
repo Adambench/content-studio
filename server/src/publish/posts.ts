@@ -13,11 +13,12 @@ import { publicUrl } from './setup';
 /** A series goes out in order: a warning when an earlier episode isn't out (or due) by this time. */
 function episodeOrderWarning(pieceId: string, platform: string, at: number): string | null {
   const piece = getPiece(pieceId);
-  if (!piece.series || !piece.episode) return null;
+  if (!piece.seriesId || !piece.episode) return null;
+  const name = db.select({ name: schema.series.name }).from(schema.series).where(eq(schema.series.id, piece.seriesId)).get()?.name ?? 'the series';
   const earlier = db
     .select({ id: schema.pieces.id, episode: schema.pieces.episode })
     .from(schema.pieces)
-    .where(and(eq(schema.pieces.workspaceId, piece.workspaceId), eq(schema.pieces.series, piece.series), lt(schema.pieces.episode, piece.episode)))
+    .where(and(eq(schema.pieces.workspaceId, piece.workspaceId), eq(schema.pieces.seriesId, piece.seriesId), lt(schema.pieces.episode, piece.episode)))
     .all();
   for (const e of earlier) {
     const out = db
@@ -26,7 +27,7 @@ function episodeOrderWarning(pieceId: string, platform: string, at: number): str
       .where(and(eq(schema.posts.pieceId, e.id), eq(schema.posts.platform, platform as PostRow['platform'])))
       .all()
       .some((x) => x.status !== 'failed' && x.status !== 'missed' && x.at <= at);
-    if (!out) return `Ep ${e.episode} of ${piece.series} isn’t out before this one.`;
+    if (!out) return `Ep ${e.episode} of ${name} isn’t out before this one.`;
   }
   return null;
 }

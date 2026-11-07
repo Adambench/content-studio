@@ -1,4 +1,4 @@
-// The board, a clipping page's campaign links and help writing a script (PLAN.md Phase 14).
+// The board, a page's series, a clipping page's campaign links and help writing a script (PLAN.md Phase 14).
 import { desc, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -10,9 +10,39 @@ import { badRequest } from '../lib/http';
 import { boardData } from '../services/board';
 import { getPiece, getWorkspace } from '../services/pieces';
 import { hookOptions, scriptDirections } from '../services/script-help';
+import { addEpisode, createSeries, deleteSeries, getSeries, listSeries, orderEpisodes, updateSeries } from '../services/series';
 
 export async function boardRoutes(app: FastifyInstance) {
   app.get('/api/board', async () => boardData());
+
+  app.get<{ Params: { wid: string } }>('/api/workspaces/:wid/series', async (req) => listSeries(getWorkspace(req.params.wid).id));
+
+  app.post<{ Params: { wid: string } }>('/api/workspaces/:wid/series', async (req) => {
+    const body = z.object({ name: z.string().trim().min(1).max(120), about: z.string().max(4000).optional() }).parse(req.body);
+    return createSeries(getWorkspace(req.params.wid).id, body);
+  });
+
+  app.get<{ Params: { id: string } }>('/api/series/:id', async (req) => getSeries(req.params.id));
+
+  app.patch<{ Params: { id: string } }>('/api/series/:id', async (req) => {
+    const body = z.object({ name: z.string().trim().min(1).max(120).optional(), about: z.string().max(4000).optional() }).parse(req.body);
+    return updateSeries(req.params.id, body);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/series/:id', async (req) => {
+    deleteSeries(req.params.id);
+    return { ok: true };
+  });
+
+  app.put<{ Params: { id: string } }>('/api/series/:id/order', async (req) => {
+    const { pieceIds } = z.object({ pieceIds: z.array(z.string()).max(1000) }).parse(req.body);
+    return orderEpisodes(req.params.id, pieceIds);
+  });
+
+  app.post<{ Params: { id: string } }>('/api/series/:id/episodes', async (req) => {
+    const { title } = z.object({ title: z.string().trim().min(1).max(200) }).parse(req.body);
+    return addEpisode(req.params.id, { title });
+  });
 
   app.get<{ Params: { wid: string } }>('/api/workspaces/:wid/campaign-links', async (req): Promise<CampaignLink[]> => {
     const ws = getWorkspace(req.params.wid);

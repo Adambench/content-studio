@@ -17,7 +17,8 @@
     "install-app": "npm run package -w desktop && npm run install-app -w desktop",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w web && npm run typecheck -w desktop && npm run typecheck -w mobile && npm run typecheck -w worker",
     "android": "npm run build:app -w web && npm run sync -w mobile",
-    "notes": "tsx server/scripts/notes.ts"
+    "notes": "tsx server/scripts/notes.ts",
+    "series": "tsx server/scripts/series.ts"
   },
   "devDependencies": {
     "concurrently": "^10.0.6"
