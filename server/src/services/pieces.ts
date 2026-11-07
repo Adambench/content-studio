@@ -203,6 +203,7 @@ export function mergeDraft(base: DraftContent, patch: Partial<DraftContent> | { 
     hook: p.hook ?? base.hook,
     script: p.script ?? base.script,
     notes: p.notes ?? base.notes,
+    labels: p.labels ?? base.labels,
     platforms: {
       tiktok: { ...base.platforms.tiktok, ...platforms.tiktok },
       instagram: { ...base.platforms.instagram, ...platforms.instagram },
