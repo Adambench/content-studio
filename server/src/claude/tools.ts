@@ -134,7 +134,31 @@ export function toolLabel(fullName: string, input: Record<string, any>): string 
 }
 
 /** The app's tools, scoped to one workspace so Claude can't touch other brands. */
-export function buildTools(workspaceId: string) {
+/** The tools the fix before a render uses (claude/agent.ts): reading and changing one video's edit, nothing else. */
+export const FIX_TOOLS = [
+  'get_piece',
+  'list_media',
+  'get_transcript',
+  'view_frames',
+  'get_knowledge',
+  'get_campaigns',
+  'get_campaign',
+  'get_edit',
+  'update_edit',
+  'tighten_edit',
+  'follow_speaker',
+  'write_scene',
+  'add_library_scene',
+  'get_quran',
+  'view_overlay',
+  'view_render',
+  'get_clip_source',
+  'recut_clip',
+  'list_assets',
+] as const;
+
+/** Claude's tools for one workspace; `only` keeps just those (by name). */
+export function buildTools(workspaceId: string, only?: readonly string[]) {
   const ownPiece = (pieceId: string) => {
     const piece = getPiece(pieceId);
     if (piece.workspaceId !== workspaceId) throw new ToolError('That piece belongs to another workspace.');
@@ -156,7 +180,7 @@ export function buildTools(workspaceId: string) {
     notes: m.notes || undefined,
   });
 
-  const tools = [
+  const all = [
     tool('get_board', 'List the pipeline stages and every piece on the board (id, title, stage, tags, hook preview, and whether the creator has watched its newest render: To watch, To improve, Check again, Looks good).', {}, safe(async () => {
       const ws = getWorkspace(workspaceId);
       const pieces = db.select().from(schema.pieces).where(eq(schema.pieces.workspaceId, workspaceId)).orderBy(schema.pieces.position).all();
@@ -576,6 +600,7 @@ export function buildTools(workspaceId: string) {
 
     ...studioTools(workspaceId, ownPiece),
   ];
+  const tools = only ? all.filter((t) => only.includes(t.name)) : all;
 
   const server = createSdkMcpServer({ name: SERVER_NAME, version: '0.1.0', tools, alwaysLoad: true });
   // `tools` is for the local chat, which calls the same handlers through its own loop.

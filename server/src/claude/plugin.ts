@@ -58,6 +58,9 @@ export const CHAT_SKILLS = [
   'hyperframes-registry',
 ];
 
+/** The skills the fix before a render loads: the playbook, hooks, and the motion craft for scenes and transitions. */
+export const FIX_SKILLS = ['playbook', 'content-principles', 'viral-hooks', 'hyperframes-animation', 'hyperframes-creative', 'motion-graphics', 'gsap-core', 'gsap-timeline'];
+
 const manifest = join(config.pluginDir, '.claude-plugin/plugin.json');
 const addedManifest = join(config.addedPluginDir, '.claude-plugin/plugin.json');
 
@@ -156,7 +159,7 @@ const readOnlyInPlugin: HookCallback = async (input) => {
 };
 
 /** What the chat needs to load the skills, or nothing when there are none. */
-export function skillOptions(): Pick<Options, 'plugins' | 'skills' | 'additionalDirectories' | 'hooks'> & { tools: string[] } {
+export function skillOptions(names: readonly string[] = CHAT_SKILLS): Pick<Options, 'plugins' | 'skills' | 'additionalDirectories' | 'hooks'> & { tools: string[] } {
   const builtIn = existsSync(manifest);
   const added = existsSync(addedManifest) ? addedSkills() : [];
   if (!builtIn && !added.length) return { tools: [] };
@@ -165,7 +168,7 @@ export function skillOptions(): Pick<Options, 'plugins' | 'skills' | 'additional
       ...(builtIn ? [{ type: 'local' as const, path: config.pluginDir, skipMcpDiscovery: true }] : []),
       ...(added.length ? [{ type: 'local' as const, path: config.addedPluginDir, skipMcpDiscovery: true }] : []),
     ],
-    skills: [...(builtIn ? CHAT_SKILLS.map((name) => `${PLUGIN_NAME}:${name}`) : []), ...added.map((name) => `${ADDED_PLUGIN}:${name}`)],
+    skills: [...(builtIn ? names.map((name) => `${PLUGIN_NAME}:${name}`) : []), ...added.map((name) => `${ADDED_PLUGIN}:${name}`)],
     // `tools` limits the built-in tools, so the Skill tool has to be listed as well as `skills`.
     tools: ['Skill', 'Read'],
     additionalDirectories: [...(builtIn ? [config.pluginDir] : []), ...(added.length ? [config.addedPluginDir] : [])],

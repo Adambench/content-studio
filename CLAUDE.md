@@ -103,6 +103,11 @@ section you need.
   leaves it open; `lessons` lists them). A clip whose story starts earlier or ends later than its cut:
   `npm run notes -- source <pieceId>` (the source's words around it), then `recut <pieceId> <start> <end>` (the running
   app makes it again on the same card, comments kept, and renders it).
+- `npm run edit` — editing a video from here (`-- help` for everything): `<card>` (the edit: clips with their words and
+  mid-word cut warnings, overlays, versions, renders, the card's files), `takes` (each take as lines between pauses;
+  flags reps Whisper skipped), `types` (the edit's types, instead of reading `shared/edit.ts`), `set` / `put` (save a
+  version: a few fields, or a design `.mts` kept in `<data>/edit-work/<pieceId>/`), `frames` / `preview` (one small
+  contact sheet to Read), `check`, `render --wait`, `heard` (what the render says, by Whisper).
 - `npm run series` — every page's series with its episodes; `-- <seriesId>` with their scripts; `new <page> "<name>"
   ["<about>"]`, `about`, `episode <seriesId> "<title>" --script <file> --notes <file> [--film]` (Claude's, as a
   version), `write <pieceId> …`, `add <pieceId> <seriesId|none>`, `order <seriesId> <pieceId>…`.
@@ -123,6 +128,10 @@ section you need.
 ## Working rules
 
 - **Commit and push when a job is done** (typecheck passes, flow tried) without asking. Never commit secrets.
+- **Edit videos on few tokens**: every step through `npm run edit` (no scratch scripts; read studio source only to change
+  the pipeline, and fix the command when it lacks something). Pictures: its sheets as they come (300 px a frame);
+  bigger only for one frame's detail. `--dry` before a big change. One video per session: once its render is queued or
+  a pipeline fix is committed, tell me in one line to `/compact` (or `/clear` for the next video).
 - Android release: bump root `package.json` version, commit, push a matching `v*` tag; CI signs with the key in the
   `ANDROID_*` secrets. Never generate a new key (the phone could no longer update).
 - The user's use cases, halal and clipping decisions are in PLAN.md: read those rather than asking again.

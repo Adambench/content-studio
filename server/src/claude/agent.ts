@@ -9,14 +9,12 @@ import { findEditForPiece, listEditVersions } from '../studio/edits';
 import { rerenderLatest } from '../studio/render';
 import { getWorkspace } from '../services/pieces';
 import { baseOptions, resolveModel } from './options';
-import { skillOptions } from './plugin';
-import { chatSystemPrompt } from './prompt';
-import { buildTools, toolLabel } from './tools';
+import { FIX_SKILLS, skillOptions } from './plugin';
+import { fixSystemPrompt } from './prompt';
+import { buildTools, FIX_TOOLS, toolLabel } from './tools';
 import { recordUsage } from './usage';
 import { claudeFamily, countToolCall, countUse } from '../toolbox/uses';
 import { isUsageError, markClaudeLimited } from '../ai/route';
-
-const WEB_TOOLS = ['WebSearch', 'WebFetch'];
 
 /** Chats currently running, so they can be stopped and not run twice. */
 const running = new Map<string, AbortController>();
@@ -40,8 +38,6 @@ export async function runChat(input: {
   threadId: string;
   text: string;
   contextPieceId?: string | null;
-  /** Which screen the piece is open in. */
-  contextView?: 'video' | null;
   model?: string | null;
   /** A clip in Review isn't rendered again when Claude changes it (the check before a render fixing it renders it after checking the fix). */
   noRerender?: boolean;
@@ -56,7 +52,7 @@ export async function runChat(input: {
   const pieceId = thread.pieceId ?? input.contextPieceId;
   const piece = pieceId ? db.select().from(schema.pieces).where(eq(schema.pieces.id, pieceId)).get() : undefined;
   const contextPiece = piece && piece.workspaceId === ws.id ? piece : undefined;
-  const branch = contextPiece?.activeBranchId ? db.select().from(schema.branches).where(eq(schema.branches.id, contextPiece.activeBranchId)).get() : undefined;
+  if (!contextPiece) throw new HttpError(400, 'Claude fixes one video at a time.');
   const model = resolveModel(input.model ?? thread.model);
 
   const userId = newId();
@@ -85,13 +81,13 @@ export async function runChat(input: {
   };
   const headBefore = editHead()?.version?.id;
 
-  const { server, tools, toolNames } = buildTools(ws.id);
-  const { tools: skillTools, ...skills } = skillOptions();
-  const systemPrompt = chatSystemPrompt(ws, {
-    piece: contextPiece && { id: contextPiece.id, title: contextPiece.title, branchName: branch?.name, view: input.contextView ?? undefined, own: thread.pieceId === contextPiece.id },
-  });
+  // The agent only fixes one video's edit before its render (studio/quality.ts): just the tools, skills and prompt for
+  // that, and a new session each time (the lessons carry what lasts), so no call carries an earlier fix's turns.
+  const { server, toolNames } = buildTools(ws.id, FIX_TOOLS);
+  const { tools: skillTools, ...skills } = skillOptions(FIX_SKILLS);
+  const systemPrompt = fixSystemPrompt(ws, contextPiece);
 
-  const attempt = (resume: string | undefined) =>
+  const attempt = () =>
     query({
       prompt: input.text,
       options: {
@@ -99,15 +95,14 @@ export async function runChat(input: {
         ...skills,
         model,
         systemPrompt,
-        tools: [...WEB_TOOLS, ...skillTools],
+        tools: skillTools,
         mcpServers: { studio: server },
-        allowedTools: [...toolNames, ...WEB_TOOLS],
+        allowedTools: toolNames,
         // Anything outside the allow-list is refused rather than prompting nobody.
         permissionPrompts: 'none',
         includePartialMessages: true,
         maxTurns: 40,
         abortController: abort,
-        resume,
       },
     });
 
@@ -198,16 +193,7 @@ export async function runChat(input: {
   };
 
   try {
-    try {
-      for await (const m of attempt(thread.sdkSessionId ?? undefined)) handle(m);
-    } catch (err) {
-      // A stored session can vanish (e.g. Claude's local history was cleared); start a fresh one once.
-      const missing = thread.sdkSessionId && parts.length === 0 && /no conversation found|session.*not found/i.test(String(err));
-      if (!missing) throw err;
-      db.update(schema.chatThreads).set({ sdkSessionId: null }).where(eq(schema.chatThreads.id, thread.id)).run();
-      thread.sdkSessionId = null;
-      for await (const m of attempt(undefined)) handle(m);
-    }
+    for await (const m of attempt()) handle(m);
     // Claude said no for usage: background work waits for it to come back.
     if (refused) markClaudeLimited();
   } catch (err) {

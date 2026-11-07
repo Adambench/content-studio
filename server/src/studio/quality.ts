@@ -265,7 +265,7 @@ async function fixEdit(r: { id: string; workspaceId: string; pieceId: string }, 
   setRender(r, { stage: report.lessons?.length ? `Breaks ${report.lessons.length} of your lessons: Claude is fixing it` : `Quality ${report.score}/100: Claude is fixing it` });
   onCancel.set(r.id, () => stopChat(thread.id));
   try {
-    await runChat({ threadId: thread.id, text: fixPrompt(report, clip), contextPieceId: r.pieceId, contextView: 'video', noRerender: true, onEvent: () => {} });
+    await runChat({ threadId: thread.id, text: fixPrompt(report, clip), contextPieceId: r.pieceId, noRerender: true, onEvent: () => {} });
     return true;
   } catch (err) {
     console.error('Quality fix failed', err);
