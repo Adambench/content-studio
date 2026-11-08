@@ -6,8 +6,9 @@
  * would drop it) and the music asset type is gone. 3: edits have camera moves, colour looks, textures, caption fonts and
  * many more transitions, caption presets, graphics, layouts and animations (an older app saving an edit would drop them).
  * 4: Phase 14: the phone only writes scripts and sends footage to a video; Ideas, captures and saved posts are gone.
+ * 5: the phone has every page the laptop has, and moves cards to any column (`POST /api/pieces/:id/move`).
  */
-export const API_VERSION = 4;
+export const API_VERSION = 5;
 
 export type Health = { ok: true; api: number; version: string };
 

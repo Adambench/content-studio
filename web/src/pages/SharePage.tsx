@@ -85,7 +85,7 @@ export function SharePage() {
   const items = (board.data?.items ?? []).filter((i) => pages.has(i.workspaceId));
   return (
     <div className="flex h-full flex-col">
-      <header className="pt-safe flex items-center gap-2 px-2">
+      <header className="flex items-center gap-2 px-2">
         <div className="flex h-14 items-center gap-2">
           <Button variant="ghost" size="icon" className="size-10" aria-label="Cancel" onClick={close}>
             <ArrowLeft />
@@ -94,7 +94,7 @@ export function SharePage() {
         </div>
       </header>
       {count > 0 && (
-        <div className="pb-safe min-h-0 flex-1 overflow-y-auto px-4 pb-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
           {ORDER.map((c) => {
             const list = items.filter((i) => i.column === c);
             if (!list.length) return null;

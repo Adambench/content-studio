@@ -1,29 +1,15 @@
-import { NavLink, Outlet, useMatch } from 'react-router';
+import { NavLink, Outlet } from 'react-router';
 import type { WorkspaceColor } from '@shared/types';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { isApp } from '@/lib/native';
-import { lastSection, pagePath, sectionOf, sectionsFor } from '@/lib/nav';
+import { usePhone } from '@/hooks/useMediaQuery';
+import { lastSection, pagePath, sectionsFor, useCurrentPage } from '@/lib/nav';
 import { useBoardData } from '@/lib/queries';
 import { useStore } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
-import { AppBanners } from './AppChrome';
 import { PhoneShell } from './PhoneShell';
 import { WorkspaceDot } from './WorkspaceDot';
 
 const tab = ({ isActive }: { isActive: boolean }) =>
   cn('flex h-9 items-center gap-2.5 rounded-lg px-3.5 text-[15px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground', isActive && 'bg-muted text-foreground');
-
-/** The page I'm on: from the address, or the card's own page. */
-function useCurrentPage() {
-  const onPage = useMatch('/p/:wid/*');
-  const onCard = useMatch('/c/:id');
-  const board = useBoardData();
-  if (onPage) return { wid: onPage.params.wid ?? '', section: onPage.params['*']?.split('/')[0] ?? '' };
-  const item = onCard && board.data?.items.find((i) => i.id === onCard.params.id);
-  if (!item) return null;
-  const kind = board.data?.pages.find((p) => p.id === item.workspaceId)?.kind ?? 'personal';
-  return { wid: item.workspaceId, section: sectionOf(kind) };
-}
 
 /** Top to bottom: the page (Home or one of mine), then its section, then the content. */
 function Desktop() {
@@ -77,17 +63,7 @@ function Desktop() {
   );
 }
 
-/** The laptop shows everything; the phone writes scripts, sends footage and plays the videos (PhoneShell). */
+/** The laptop: the top bar and the page's sections. The phone: the same pages, laid out for it (PhoneShell). */
 export function AppShell() {
-  const small = useMediaQuery('(max-width: 767px)');
-  if (isApp || small)
-    return (
-      <div className="flex h-full flex-col">
-        {isApp && <AppBanners />}
-        <div className="min-h-0 flex-1">
-          <PhoneShell />
-        </div>
-      </div>
-    );
-  return <Desktop />;
+  return usePhone() ? <PhoneShell /> : <Desktop />;
 }

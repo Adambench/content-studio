@@ -1,27 +1,79 @@
-import { Check, ChevronLeft, Download, Paperclip, Plus, Settings } from 'lucide-react';
-import { useRef, useState } from 'react';
-import { Link, Navigate, Outlet, useMatch, useNavigate } from 'react-router';
+import { Menu, Paperclip } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { COLUMN_LABELS, isWritingColumn, type BoardItem } from '@shared/board';
-import { useVideoVersions, VersionStrip } from '@/components/card/ReviewView';
-import { useDraft } from '@/components/card/useDraft';
-import { WriteView } from '@/components/card/WriteView';
+import type { WorkspaceColor } from '@shared/types';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
-import { api, ApiError, errorMessage, mediaFileUrl } from '@/lib/api';
-import { downloadVideo, savedVideoUrl, useDownload, videoName } from '@/lib/downloads';
-import { duration } from '@/lib/format';
-import { LIST_ORDER, writes } from '@/lib/nav';
-import { isNative, Studio } from '@/lib/native';
-import { keys, queryClient, useBoardData, usePiece } from '@/lib/queries';
-import type { PieceDetail } from '@/lib/types';
-import { createStore, serverReachable, useStore } from '@/lib/ui-state';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { usePhone } from '@/hooks/useMediaQuery';
+import { errorMessage } from '@/lib/api';
+import { isApp, isNative, Studio } from '@/lib/native';
+import { lastSection, pagePath, sectionsFor, useCurrentPage } from '@/lib/nav';
+import { useBoardData } from '@/lib/queries';
+import { createStore, useStore } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
 import { pickedFiles } from '@/pages/SharePage';
-import { uploadSummary, UploadsButton, usePieceUploads } from './AppChrome';
+import { AppBanners, UploadsButton } from './AppChrome';
+import { WorkspaceDot } from './WorkspaceDot';
 
-/** The page the phone's list shows (the first page I write for until I pick one), kept when I open a card and come back. */
-const phonePage = createStore('', 'cs.phonePage');
+/** Whether the phone's menu (the laptop's top bar) is open. */
+const menuOpen = createStore(false);
+
+/** Opens the phone's menu: in the shell's header, and in a page's own (PageHeader). Nothing on the laptop. */
+export function PhoneMenuButton() {
+  const phone = usePhone();
+  if (!phone) return null;
+  return (
+    <Button variant="ghost" size="icon" className="-ml-1 size-10 shrink-0" aria-label="Menu" onClick={() => menuOpen.set(true)}>
+      <Menu className="size-5" />
+    </Button>
+  );
+}
+
+const item = ({ isActive }: { isActive: boolean }) => cn('flex h-12 items-center gap-3 rounded-lg px-3.5 text-base font-medium text-muted-foreground', isActive && 'bg-muted text-foreground');
+
+/** The laptop's top bar as a list: Home, my pages, then Knowledge, Toolbox, Settings. */
+function PhoneMenu() {
+  const open = useStore(menuOpen);
+  const board = useBoardData();
+  const last = useStore(lastSection);
+  const current = useCurrentPage();
+  const { pathname } = useLocation();
+  const pages = (board.data?.pages ?? []).filter((p) => !p.hidden);
+  useEffect(() => menuOpen.set(false), [pathname]);
+  return (
+    <Sheet open={open} onOpenChange={menuOpen.set}>
+      <SheetContent side="left" showCloseButton={false} className="pt-safe pb-safe w-72 gap-0">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-3">
+            <img src="/icon.svg" alt="" className="size-6" /> Content Studio
+          </SheetTitle>
+        </SheetHeader>
+        <nav className="flex flex-col gap-1 overflow-y-auto px-3 pb-4">
+          <NavLink to="/" end className={item}>
+            Home
+          </NavLink>
+          {pages.map((p) => (
+            <NavLink key={p.id} to={pagePath(p.id, last[p.id])} className={() => item({ isActive: current?.wid === p.id })}>
+              <WorkspaceDot color={p.color as WorkspaceColor} className="size-2" />
+              <span className="truncate">{p.name}</span>
+            </NavLink>
+          ))}
+          <div className="my-2 border-t" />
+          <NavLink to="/knowledge" className={item}>
+            Knowledge
+          </NavLink>
+          <NavLink to="/toolbox" className={item}>
+            Toolbox
+          </NavLink>
+          <NavLink to="/settings" className={item}>
+            Settings
+          </NavLink>
+        </nav>
+      </SheetContent>
+    </Sheet>
+  );
+}
 
 /** Pick clips (Android's picker, or the browser's), then say which video they're for. */
 function AddFootage() {
@@ -40,8 +92,8 @@ function AddFootage() {
   }
   return (
     <>
-      <Button variant="outline" className="h-10 px-3.5 text-[15px]" onClick={pick}>
-        <Paperclip /> Add footage
+      <Button variant="ghost" size="icon" className="size-10" aria-label="Add footage" onClick={pick}>
+        <Paperclip className="size-5" />
       </Button>
       <input
         ref={input}
@@ -61,268 +113,55 @@ function AddFootage() {
   );
 }
 
-function Row({ item }: { item: BoardItem }) {
-  const sending = uploadSummary(usePieceUploads(item.id));
-  return (
-    <Link to={`/c/${item.id}`} className="relative flex items-center gap-3 overflow-hidden rounded-xl border bg-card px-4 py-3.5 text-base">
-      <span className="min-w-0 flex-1 truncate">{item.title}</span>
-      {sending ? (
-        <>
-          <span className={cn('shrink-0 text-[13px] tabular-nums', sending.failed ? 'text-destructive' : 'text-muted-foreground')}>{sending.text}</span>
-          {!sending.failed && (
-            <span className="absolute inset-x-0 bottom-0 h-0.5 bg-muted">
-              <span className="block h-full bg-brand transition-[width]" style={{ width: `${sending.fraction * 100}%` }} />
-            </span>
-          )}
-        </>
-      ) : item.durationMs && !isWritingColumn(item.column) ? (
-        <span className="shrink-0 text-[13px] text-muted-foreground tabular-nums">{duration(item.durationMs)}</span>
-      ) : item.footage ? (
-        <span className="shrink-0 text-[13px] text-muted-foreground">
-          {item.footage} clip{item.footage === 1 ? '' : 's'}
-        </span>
-      ) : item.series ? (
-        <span className="shrink-0 text-[13px] text-muted-foreground">Ep {item.series.episode}</span>
-      ) : null}
-    </Link>
-  );
-}
-
-/** The phone's one list, like the laptop's Videos board: a page's cards from idea to posted, Review first. */
-function Videos() {
+/** Home's and a page's header: the menu, where I am, my uploads and Add footage; under a page, its sections. */
+function PlaceHeader() {
   const board = useBoardData();
-  const wid = useStore(phonePage);
-  const [adding, setAdding] = useState(false);
-  const [title, setTitle] = useState('');
-  const pages = (board.data?.pages ?? []).filter((p) => !p.hidden);
-  const page = pages.find((p) => p.id === wid) ?? pages.find((p) => writes(p.kind)) ?? pages[0];
-  const writer = !!page && writes(page.kind);
-
-  async function add() {
-    const t = title.trim();
-    if (!t || !page) return;
-    setTitle('');
-    setAdding(false);
-    try {
-      await api(`/workspaces/${page.id}/pieces`, { method: 'POST', body: { title: t, stage: 'idea' } });
-      void queryClient.invalidateQueries({ queryKey: keys.boardAll });
-    } catch (err) {
-      toast.error(errorMessage(err));
-    }
-  }
-
-  if (!board.data)
-    return (
-      <div className="grid flex-1 place-items-center text-muted-foreground">{board.isError || board.isPaused ? 'Can’t reach your computer' : <Spinner />}</div>
-    );
-  const items = board.data.items.filter((i) => i.workspaceId === page?.id);
+  const current = useCurrentPage();
+  const page = current && board.data?.pages.find((p) => p.id === current.wid);
   return (
     <>
-      <header className="pt-safe flex items-center gap-2 px-4 pb-2">
-        <div className="flex h-14 min-w-0 flex-1 items-center gap-2">
-          {pages.length > 1 ? (
-            <select value={page?.id} onChange={(e) => phonePage.set(e.target.value)} className="min-w-0 truncate bg-transparent text-2xl font-semibold outline-none">
-              {pages.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <h1 className="text-2xl font-semibold">Videos</h1>
-          )}
-        </div>
-        <UploadsButton />
+      <header className="flex h-14 shrink-0 items-center gap-1 px-3">
+        <PhoneMenuButton />
+        <h1 className="flex min-w-0 flex-1 items-center gap-2.5 px-1 text-xl font-semibold">
+          {page && <WorkspaceDot color={page.color as WorkspaceColor} className="size-2.5" />}
+          <span className="truncate">{page ? page.name : 'Home'}</span>
+        </h1>
+        <UploadsButton className="size-10" />
         <AddFootage />
-        {writer && (
-          <Button size="icon" className="size-10 rounded-full" aria-label="New idea" onClick={() => setAdding(true)}>
-            <Plus />
-          </Button>
-        )}
-        <Button variant="ghost" size="icon" className="size-10" aria-label="Settings" asChild>
-          <Link to="/settings">
-            <Settings />
-          </Link>
-        </Button>
       </header>
-      <div className="pb-safe min-h-0 flex-1 overflow-y-auto px-4 pb-6">
-        {adding && (
-          <input
-            autoFocus
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && void add()}
-            onBlur={() => !title.trim() && setAdding(false)}
-            placeholder="Title, then Enter"
-            className="mb-3 w-full rounded-xl border bg-muted/40 px-4 py-3.5 text-base outline-none"
-          />
-        )}
-        {LIST_ORDER.map((c) => {
-          const list = items.filter((i) => i.column === c).sort((a, b) => (isWritingColumn(c) ? a.position - b.position : b.updatedAt - a.updatedAt));
-          if (!list.length) return null;
-          return (
-            <section key={c}>
-              <h2 className="px-1 pt-5 pb-2 text-xs font-semibold tracking-widest text-muted-foreground uppercase">{COLUMN_LABELS[c]}</h2>
-              <div className="flex flex-col gap-2">
-                {list.map((i) => (
-                  <Row key={i.id} item={i} />
-                ))}
-              </div>
-            </section>
-          );
-        })}
-        {!items.length && !adding && <p className="pt-10 text-center text-muted-foreground">No videos yet</p>}
-      </div>
-    </>
-  );
-}
-
-/** Save the video playing to the phone (the gallery), and how that's going. */
-function SaveVideo({ mediaId, name }: { mediaId: string; name: string }) {
-  const saved = useDownload(mediaId);
-  const reachable = useStore(serverReachable);
-  const [starting, setStarting] = useState(false);
-  if (saved?.state === 'done')
-    return (
-      <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
-        <Check className="size-4" /> On this phone
-      </span>
-    );
-  if (saved?.state === 'running')
-    return (
-      <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground tabular-nums">
-        <Spinner /> {Math.round(saved.progress * 100)}%
-      </span>
-    );
-  if (!reachable) return null;
-  async function start() {
-    setStarting(true);
-    try {
-      await downloadVideo(mediaId, name);
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setStarting(false);
-    }
-  }
-  return (
-    <Button variant="ghost" size="sm" className={cn('-mr-2 text-[13px]', saved?.state === 'failed' ? 'text-destructive' : 'text-muted-foreground')} onClick={start} disabled={starting}>
-      {starting ? <Spinner /> : <Download />} {saved?.state === 'failed' ? 'Download again' : 'Download'}
-    </Button>
-  );
-}
-
-/**
- * A card's video on the phone, to watch: the newest render, and a tap on an older version plays that one instead.
- * A video saved to the phone plays from there; without the computer, only those play.
- */
-function PhoneVideo({ piece }: { piece: PieceDetail }) {
-  const { versions, current, loading } = useVideoVersions(piece.id);
-  const [picked, setPicked] = useState<string | null>(null);
-  const reachable = useStore(serverReachable);
-  const mediaId = picked ?? current?.mediaId;
-  const saved = useDownload(mediaId);
-  const playing = versions.find((v) => v.render?.mediaId === mediaId)?.render ?? current;
-  const src = !mediaId ? null : saved?.state === 'done' ? savedVideoUrl(mediaId) : reachable ? mediaFileUrl(mediaId) : null;
-  return (
-    <div className="space-y-4">
-      {mediaId ? (
-        <>
-          {src ? (
-            <video key={src} src={src} controls playsInline preload="metadata" className="mx-auto aspect-[9/16] max-h-[72vh] w-full rounded-xl bg-black" />
-          ) : (
-            <div className="grid aspect-[9/16] max-h-[72vh] w-full place-items-center rounded-xl bg-muted px-8 text-center text-muted-foreground">Not on this phone: download it while your computer is reachable</div>
-          )}
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[13px] text-muted-foreground">
-              v{playing?.versionNumber ?? '?'}
-              {playing?.id === current?.id && ' · now'}
-            </p>
-            <SaveVideo mediaId={mediaId} name={videoName(piece.title, playing?.versionNumber)} />
-          </div>
-          <VersionStrip versions={versions} current={current} selected={picked} onPick={setPicked} />
-        </>
-      ) : (
-        <div className="grid aspect-[9/16] max-h-[72vh] w-full place-items-center rounded-xl bg-muted text-muted-foreground">{loading ? <Spinner /> : 'No render yet'}</div>
+      {page && current && (
+        <nav className="flex h-11 shrink-0 items-end gap-6 overflow-x-auto border-b px-4 [scrollbar-width:none]" aria-label={page.name}>
+          {sectionsFor(page.kind).map((s) => (
+            <NavLink
+              key={s.id}
+              to={pagePath(page.id, s.id)}
+              className={cn('shrink-0 border-b-2 border-transparent px-0.5 pb-2.5 text-[15px] font-medium text-muted-foreground', current.section === s.id && 'border-foreground text-foreground')}
+            >
+              {s.label}
+            </NavLink>
+          ))}
+        </nav>
       )}
-    </div>
-  );
-}
-
-/**
- * A card on a page I write for, at any stage, as on the laptop: the document and the video, the one the stage needs
- * first. While I write, the video shows once one was made.
- */
-function PhoneDoc({ piece, item }: { piece: PieceDetail; item: BoardItem }) {
-  const draft = useDraft(piece);
-  const { current } = useVideoVersions(piece.id);
-  const writing = isWritingColumn(item.column);
-  const video = <PhoneVideo piece={piece} />;
-  return <WriteView piece={piece} draft={draft} phone={{ column: item.column, series: item.series, above: writing ? undefined : video, below: writing && current ? video : undefined }} />;
-}
-
-/** A clip (a clipping page's card): its video to watch. */
-function PhoneClip({ piece }: { piece: PieceDetail }) {
-  return (
-    <div className="pb-safe h-full space-y-4 overflow-y-auto px-4 pb-8">
-      <h1 className="text-xl font-semibold">{piece.title}</h1>
-      <PhoneVideo piece={piece} />
-    </div>
-  );
-}
-
-/** One card on the phone. */
-function PhoneCard({ id }: { id: string }) {
-  const piece = usePiece(id);
-  const board = useBoardData();
-  const item = board.data?.items.find((i) => i.id === id);
-  const kind = board.data?.pages.find((p) => p.id === item?.workspaceId)?.kind ?? 'personal';
-  return (
-    <>
-      <header className="pt-safe flex items-center gap-2 px-2">
-        <div className="flex h-14 flex-1 items-center">
-          <Button variant="ghost" size="icon" className="size-10" aria-label="Back" asChild>
-            <Link to="/">
-              <ChevronLeft className="size-6" />
-            </Link>
-          </Button>
-        </div>
-        {item && <span className="mr-3 rounded-full bg-muted px-3 py-1 text-[13px] text-muted-foreground">{COLUMN_LABELS[item.column]}</span>}
-      </header>
-      <div className="min-h-0 flex-1">
-        {!piece.data || !item ? (
-          <div className="grid h-full place-items-center">
-            {piece.error instanceof ApiError && piece.error.status === 404 ? (
-              <p className="text-muted-foreground">This card is gone.</p>
-            ) : piece.isError || piece.isPaused || board.isPaused ? (
-              <p className="text-muted-foreground">Can’t reach your computer</p>
-            ) : (
-              <Spinner />
-            )}
-          </div>
-        ) : writes(kind) ? (
-          <PhoneDoc key={id} piece={piece.data} item={item} />
-        ) : (
-          <PhoneClip key={id} piece={piece.data} />
-        )}
-      </div>
     </>
   );
 }
 
 /**
- * The phone (PLAN.md Phase 14): write scripts, send footage to a video, and watch the videos. Settings (pairing,
- * notifications, the lock) and the share screen come through as they are.
+ * The phone (the Android app, or a narrow browser): every page the laptop has, laid out for a small screen. Home and a
+ * page's sections get the header with the menu (the laptop's top bar); the other pages bring their own (PageHeader,
+ * the card's back bar, the share screen).
  */
 export function PhoneShell() {
-  const home = useMatch('/');
-  const card = useMatch('/c/:id');
-  const share = useMatch('/share');
-  const settings = useMatch('/settings/*');
-  const passthrough = share || settings;
+  const { pathname } = useLocation();
+  const place = pathname === '/' || pathname.startsWith('/p/');
   return (
-    <div className="flex h-full flex-col">
-      {home ? <Videos /> : card?.params.id ? <PhoneCard id={card.params.id} /> : passthrough ? <Outlet /> : <Navigate to="/" replace />}
+    <div className="pt-safe pb-safe flex h-full flex-col">
+      {isApp && <AppBanners />}
+      {place && <PlaceHeader />}
+      <main className="flex min-h-0 flex-1 flex-col">
+        <Outlet />
+      </main>
+      <PhoneMenu />
     </div>
   );
 }

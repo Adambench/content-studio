@@ -74,7 +74,7 @@ function Settings({ ws }: { ws: Workspace }) {
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl space-y-6 p-6">
+        <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-6">
           <Card>
             <CardContent className="space-y-5 pt-6">
               <div className="space-y-2">

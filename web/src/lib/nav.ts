@@ -1,4 +1,6 @@
+import { useMatch } from 'react-router';
 import type { BoardColumn } from '@shared/board';
+import { useBoardData } from './queries';
 import { createStore } from './ui-state';
 
 // Pages on the top bar, then the page's sections (PLAN.md Phase 14). A page that writes its videos (Personal brand)
@@ -36,3 +38,15 @@ export const lastSection = createStore<Record<string, SectionId>>({}, 'cs.lastSe
 export const pagePath = (wid: string, section?: SectionId) => `/p/${wid}${section ? `/${section}` : ''}`;
 export const cardPath = (id: string) => `/c/${id}`;
 export const seriesPath = (wid: string, id: string) => `/p/${wid}/series/${id}`;
+
+/** The page I'm on and its section: from the address, or the card's own page. */
+export function useCurrentPage(): { wid: string; section: string } | null {
+  const onPage = useMatch('/p/:wid/*');
+  const onCard = useMatch('/c/:id');
+  const board = useBoardData();
+  if (onPage) return { wid: onPage.params.wid ?? '', section: onPage.params['*']?.split('/')[0] ?? '' };
+  const item = onCard && board.data?.items.find((i) => i.id === onCard.params.id);
+  if (!item) return null;
+  const kind = board.data?.pages.find((p) => p.id === item.workspaceId)?.kind ?? 'personal';
+  return { wid: item.workspaceId, section: sectionOf(kind) };
+}

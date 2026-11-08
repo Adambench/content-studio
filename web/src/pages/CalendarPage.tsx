@@ -17,7 +17,7 @@ function weekStart(offset: number) {
 
 const hm = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
-/** A page's week: what goes out when, what went out, what failed. */
+/** A page's week: what goes out when, what went out, what failed. Seven columns on the laptop, a list of days on the phone. */
 export function PageCalendar({ wid }: { wid: string }) {
   const [offset, setOffset] = useState(0);
   const from = weekStart(offset);
@@ -27,7 +27,7 @@ export function PageCalendar({ wid }: { wid: string }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-1 px-5 pt-3">
+      <div className="flex items-center gap-1 px-3 pt-3 md:px-5">
         <Button variant="ghost" size="icon" aria-label="Week before" onClick={() => setOffset((o) => o - 1)}>
           <ChevronLeft />
         </Button>
@@ -41,13 +41,13 @@ export function PageCalendar({ wid }: { wid: string }) {
           </Button>
         )}
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-7 gap-3 px-5 pt-3 pb-5">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pt-3 pb-5 md:grid md:grid-cols-7 md:gap-3 md:overflow-visible md:px-5">
         {Array.from({ length: 7 }, (_, i) => {
           const start = from + i * DAY;
           const day = new Date(start);
           const list = (posts.data ?? []).filter((p) => p.scheduledAt >= start && p.scheduledAt < start + DAY).sort((a, b) => a.scheduledAt - b.scheduledAt);
           return (
-            <section key={start} className={cn('min-h-0 overflow-y-auto rounded-xl border bg-card p-3', start === today && 'border-foreground/20 bg-muted/40')}>
+            <section key={start} className={cn('shrink-0 rounded-xl border bg-card p-3 md:min-h-0 md:shrink md:overflow-y-auto', start === today && 'border-foreground/20 bg-muted/40')}>
               <h2 className={cn('mb-2.5 text-sm font-semibold text-muted-foreground', start === today && 'text-foreground')}>
                 {day.toLocaleDateString(undefined, { weekday: 'short' })} {day.getDate()}
               </h2>

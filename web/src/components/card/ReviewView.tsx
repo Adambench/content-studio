@@ -1,4 +1,4 @@
-import { Copy, Download } from 'lucide-react';
+import { Check, Copy, Download } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { BoardItem } from '@shared/board';
@@ -6,9 +6,12 @@ import { NoteComposer, NoteList } from '@/components/package/VideoNotes';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { api, errorMessage, fileUrl, mediaFileUrl } from '@/lib/api';
+import { downloadVideo, savedVideoUrl, useDownload, videoName } from '@/lib/downloads';
 import { postWhen } from '@/lib/format';
+import { isApp, isNative } from '@/lib/native';
 import { keys, queryClient, useApprovePlan, useNotes, usePackage, usePiecePosts, useRenders, useVersions } from '@/lib/queries';
 import type { PieceDetail, RenderRow, VersionRow } from '@/lib/types';
+import { serverReachable, useStore } from '@/lib/ui-state';
 import { cn } from '@/lib/utils';
 import type { CardDraft } from './useDraft';
 
@@ -19,18 +22,69 @@ export function copyFix() {
   toast(`Copied “${FIX}”: paste it in Claude Code`);
 }
 
-export function Player({ mediaId, label, onVideo, className }: { mediaId: string; label: string; onVideo?: (v: HTMLVideoElement | null) => void; className?: string }) {
+/** Save a video to the phone (the gallery, through Android's downloads), and how that's going. */
+function SaveVideo({ mediaId, name }: { mediaId: string; name: string }) {
+  const saved = useDownload(mediaId);
+  const reachable = useStore(serverReachable);
+  const [starting, setStarting] = useState(false);
+  if (saved?.state === 'done')
+    return (
+      <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+        <Check className="size-4" /> On this phone
+      </span>
+    );
+  if (saved?.state === 'running')
+    return (
+      <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground tabular-nums">
+        <Spinner /> {Math.round(saved.progress * 100)}%
+      </span>
+    );
+  if (!reachable) return null;
+  async function start() {
+    setStarting(true);
+    try {
+      await downloadVideo(mediaId, name);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setStarting(false);
+    }
+  }
   return (
-    <figure className={cn('space-y-2', className)}>
-      <video ref={onVideo} src={mediaFileUrl(mediaId)} controls playsInline preload="metadata" className="aspect-[9/16] h-[min(66vh,760px)] rounded-xl bg-black" />
-      <figcaption className="flex items-center justify-between text-[13px] text-muted-foreground">
+    <Button variant="ghost" size="sm" className={cn('-mr-2 text-[13px]', saved?.state === 'failed' ? 'text-destructive' : 'text-muted-foreground')} onClick={start} disabled={starting}>
+      {starting ? <Spinner /> : <Download />} {saved?.state === 'failed' ? 'Download again' : 'Download'}
+    </Button>
+  );
+}
+
+/**
+ * A render to watch, with its download. The phone plays the copy it saved when there is one, and without the computer
+ * only those. Its height on the laptop; on the phone the width it's given (two side by side to compare).
+ */
+export function Player({ mediaId, label, name, onVideo, className }: { mediaId: string; label: string; name: string; onVideo?: (v: HTMLVideoElement | null) => void; className?: string }) {
+  const saved = useDownload(mediaId);
+  const reachable = useStore(serverReachable);
+  const src = saved?.state === 'done' ? savedVideoUrl(mediaId) : reachable || !isApp ? mediaFileUrl(mediaId) : null;
+  const box = 'aspect-[9/16] max-h-[72vh] w-full rounded-xl md:h-[min(66vh,760px)] md:max-h-none md:w-auto';
+  return (
+    <figure className={cn('min-w-0 flex-1 space-y-2 md:flex-none', className)}>
+      {src ? (
+        <video key={src} ref={onVideo} src={src} controls playsInline preload="metadata" className={cn(box, 'bg-black')} />
+      ) : (
+        <div className={cn(box, 'grid place-items-center bg-muted px-6 text-center text-sm text-muted-foreground')}>Not on this phone: download it while your computer is reachable</div>
+      )}
+      <figcaption className="flex flex-wrap items-center justify-between gap-x-2 text-[13px] text-muted-foreground">
         {label}
-        {/* The file goes to Downloads (the desktop app says so when it's there). */}
-        <Button variant="ghost" size="icon-xs" className="text-muted-foreground" aria-label="Download" title="Download" asChild>
-          <a href={fileUrl(`/media/${mediaId}/file?download=1`)} download>
-            <Download />
-          </a>
-        </Button>
+        {isNative ? (
+          <SaveVideo mediaId={mediaId} name={name} />
+        ) : (
+          // The file goes to Downloads (the desktop app says so when it's there).
+          <Button variant="ghost" size="icon-xs" className="text-muted-foreground" aria-label="Download" title="Download" asChild>
+            <a href={fileUrl(`/media/${mediaId}/file?download=1`)} download={name}>
+              <Download />
+            </a>
+          </Button>
+        )}
       </figcaption>
     </figure>
   );
@@ -208,7 +262,7 @@ export function useVideoVersions(pieceId: string) {
 
 /**
  * The version strip: one button per version. A rendered one plays (`onPick`), one being rendered shows how far it
- * is, and one never rendered renders on a click (`render`; on the laptop only).
+ * is, and one never rendered renders on a click (`render`).
  */
 export function VersionStrip({ versions, current, selected, onPick, render }: { versions: Version[]; current: RenderRow | undefined; selected: string | null; onPick: (mediaId: string | null) => void; render?: boolean }) {
   const shown = render ? versions : versions.filter((v) => v.render?.status === 'done');
@@ -256,8 +310,8 @@ export function VersionStrip({ versions, current, selected, onPick, render }: { 
 
 /**
  * A video Claude made: the newest render (an older one beside it to compare), comments pinned to moments under it,
- * and on the right what it waits for, its look, the comments and the post's text. The card's title is above it
- * (CardPage).
+ * and on the right what it waits for, its look, the comments and the post's text (on the phone all of it under the
+ * video). The card's title is above it (CardPage).
  */
 export function ReviewView({ piece, item, draft }: { piece: PieceDetail; item: BoardItem | undefined; draft: CardDraft }) {
   const { versions, current, loading } = useVideoVersions(piece.id);
@@ -267,24 +321,24 @@ export function ReviewView({ piece, item, draft }: { piece: PieceDetail; item: B
   const olderRender = versions.find((v) => v.render?.mediaId === older)?.render;
 
   return (
-    <div className="grid grid-cols-[auto_minmax(0,34rem)] items-start justify-start gap-14">
-      <div className="space-y-4">
+    <div className="grid grid-cols-1 items-start gap-9 md:grid-cols-[auto_minmax(0,34rem)] md:justify-start md:gap-14">
+      <div className="min-w-0 space-y-4">
         {current?.mediaId ? (
           <>
-            <div className="flex gap-4">
-              {olderRender?.mediaId && <Player mediaId={olderRender.mediaId} label={`v${olderRender.versionNumber ?? '?'}`} />}
-              <Player mediaId={current.mediaId} label={`v${current.versionNumber ?? '?'} · now`} onVideo={setVideo} />
+            <div className="flex gap-2 md:gap-4">
+              {olderRender?.mediaId && <Player mediaId={olderRender.mediaId} label={`v${olderRender.versionNumber ?? '?'}`} name={videoName(piece.title, olderRender.versionNumber)} />}
+              <Player mediaId={current.mediaId} label={`v${current.versionNumber ?? '?'} · now`} name={videoName(piece.title, current.versionNumber)} onVideo={setVideo} />
             </div>
-            <div className="max-w-[min(66vh,760px)]" style={{ width: 'calc(min(66vh, 760px) * 9 / 16)' }}>
+            <div className="w-full md:w-[calc(min(66vh,760px)*9/16)]">
               <NoteComposer pieceId={piece.id} video={video} mediaId={current.mediaId} version={current.versionNumber} />
             </div>
             <VersionStrip versions={versions} current={current} selected={older} onPick={setOlder} render />
           </>
         ) : (
-          <div className="grid aspect-[9/16] h-[min(66vh,760px)] place-items-center rounded-xl bg-muted text-muted-foreground">{loading ? <Spinner /> : 'No render yet'}</div>
+          <div className="grid aspect-[9/16] max-h-[72vh] w-full place-items-center rounded-xl bg-muted text-muted-foreground md:h-[min(66vh,760px)] md:max-h-none md:w-auto">{loading ? <Spinner /> : 'No render yet'}</div>
         )}
       </div>
-      <div className="space-y-9">
+      <div className="min-w-0 space-y-9">
         <Status piece={piece} item={item} />
         {piece.workspaceId && <Looks piece={piece} />}
         {current?.mediaId && <NoteList pieceId={piece.id} video={video} mediaId={current.mediaId} version={current.versionNumber} />}

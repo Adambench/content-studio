@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { isApp } from '@/lib/native';
 
 export function useMediaQuery(query: string) {
   return useSyncExternalStore(
@@ -12,3 +13,6 @@ export function useMediaQuery(query: string) {
 }
 
 export const useIsDesktop = () => useMediaQuery('(min-width: 1024px)');
+
+/** The phone: the Android app, or a browser window as narrow as one. It has every page, laid out for a small screen. */
+export const usePhone = () => useMediaQuery('(max-width: 767px)') || isApp;

@@ -40,7 +40,7 @@ export function CampaignLinks({ wid }: { wid: string }) {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-4xl space-y-7 px-6 py-8">
+      <div className="mx-auto max-w-4xl space-y-7 px-4 py-6 md:px-6 md:py-8">
         <form
           className="flex gap-2"
           onSubmit={(e) => {

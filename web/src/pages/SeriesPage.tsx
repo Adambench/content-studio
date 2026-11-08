@@ -60,7 +60,7 @@ export function SeriesList({ wid }: { wid: string }) {
   const navigate = useNavigate();
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-4xl space-y-3 px-6 py-8">
+      <div className="mx-auto max-w-4xl space-y-3 px-4 py-6 md:px-6 md:py-8">
         {list.data?.length ? (
           <ul>
             {list.data.map((s) => (
@@ -127,10 +127,18 @@ async function save(id: string, body: { name?: string; about?: string }) {
   }
 }
 
-/** The episodes in order: dragging one moves it, and the numbers follow. */
+/** Where in the list a drag at height `y` would drop: before that row, or at the end. */
+function overAt(list: HTMLElement, y: number) {
+  const rows = [...list.querySelectorAll('li')];
+  const i = rows.findIndex((r) => y < r.getBoundingClientRect().top + r.offsetHeight / 2);
+  return i < 0 ? rows.length : i;
+}
+
+/** The episodes in order: dragging one moves it (by its grip on a touchscreen), and the numbers follow. */
 function Episodes({ series }: { series: Series }) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<number | null>(null);
+  const list = useRef<HTMLOListElement>(null);
 
   async function drop(at: number) {
     const id = dragging;
@@ -154,12 +162,11 @@ function Episodes({ series }: { series: Series }) {
 
   return (
     <ol
+      ref={list}
       onDragOver={(e) => {
         if (!dragging) return;
         e.preventDefault();
-        const rows = [...e.currentTarget.querySelectorAll('li')];
-        const i = rows.findIndex((r) => e.clientY < r.getBoundingClientRect().top + r.offsetHeight / 2);
-        setOver(i < 0 ? rows.length : i);
+        setOver(overAt(e.currentTarget, e.clientY));
       }}
       onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(null)}
       onDrop={(e) => {
@@ -181,7 +188,23 @@ function Episodes({ series }: { series: Series }) {
           }}
           className={cn('group flex items-center gap-3 border-b border-t border-t-transparent', over === i && 'border-t-foreground/40', over === series.episodes.length && i === series.episodes.length - 1 && 'border-b-foreground/40', dragging === ep.id && 'opacity-40')}
         >
-          <GripVertical className="size-4 shrink-0 cursor-grab text-muted-foreground/40 group-hover:text-muted-foreground" aria-hidden />
+          {/* HTML drag and drop is the mouse's; a finger drags the grip. */}
+          <span
+            className="-my-1 shrink-0 touch-none p-2 md:m-0 md:p-0"
+            onPointerDown={(e) => {
+              if (e.pointerType === 'mouse') return;
+              e.currentTarget.setPointerCapture(e.pointerId);
+              setDragging(ep.id);
+            }}
+            onPointerMove={(e) => dragging && e.pointerType !== 'mouse' && list.current && setOver(overAt(list.current, e.clientY))}
+            onPointerUp={(e) => e.pointerType !== 'mouse' && dragging && void drop(over ?? series.episodes.length)}
+            onPointerCancel={() => {
+              setDragging(null);
+              setOver(null);
+            }}
+          >
+            <GripVertical className="size-4 cursor-grab text-muted-foreground/40 group-hover:text-muted-foreground" aria-hidden />
+          </span>
           <span className="w-6 shrink-0 text-[13px] text-muted-foreground tabular-nums">{ep.episode}</span>
           <Link to={cardPath(ep.id)} draggable={false} className="min-w-0 flex-1 truncate py-3.5 text-[15px] hover:underline hover:underline-offset-4">
             {ep.title}
@@ -222,7 +245,7 @@ export function SeriesView({ wid, id }: { wid: string; id: string }) {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-4xl space-y-8 px-6 pt-5 pb-20">
+      <div className="mx-auto max-w-4xl space-y-8 px-4 pt-4 pb-20 md:px-6 md:pt-5">
         <div className="flex items-center">
           <Link to={pagePath(wid, 'series')} className="text-sm text-muted-foreground hover:text-foreground">
             ← Series
@@ -247,7 +270,7 @@ export function SeriesView({ wid, id }: { wid: string; id: string }) {
             onBlur={() => (name.trim() && name.trim() !== s.name ? void save(s.id, { name: name.trim() }) : setName(s.name))}
             onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
             aria-label="Name"
-            className="w-full bg-transparent text-3xl font-semibold tracking-tight outline-none"
+            className="w-full bg-transparent text-2xl font-semibold tracking-tight outline-none md:text-3xl"
           />
           <About series={s} />
         </div>

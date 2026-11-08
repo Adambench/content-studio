@@ -13,7 +13,7 @@ import { keys, queryClient } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 /** The order a column lists its cards in. */
-function ordered(column: BoardColumn, items: BoardItem[]) {
+export function ordered(column: BoardColumn, items: BoardItem[]) {
   const list = items.filter((i) => i.column === column);
   switch (column) {
     case 'posted': {
@@ -32,7 +32,7 @@ function ordered(column: BoardColumn, items: BoardItem[]) {
 }
 
 /** What a card says on the right: its length, when it goes out, its comments, or its episode. */
-function Meta({ item }: { item: BoardItem }) {
+export function Meta({ item }: { item: BoardItem }) {
   const m = 'mt-0.5 shrink-0 text-[13px] text-muted-foreground tabular-nums';
   switch (item.column) {
     case 'editing':
@@ -81,7 +81,7 @@ function Card({ item, color }: { item: BoardItem; color: string }) {
   );
 }
 
-function NewIdea({ workspaceId }: { workspaceId: string }) {
+export function NewIdea({ workspaceId }: { workspaceId: string }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
 

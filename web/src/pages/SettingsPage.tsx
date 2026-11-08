@@ -58,23 +58,13 @@ export function SettingsPage() {
     }
   }
 
-  if (isApp)
-    return (
-      <div className="flex h-full flex-col">
-        <PageHeader title="Settings" actions={<Button variant="ghost" onClick={() => history.back()}>Done</Button>} />
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl space-y-6 p-4">
-            <ThisPhoneCard />
-          </div>
-        </div>
-      </div>
-    );
-
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Settings" />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-6">
+          {isApp && <ThisPhoneCard />}
+
           <PagesCard />
 
           {desktop && <AppCard dataDir={st?.dataDir} />}
@@ -115,7 +105,7 @@ export function SettingsPage() {
 
           <ClipToolsCard />
 
-          {!isApp && <ComputeCard />}
+          <ComputeCard />
 
           <PublishingCard />
 
@@ -123,9 +113,9 @@ export function SettingsPage() {
 
           <NotificationsCard pushDevices={st?.pushDevices ?? 0} vapidPublicKey={s?.vapidPublicKey} />
 
-          <PhoneCard />
+          {!isApp && <PhoneCard />}
 
-          {!desktop && <SignOutCard />}
+          {!desktop && !isApp && <SignOutCard />}
         </div>
       </div>
     </div>
@@ -376,7 +366,7 @@ function NotificationsCard({ pushDevices, vapidPublicKey }: { pushDevices: numbe
       <CardContent className="space-y-4">
         {desktop ? (
           <p className="text-sm text-muted-foreground">On this computer they appear as desktop notifications while the window isn’t in front. For your phone, open Content Studio there and turn notifications on in its Settings.</p>
-        ) : pushSupported() ? (
+        ) : isApp ? null : pushSupported() ? (
           <div className="flex items-center justify-between gap-4">
             <Label htmlFor="push">Notifications on this device</Label>
             <Switch id="push" checked={pushOn} onCheckedChange={togglePush} />

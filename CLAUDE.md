@@ -1,8 +1,8 @@
 # CLAUDE.md
 
 Content Studio: single-user Electron desktop app that shows me my videos and takes my clicks; Claude (Claude Code in
-the terminal) does the editing, organising and scheduling. The phone (Android app, Capacitor) writes scripts, sends
-footage and plays the videos. PLAN.md has the decisions (*Phase 14* is the current shape), measurements and open items. Read only the
+the terminal) does the editing, organising and scheduling. The phone (Android app, Capacitor) has every page the laptop
+has, laid out for it, and also sends footage and downloads videos. PLAN.md has the decisions (*Phase 14* is the current shape), measurements and open items. Read only the
 section you need.
 
 ## Layout
@@ -21,8 +21,9 @@ section you need.
   columns from stages in `shared/board.ts`); a card opens at `/c/:id` (`pages/CardPage.tsx`: at every stage the Script
   + Notes document and the render + comments + Approve, the one the stage needs first; one shared `useDraft`). A series
   (`pages/SeriesPage.tsx`, `services/series.ts`) is a name, an About every episode follows, and cards numbered in its
-  order (`pieces.seriesId`, `episode`). The phone gets `components/PhoneShell.tsx` only; offline it reads its copy and queues drafts (`lib/offline.ts`), and
-  plays videos it downloaded (`lib/downloads.ts`).
+  order (`pieces.seriesId`, `episode`). The phone (`usePhone()`: the app or a narrow window) gets the same pages in
+  `components/PhoneShell.tsx` (a menu for the top bar, boards as one list: `board/BoardList.tsx`); offline it reads its
+  copy and queues drafts (`lib/offline.ts`), and plays videos it downloaded (`lib/downloads.ts`).
   `isDesktop` (`lib/desktop.ts`), `isApp`/`isNative` (`lib/native.ts`, the `vite --mode app` build).
 - `mobile/` — Capacitor 8, committed `android/`, one native plugin `StudioPlugin` (Java). CI builds APKs.
 - `shared/` — types for both sides (`types.ts`, `edit.ts`, `campaigns.ts`, `clipping.ts`, …).
@@ -89,8 +90,8 @@ section you need.
   file list; transitions only overlap pictures (sound still cuts) so timings never move.
 - Stages: every page has `BOARD_STAGES` (`shared/types.ts`); `columnOf` (`shared/board.ts`) maps them to the board.
   A render that finishes moves a card in Making, Editing or Ready to film to Review (`studio/render.ts`).
-- UI: shadcn/ui (radix-nova) in `web/src/components/ui` is generated: compose, don't edit. Dark only, laptop first; the
-  phone writes scripts, sends footage and plays the videos. No `alert`/`confirm`/`prompt`.
+- UI: shadcn/ui (radix-nova) in `web/src/components/ui` is generated: compose, don't edit. Dark only, laptop first; every
+  page also fits the phone (`md:` for the laptop's layout, `usePhone()` where it differs). No `alert`/`confirm`/`prompt`.
 - `pkill -f "<pattern>"` from a shell whose command line contains the pattern kills that shell: use `[x]yz` patterns.
 
 ## Commands

@@ -1,13 +1,14 @@
 import { Paperclip, X } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
-import { COLUMN_LABELS, COLUMN_STAGE, isWritingColumn, WRITING_COLUMNS, type BoardColumn } from '@shared/board';
+import { COLUMN_LABELS, type BoardColumn } from '@shared/board';
 import { PieceUploads, usePieceUploads } from '@/components/AppChrome';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Spinner } from '@/components/ui/spinner';
+import { usePhone } from '@/hooks/useMediaQuery';
 import { api, errorMessage, uploadFiles } from '@/lib/api';
 import { duration } from '@/lib/format';
 import { moveCard } from '@/lib/move';
@@ -92,16 +93,13 @@ const FOOTAGE = new Set(['upload', 'share', 'capture']);
 
 type Series = { id: string; name: string; episode: number };
 
-/**
- * A card's title (renamed in place), the column it's in (on the laptop any of the page's `columns`, as on the board;
- * on the phone while I write it) and its series, picked on the laptop once the page has one.
- */
-export function CardHeader({ piece, column, columns, series, phone = false }: { piece: PieceDetail; column: BoardColumn; columns?: readonly BoardColumn[]; series: Series | null; phone?: boolean }) {
+/** A card's title (renamed in place), the column it's in (any of the page's `columns`, as on the board) and its series. */
+export function CardHeader({ piece, column, columns, series }: { piece: PieceDetail; column: BoardColumn; columns: readonly BoardColumn[]; series: Series | null }) {
   const [title, setTitle] = useState(piece.title);
   useEffect(() => setTitle(piece.title), [piece.title]);
-  const loaded = useSeries(phone ? '' : piece.workspaceId).data ?? [];
+  const loaded = useSeries(piece.workspaceId).data ?? [];
   const pageSeries = series && !loaded.some((s) => s.id === series.id) ? [series, ...loaded] : loaded;
-  const movable = phone ? isWritingColumn(column) : !!columns?.includes(column);
+  const movable = columns.includes(column);
 
   async function pickSeries(seriesId: string) {
     try {
@@ -113,41 +111,30 @@ export function CardHeader({ piece, column, columns, series, phone = false }: { 
     }
   }
 
-  async function moveTo(c: BoardColumn) {
-    if (!phone) return moveCard({ id: piece.id, column }, c);
-    try {
-      await api(`/pieces/${piece.id}`, { method: 'PATCH', body: { stage: COLUMN_STAGE[c] } });
-      void queryClient.invalidateQueries({ queryKey: keys.boardAll });
-      void queryClient.invalidateQueries({ queryKey: keys.piece(piece.id) });
-    } catch (err) {
-      toast.error(errorMessage(err));
-    }
-  }
-
   return (
-    <div className={phone ? 'space-y-3' : 'space-y-4'}>
+    <div className="space-y-3 md:space-y-4">
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         onBlur={() => title.trim() !== piece.title && void renameCard(piece.id, title)}
         onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
         aria-label="Title"
-        className={cn('w-full bg-transparent font-semibold tracking-tight outline-none', phone ? 'text-2xl' : 'text-3xl')}
+        className="w-full bg-transparent text-2xl font-semibold tracking-tight outline-none md:text-3xl"
       />
       {(movable || series || pageSeries.length > 0) && (
         <div className="flex flex-wrap items-center gap-3">
           {movable && (
-            <select value={column} onChange={(e) => void moveTo(e.target.value as BoardColumn)} aria-label="Column" className="h-9 rounded-lg border bg-card px-2.5 text-sm">
-              {(phone || !columns ? WRITING_COLUMNS : columns).map((c) => (
+            <select value={column} onChange={(e) => void moveCard({ id: piece.id, column }, e.target.value as BoardColumn)} aria-label="Column" className="h-9 rounded-lg border bg-card px-2.5 text-sm">
+              {columns.map((c) => (
                 <option key={c} value={c}>
                   {COLUMN_LABELS[c]}
                 </option>
               ))}
             </select>
           )}
-          {!phone && (series || pageSeries.length > 0) ? (
+          {(series || pageSeries.length > 0) && (
             <>
-              <select value={series?.id ?? ''} onChange={(e) => void pickSeries(e.target.value)} aria-label="Series" className="h-9 max-w-64 rounded-lg border bg-card px-2.5 text-sm">
+              <select value={series?.id ?? ''} onChange={(e) => void pickSeries(e.target.value)} aria-label="Series" className="h-9 max-w-64 min-w-0 rounded-lg border bg-card px-2.5 text-sm">
                 <option value="">No series</option>
                 {pageSeries.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -161,12 +148,6 @@ export function CardHeader({ piece, column, columns, series, phone = false }: { 
                 </Link>
               )}
             </>
-          ) : (
-            series && (
-              <span className="text-sm text-muted-foreground">
-                {series.name} · Ep {series.episode}
-              </span>
-            )
           )}
         </div>
       )}
@@ -175,12 +156,13 @@ export function CardHeader({ piece, column, columns, series, phone = false }: { 
 }
 
 /**
- * A card's document: Script, then Notes under it, Hooks and Directions beside it, and the footage I sent for it. The
- * laptop shows it under the card's header (CardPage); the phone shows it with the header, the video `above` or
- * `below` it, and Hooks and Directions at the bottom.
+ * A card's document: Script, then Notes under it, Hooks and Directions beside it, and the footage I sent for it, under
+ * the card's header (CardPage). On the phone Hooks and Directions stay at the bottom of the screen while the document
+ * is on it, and their answers come up from there.
  */
-export function WriteView({ piece, draft: shared, phone }: { piece: PieceDetail; draft: CardDraft; phone?: { column: BoardColumn; series: Series | null; above?: ReactNode; below?: ReactNode } }) {
+export function WriteView({ piece, draft: shared }: { piece: PieceDetail; draft: CardDraft }) {
   const { draft, change, ready } = shared;
+  const phone = usePhone();
   const { help, ask, close } = useHelp(piece.id);
   const [uploading, setUploading] = useState<number | null>(null);
   const [removing, setRemoving] = useState<Media | null>(null);
@@ -257,11 +239,11 @@ export function WriteView({ piece, draft: shared, phone }: { piece: PieceDetail;
   const doc = (
     <div className="space-y-2">
       <Heading value={labels.script} onChange={(v) => change({ ...draft, labels: { ...labels, script: v } })} />
-      <Grow value={draft.script} onChange={(v) => change({ ...draft, script: v })} placeholder="What you say" className={cn('leading-relaxed', phone ? 'text-[17px]' : 'text-lg')} />
+      <Grow value={draft.script} onChange={(v) => change({ ...draft, script: v })} placeholder="What you say" className="text-[17px] leading-relaxed md:text-lg" />
       <div className="pt-6">
         <Heading value={labels.notes} onChange={(v) => change({ ...draft, labels: { ...labels, notes: v } })} />
       </div>
-      <Grow value={draft.notes} onChange={(v) => change({ ...draft, notes: v })} placeholder="The effects you want" className={cn('leading-relaxed', phone ? 'text-[17px]' : 'text-lg')} />
+      <Grow value={draft.notes} onChange={(v) => change({ ...draft, notes: v })} placeholder="The effects you want" className="text-[17px] leading-relaxed md:text-lg" />
     </div>
   );
 
@@ -333,23 +315,14 @@ export function WriteView({ piece, draft: shared, phone }: { piece: PieceDetail;
     </section>
   );
 
-  if (!ready) return <p className={cn('text-muted-foreground', phone && 'p-8')}>This card has no draft.</p>;
+  if (!ready) return <p className="text-muted-foreground">This card has no draft.</p>;
 
   if (phone)
     return (
-      <div className="flex h-full flex-col">
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pt-2 pb-8">
-          <CardHeader piece={piece} column={phone.column} series={phone.series} phone />
-          {phone.above}
-          <div className={cn('space-y-5', phone.above && 'border-t pt-5')}>
-            {doc}
-            {footageList}
-          </div>
-          {phone.below && <div className="border-t pt-5">{phone.below}</div>}
-        </div>
-        <div className="pb-safe flex gap-2 border-t bg-sidebar px-4 pt-2.5">
-          <div className="flex w-full gap-2 pb-2.5 [&>button]:flex-1">{helpButtons}</div>
-        </div>
+      <div className="space-y-5">
+        {doc}
+        <div className="sticky bottom-0 z-10 -mx-4 flex gap-2 border-t bg-background/95 px-4 py-2.5 backdrop-blur [&>button]:flex-1">{helpButtons}</div>
+        {footageList}
         <Sheet open={!!help} onOpenChange={(o) => !o && close()}>
           <SheetContent side="bottom" className="pb-safe max-h-[80dvh] gap-0">
             <SheetHeader>
