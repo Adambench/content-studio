@@ -2,11 +2,12 @@ import { MessageSquare } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
-import { COLUMN_LABELS, COLUMN_STAGE, isWritingColumn, POSTED_DAYS, type BoardColumn, type BoardData, type BoardItem, type BoardPage } from '@shared/board';
+import { COLUMN_LABELS, POSTED_DAYS, type BoardColumn, type BoardItem, type BoardPage } from '@shared/board';
 import type { WorkspaceColor } from '@shared/types';
 import { WorkspaceDot } from '@/components/WorkspaceDot';
 import { api, errorMessage } from '@/lib/api';
 import { dayText, duration, postTime } from '@/lib/format';
+import { moveCard } from '@/lib/move';
 import { cardPath } from '@/lib/nav';
 import { keys, queryClient } from '@/lib/queries';
 import { cn } from '@/lib/utils';
@@ -62,11 +63,10 @@ function Meta({ item }: { item: BoardItem }) {
 }
 
 function Card({ item, color }: { item: BoardItem; color: string }) {
-  const draggable = isWritingColumn(item.column);
   return (
     <Link
       to={cardPath(item.id)}
-      draggable={draggable}
+      draggable
       onDragStart={(e) => {
         e.dataTransfer.setData('text/card', item.id);
         e.dataTransfer.effectAllowed = 'move';
@@ -79,19 +79,6 @@ function Card({ item, color }: { item: BoardItem; color: string }) {
       <Meta item={item} />
     </Link>
   );
-}
-
-/** Move a card to another writing column: right away on screen, then on the server. */
-async function moveTo(item: BoardItem, column: BoardColumn) {
-  if (!isWritingColumn(column) || item.column === column) return;
-  queryClient.setQueryData<BoardData>(keys.boardAll, (d) => d && { ...d, items: d.items.map((i) => (i.id === item.id ? { ...i, column, stage: COLUMN_STAGE[column] } : i)) });
-  try {
-    await api(`/pieces/${item.id}`, { method: 'PATCH', body: { stage: COLUMN_STAGE[column] } });
-  } catch (err) {
-    toast.error(errorMessage(err));
-  } finally {
-    void queryClient.invalidateQueries({ queryKey: keys.boardAll });
-  }
 }
 
 function NewIdea({ workspaceId }: { workspaceId: string }) {
@@ -133,8 +120,9 @@ function NewIdea({ workspaceId }: { workspaceId: string }) {
 }
 
 /**
- * Columns of cards. On Home every page's cards; on a page's section its own. Cards in the writing columns move by
- * dragging; the rest move by themselves (Claude edits, I approve, it goes out).
+ * Columns of cards. On Home every page's cards; on a page's section its own. Any card drags to any column (moveCard:
+ * onto Scheduled approves it, off it cancels its posts); they also move by themselves (Claude edits, I approve, it
+ * goes out).
  */
 export function Board({ items, columns, pages, addTo }: { items: BoardItem[]; columns: readonly BoardColumn[]; pages: BoardPage[]; addTo?: string }) {
   const [over, setOver] = useState<BoardColumn | null>(null);
@@ -143,13 +131,12 @@ export function Board({ items, columns, pages, addTo }: { items: BoardItem[]; co
     <div className="grid min-h-0 flex-1 gap-3.5 overflow-x-auto px-5 pt-3 pb-5" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(13rem, 1fr))` }}>
       {columns.map((column) => {
         const list = ordered(column, items);
-        const droppable = isWritingColumn(column);
         return (
           <section
             key={column}
             className="flex min-h-0 flex-col"
             onDragOver={(e) => {
-              if (!droppable || !e.dataTransfer.types.includes('text/card')) return;
+              if (!e.dataTransfer.types.includes('text/card')) return;
               e.preventDefault();
               setOver(column);
             }}
@@ -157,7 +144,7 @@ export function Board({ items, columns, pages, addTo }: { items: BoardItem[]; co
             onDrop={(e) => {
               setOver(null);
               const item = items.find((i) => i.id === e.dataTransfer.getData('text/card'));
-              if (item) void moveTo(item, column);
+              if (item) void moveCard(item, column);
             }}
           >
             <h2 className="flex items-center gap-2 px-1 py-2.5 text-sm font-semibold text-muted-foreground">

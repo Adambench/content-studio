@@ -2,7 +2,7 @@ import { MoreHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { COLUMN_LABELS, columnOf, isWritingColumn, VIDEO_COLUMNS, type BoardColumn, type BoardItem } from '@shared/board';
+import { BOARD_COLUMNS, COLUMN_LABELS, columnOf, isWritingColumn, VIDEO_COLUMNS, type BoardColumn, type BoardItem } from '@shared/board';
 import { ReviewView, useVideoVersions } from '@/components/card/ReviewView';
 import { useDraft } from '@/components/card/useDraft';
 import { CardHeader, WriteView } from '@/components/card/WriteView';
@@ -57,7 +57,7 @@ function CardBody({ piece, item, writer }: { piece: PieceDetail; item: BoardItem
   const [first, second] = writing ? [doc, video] : [video, doc];
   return (
     <div className="space-y-8 px-12 pt-5 pb-20">
-      <CardHeader piece={piece} column={item.column} series={item.series} />
+      <CardHeader piece={piece} column={item.column} columns={writer ? BOARD_COLUMNS : VIDEO_COLUMNS} series={item.series} />
       {first}
       {second && <div className="border-t pt-10">{second}</div>}
     </div>

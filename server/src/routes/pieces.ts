@@ -5,6 +5,7 @@ import { normalizeDraft } from '../../../shared/types';
 import { db, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, notFound } from '../lib/http';
+import { moveCard } from '../clipping/review';
 import { deleteMedia } from '../services/media';
 import { createBranch, createPiece, getBranch, getPiece, getPieceDetail, getWorkspace, restoreVersion, saveVersion, updateWorking } from '../services/pieces';
 import { chooseDirection, requestPitch } from '../studio/directions';
@@ -48,11 +49,19 @@ export async function pieceRoutes(app: FastifyInstance) {
       .parse(req.body);
     if (body.stage && !getWorkspace(piece.workspaceId).stages.some((s) => s.id === body.stage)) throw badRequest('Unknown stage.');
     if (body.activeBranchId && getBranch(body.activeBranchId).pieceId !== piece.id) throw badRequest('That alternative belongs to another piece.');
-    const { seriesId, ...rest } = body;
+    const { seriesId, stage, ...rest } = body;
     if (seriesId !== undefined) setPieceSeries(piece.id, seriesId);
+    // Another column moves it the board's way (its unsent posts cancelled, Scheduled = approved).
+    if (stage && stage !== piece.stage) moveCard(piece.id, stage);
     db.update(schema.pieces).set({ ...rest, updatedAt: now() }).where(eq(schema.pieces.id, piece.id)).run();
     emit({ type: 'changed', entity: 'pieces', workspaceId: piece.workspaceId, id: piece.id });
     return { ok: true };
+  });
+
+  // A card dropped on another column of the board (or picked on its page), or put back there by Undo.
+  app.post<{ Params: { id: string } }>('/api/pieces/:id/move', async (req) => {
+    const { stage } = z.object({ stage: z.string().min(1).max(40) }).parse(req.body);
+    return moveCard(getPiece(req.params.id).id, stage);
   });
 
   // Creative directions (personal and business pages): pitch (again, with what to change), pick one.

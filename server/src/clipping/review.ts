@@ -148,25 +148,29 @@ export function approvePlan(pieceId: string): ApprovePlan {
  * of the page's accounts the clip may go to at its next good time (shared/publish.ts POSTING: right away when a
  * queue time just went by, never more than two a day). TikTok posting directly needs me to say who sees it. When
  * there's nowhere to queue it, it waits in Ready and the answer says why. `from` is where it was, for Undo.
+ * `anywhere`: I dropped the card on Scheduled from any column (Posted too: it goes out again); its posts that
+ * haven't gone out are replaced.
  */
-export function approveClip(pieceId: string, opts: { tiktokPrivacy?: TikTokPrivacy } = {}) {
+export function approveClip(pieceId: string, opts: { tiktokPrivacy?: TikTokPrivacy; anywhere?: boolean } = {}) {
   const piece = getPiece(pieceId);
-  if (!approvable(piece)) throw new HttpError(409, 'It’s scheduled already.');
+  if (!opts.anywhere && !approvable(piece)) throw new HttpError(409, 'It’s scheduled already.');
   const clip = buildClip(piece);
-  if (!clip.render) throw badRequest('Wait for its render to finish.');
+  if (!clip.render) throw badRequest(clip.rendering ? 'Wait for its render to finish.' : 'It has no video to post yet.');
   const failing = clip.rules.find((r) => r.status === 'fail');
   if (failing) throw badRequest(`Fix this first: ${failing.rule.text} (${failing.detail}).`);
+  const waiting = opts.anywhere ? unsentPosts(piece.id) : [];
   const ws = getWorkspace(piece.workspaceId);
   const ready = ws.stages.some((s) => s.id === 'ready') ? 'ready' : piece.stage;
   const usable = clip.accounts.filter((a) => !a.reconnect);
   // My yes means I watched it and it's fine (shared/review.ts); refused while a comment is open.
   markReviewed(piece.id, true);
+  for (const p of waiting) deletePost(p.id);
   moveTo(piece, ready);
   const from = piece.stage;
   type Scheduled = { platform: PublishPlatform; label: string; at: number };
   if (!usable.length) {
     const missing = clip.missingPlatforms.length ? ` on ${clip.missingPlatforms.join(', ')}` : '';
-    return { from, scheduled: [] as Scheduled[], note: `Approved: it’s in Ready. ${ws.name} has no connected account${missing} to queue it on yet.` };
+    return { from, scheduled: [] as Scheduled[], note: `Approved, not queued: ${ws.name} has no connected account${missing} yet.` };
   }
   // Each account on its own merits: one that can't take it (Instagram without the public address, say) doesn't hold
   // the others back.
@@ -180,13 +184,39 @@ export function approveClip(pieceId: string, opts: { tiktokPrivacy?: TikTokPriva
       if (error) skipped.push(`${accountLabel(t.account)}: ${error.message}`);
     }
     targets = input.targets.filter((t) => plan.targets.some((p) => p.accountId === t.accountId && !p.problems.some((x) => x.level === 'error')));
-    if (!targets.length) return { from, scheduled: [] as Scheduled[], note: `Approved, but not queued. ${skipped.join(' ')} It waits in Ready.` };
+    if (!targets.length) return { from, scheduled: [] as Scheduled[], note: `Approved, not queued. ${skipped.join(' ')}` };
     const ids = createPosts(pieceId, { ...input, targets });
     const posts = db.select().from(schema.posts).where(inArray(schema.posts.id, ids)).all();
     return { from, scheduled: posts.map((p): Scheduled => ({ platform: p.platform, label: p.accountLabel, at: p.scheduledAt })), note: skipped.length ? `Not queued on ${skipped.join(' ')}` : null };
   } catch (err) {
-    return { from, scheduled: [] as Scheduled[], note: `Approved, but not queued: ${(err as Error).message} It waits in Ready.` };
+    return { from, scheduled: [] as Scheduled[], note: `Approved, not queued: ${(err as Error).message}` };
   }
+}
+
+/** A piece's posts that haven't gone out (queued, failed or missed); refused while one is going out. */
+function unsentPosts(pieceId: string) {
+  const posts = db.select().from(schema.posts).where(eq(schema.posts.pieceId, pieceId)).all();
+  if (posts.some((p) => p.status === 'publishing')) throw new HttpError(409, 'It’s being posted right now: wait for it to finish.');
+  return posts.filter((p) => p.status !== 'published');
+}
+
+/**
+ * I drop a card on any column (or pick one on its page) and it goes there. Onto Scheduled it's my yes (approveClip,
+ * queued at the next good time); anywhere else its posts that haven't gone out are cancelled, so nothing posts behind
+ * my back: Posted is one I posted myself, Review is to watch it again. What went out stays out. `from` is where it
+ * was, for Undo (which moves it back the same way).
+ */
+export function moveCard(pieceId: string, stage: string) {
+  const piece = getPiece(pieceId);
+  if (!getWorkspace(piece.workspaceId).stages.some((s) => s.id === stage)) throw badRequest('That column isn’t on this page’s board.');
+  const from = piece.stage;
+  if (stage === from) return { from, scheduled: [], note: null, cancelled: 0 };
+  if (stage === 'ready' || stage === 'scheduled') return { ...approveClip(pieceId, { anywhere: true }), cancelled: 0 };
+  const cancel = unsentPosts(piece.id);
+  for (const p of cancel) deletePost(p.id);
+  if (stage === REVIEW_STAGE) markReviewed(piece.id, false);
+  moveTo(piece, stage);
+  return { from, scheduled: [], note: null, cancelled: cancel.length };
 }
 
 /** Undo my yes: its posts that haven't started going out go, it's unwatched again and back where it was. */

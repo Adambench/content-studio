@@ -1,5 +1,6 @@
 // The board (PLAN.md Phase 14): one set of columns for every page, the same on Home (every page) and on a page's
-// sections. A card's column comes from its stage; only the writing columns are mine to move cards between.
+// sections. A card's column comes from its stage; I can move a card to any column (since 2026-11-08: onto Scheduled
+// approves it, off Scheduled cancels its posts, Posted is one I posted myself).
 
 export const BOARD_COLUMNS = ['ideas', 'writing', 'film', 'editing', 'review', 'scheduled', 'posted'] as const;
 export type BoardColumn = (typeof BOARD_COLUMNS)[number];
@@ -14,14 +15,14 @@ export const COLUMN_LABELS: Record<BoardColumn, string> = {
   posted: 'Posted',
 };
 
-/** Where I write: I drag cards between these. */
+/** Where I write. */
 export const WRITING_COLUMNS = ['ideas', 'writing', 'film'] as const satisfies readonly BoardColumn[];
 export type WritingColumn = (typeof WRITING_COLUMNS)[number];
 /** Where Claude edits and I watch, approve and see it go out. */
 export const VIDEO_COLUMNS = ['editing', 'review', 'scheduled', 'posted'] as const satisfies readonly BoardColumn[];
 
-/** The stage a writing column puts a card in. */
-export const COLUMN_STAGE: Record<WritingColumn, string> = { ideas: 'idea', writing: 'script', film: 'film' };
+/** The stage a column puts a card in (Scheduled: approved and queued, Ready when it can't be queued). */
+export const COLUMN_STAGE: Record<BoardColumn, string> = { ideas: 'idea', writing: 'script', film: 'film', editing: 'edit', review: 'review', scheduled: 'scheduled', posted: 'posted' };
 
 export const isWritingColumn = (c: BoardColumn): c is WritingColumn => (WRITING_COLUMNS as readonly string[]).includes(c);
 

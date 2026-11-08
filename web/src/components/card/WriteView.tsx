@@ -2,7 +2,7 @@ import { Paperclip, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
-import { COLUMN_LABELS, COLUMN_STAGE, isWritingColumn, WRITING_COLUMNS, type BoardColumn, type WritingColumn } from '@shared/board';
+import { COLUMN_LABELS, COLUMN_STAGE, isWritingColumn, WRITING_COLUMNS, type BoardColumn } from '@shared/board';
 import { PieceUploads, usePieceUploads } from '@/components/AppChrome';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Spinner } from '@/components/ui/spinner';
 import { api, errorMessage, uploadFiles } from '@/lib/api';
 import { duration } from '@/lib/format';
+import { moveCard } from '@/lib/move';
 import { isApp, pickAndUpload } from '@/lib/native';
 import { seriesPath } from '@/lib/nav';
 import { keys, queryClient, useSeries } from '@/lib/queries';
@@ -91,12 +92,16 @@ const FOOTAGE = new Set(['upload', 'share', 'capture']);
 
 type Series = { id: string; name: string; episode: number };
 
-/** A card's title (renamed in place) and, while I'm writing it, the column it's in; its series, picked on the laptop once the page has one. */
-export function CardHeader({ piece, column, series, phone = false }: { piece: PieceDetail; column: BoardColumn; series: Series | null; phone?: boolean }) {
+/**
+ * A card's title (renamed in place), the column it's in (on the laptop any of the page's `columns`, as on the board;
+ * on the phone while I write it) and its series, picked on the laptop once the page has one.
+ */
+export function CardHeader({ piece, column, columns, series, phone = false }: { piece: PieceDetail; column: BoardColumn; columns?: readonly BoardColumn[]; series: Series | null; phone?: boolean }) {
   const [title, setTitle] = useState(piece.title);
   useEffect(() => setTitle(piece.title), [piece.title]);
   const loaded = useSeries(phone ? '' : piece.workspaceId).data ?? [];
   const pageSeries = series && !loaded.some((s) => s.id === series.id) ? [series, ...loaded] : loaded;
+  const movable = phone ? isWritingColumn(column) : !!columns?.includes(column);
 
   async function pickSeries(seriesId: string) {
     try {
@@ -108,7 +113,8 @@ export function CardHeader({ piece, column, series, phone = false }: { piece: Pi
     }
   }
 
-  async function moveTo(c: WritingColumn) {
+  async function moveTo(c: BoardColumn) {
+    if (!phone) return moveCard({ id: piece.id, column }, c);
     try {
       await api(`/pieces/${piece.id}`, { method: 'PATCH', body: { stage: COLUMN_STAGE[c] } });
       void queryClient.invalidateQueries({ queryKey: keys.boardAll });
@@ -128,11 +134,11 @@ export function CardHeader({ piece, column, series, phone = false }: { piece: Pi
         aria-label="Title"
         className={cn('w-full bg-transparent font-semibold tracking-tight outline-none', phone ? 'text-2xl' : 'text-3xl')}
       />
-      {(isWritingColumn(column) || series || pageSeries.length > 0) && (
+      {(movable || series || pageSeries.length > 0) && (
         <div className="flex flex-wrap items-center gap-3">
-          {isWritingColumn(column) && (
-            <select value={column} onChange={(e) => void moveTo(e.target.value as WritingColumn)} aria-label="Column" className="h-9 rounded-lg border bg-card px-2.5 text-sm">
-              {WRITING_COLUMNS.map((c) => (
+          {movable && (
+            <select value={column} onChange={(e) => void moveTo(e.target.value as BoardColumn)} aria-label="Column" className="h-9 rounded-lg border bg-card px-2.5 text-sm">
+              {(phone || !columns ? WRITING_COLUMNS : columns).map((c) => (
                 <option key={c} value={c}>
                   {COLUMN_LABELS[c]}
                 </option>

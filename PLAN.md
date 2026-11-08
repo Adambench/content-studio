@@ -863,3 +863,8 @@ Build (after the mockup):
   desktop app with no dialog, a notification shows it in its folder). Tried in headless Chrome against a test server:
   list and card offline, outbox with a conflict, the file's name. Not tried on the phone itself: the Android download
   and offline playback
+- [x] Any card to any column (2026-11-08): drag it on the board, or pick the column on its page (laptop). Onto
+  Scheduled is Approve (queued at the next time, Undo; refused with an open comment, a broken campaign rule or no
+  video yet); off Scheduled its posts that haven't gone out are cancelled (refused while one is going out); Posted is
+  one I posted myself; Review makes it unwatched again. What went out stays out (`moveCard`, `clipping/review.ts`;
+  the old stage `PATCH` goes the same way). Claude still can't approve: `update_piece` refuses Ready too

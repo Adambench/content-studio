@@ -304,7 +304,7 @@ export function buildTools(workspaceId: string, only?: readonly string[]) {
         // follow real posts.
         if (stage && stage !== piece.stage && inReview(piece.stage))
           throw new ToolError('Only the creator takes a card out of Review (approve or reject it there). One in With Claude goes back to Review by itself once its comments are resolved and its new version has rendered.');
-        if (stage && stage !== piece.stage && (stage === 'scheduled' || stage === 'posted')) throw new ToolError('Cards move to Scheduled and Posted by themselves when posts are scheduled and go out.');
+        if (stage && stage !== piece.stage && (stage === 'ready' || stage === 'scheduled' || stage === 'posted')) throw new ToolError('Only the creator approves a card; it moves to Scheduled and Posted by itself when posts are scheduled and go out.');
         db.update(schema.pieces)
           .set({ title: title ?? piece.title, stage: stage ?? piece.stage, tags: tags ?? piece.tags, updatedAt: now() })
           .where(eq(schema.pieces.id, pieceId))
