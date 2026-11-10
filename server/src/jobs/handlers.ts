@@ -22,7 +22,7 @@ import { createPiece, getWorkspace } from '../services/pieces';
 import { makeProxy, onProxyFailed } from '../studio/proxy';
 import { onPublishFailed, publishPost } from '../publish/publisher';
 import { renderJob } from '../studio/render';
-import { refineWords, voiceEnvelope } from '../studio/clean-cuts';
+import { bandPauses, fitToPauses, refineWords, voiceEnvelope } from '../studio/clean-cuts';
 import { checkJob } from '../studio/quality';
 import { onReframeFailed, reframeEdit } from '../studio/reframe';
 import { enqueue, onJobFailed, registerJob } from './queue';
@@ -74,8 +74,9 @@ async function transcribeMedia({ mediaId }: { mediaId: string }) {
     transcript = JSON.parse(await readFile(transcriptPath(mediaId), 'utf8')) as Transcript;
     // Whisper gives a word the pause before it (a line's first word often starts a second early, in the silence), so a
     // clip cut in that pause lost the word from its captions. Fitted to the voice, every word starts where it's heard.
+    // A phone take's room is louder than the envelope's quiet level: the voice band's own pauses catch the rest.
     const fitted = await voiceEnvelope(wav).then(
-      (env) => refineWords(transcript, env),
+      async (env) => fitToPauses(refineWords(transcript, env), await bandPauses(wav)),
       () => null,
     );
     if (fitted) {

@@ -98,6 +98,69 @@ const isSpeech = (env: Envelope, t: number) => (env.db[Math.floor(t / STEP)] ?? 
  * Word times fitted to the voice: a word whose times hold a real pause keeps only the sound after it (what came before
  * is a filler or a breath Whisper didn't write down), and each word's start and end move in to where its sound is.
  */
+/**
+ * Pauses by the voice band (150–4000 Hz) against the room's own floor: phone takes whose room tone sits above
+ * voiceEnvelope's quiet level (capped at 20 dB under the voice) show no pauses there, but do here.
+ */
+export async function bandPauses(file: string, min = 0.12): Promise<[number, number][]> {
+  const { stdout } = await execFile(requireBinary('ffmpeg'), ['-v', 'error', '-i', file, '-map', '0:a:0', '-ac', '1', '-ar', '16000', '-af', 'highpass=f=150,lowpass=f=4000', '-f', 'f32le', 'pipe:1'], {
+    encoding: 'buffer',
+    maxBuffer: 1024 * 1024 * 1024,
+  });
+  const buf = stdout as unknown as Buffer;
+  const x = new Float32Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 4));
+  const hop = 160;
+  const db = Array.from({ length: Math.floor(x.length / hop) }, (_, i) => {
+    let sum = 0;
+    for (let j = i * hop; j < (i + 1) * hop; j++) sum += x[j] * x[j];
+    return 10 * Math.log10(sum / hop + 1e-12);
+  });
+  const sorted = db.filter((v) => v > -110).sort((a, b) => a - b);
+  const level = (sorted[Math.floor(0.08 * sorted.length)] ?? -100) + 8;
+  const out: [number, number][] = [];
+  let start = -1;
+  for (let i = 0; i <= db.length; i++) {
+    const quiet = i < db.length && [db[i - 1], db[i], db[i + 1]].filter((v) => v === undefined || v < level).length >= 2;
+    if (quiet && start < 0) start = i;
+    if (!quiet && start >= 0) {
+      if ((i - start) / 100 >= min) out.push([start / 100, i / 100]);
+      start = -1;
+    }
+  }
+  return out;
+}
+
+/**
+ * Each word moved out of the pauses beside it (`bandPauses`): Whisper gives a line's first word the silence before it,
+ * and on a phone take `refineWords` can't see that silence (the room is louder than its quiet level). A clip cut in that
+ * silence lost the word from its captions.
+ */
+export function fitToPauses(t: Transcript, gaps: [number, number][]): Transcript {
+  const segments = t.segments.map((seg) => ({ ...seg, words: seg.words?.map((w) => ({ ...w })) }));
+  const words = segments.flatMap((s) => s.words ?? []).sort((x, y) => x.start - y.start);
+  let prevEnd = 0;
+  for (const w of words) {
+    const len = w.end - w.start;
+    // Wholly inside a long silence: Whisper slid it (and the line it starts) early. It's said just after the silence.
+    const within = gaps.find(([a, b]) => b - a >= 0.3 && a <= w.start + 0.02 && w.end <= b + 0.02);
+    if (within) {
+      w.start = within[1] - 0.02;
+      w.end = w.start + Math.min(len, 0.3);
+    } else {
+      const before = gaps.find(([a, b]) => a <= w.start + 0.02 && b > w.start && b < w.end - 0.02);
+      if (before) w.start = before[1] - 0.02;
+      const after = gaps.find(([a, b]) => a > w.start + 0.05 && a < w.end && b >= w.end - 0.02);
+      if (after) w.end = after[0] + 0.03;
+    }
+    // Never before the word ahead of it ends (a moved word pushes the next one along).
+    if (w.start < prevEnd && prevEnd < w.end - 0.05) w.start = prevEnd;
+    w.start = round(w.start);
+    w.end = round(w.end);
+    prevEnd = Math.max(prevEnd, w.end);
+  }
+  return { ...t, segments };
+}
+
 export function refineWords(t: Transcript, env: Envelope): Transcript {
   const fit = (w: TranscriptWord): TranscriptWord => {
     let { start, end } = w;

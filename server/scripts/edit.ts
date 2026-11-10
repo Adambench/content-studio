@@ -6,10 +6,17 @@
 //   npm run edit -- <card>                         the edit: versions, renders, check, story, clips with their words,
 //                                                  overlays, sound, the footage on the card, open comments
 //   npm run edit -- takes <card> [file…] [--words] each take's words as phrases between pauses (cut points), with times
+//   npm run edit -- rewhisper <card> <file> <from> <to> ["<words>"]   Whisper that stretch of the file on its own and
+//                                                  put its words in the transcript there (a rep `takes` marks ??); with
+//                                                  the words said, Whisper's timings carry them (one word for one word)
+//   npm run edit -- fit <card> <file>              a transcript from before words were fitted to a phone take's pauses:
+//                                                  each word out of the silence (a clip's first word missing from captions)
 //   npm run edit -- types [name…|lists|graphics|library]   the edit's types and option lists (instead of shared/edit.ts)
 //   npm run edit -- arsenal <card>                 every move, and how often this page's recent edits used it
 //   npm run edit -- set <card> "<message>" <path>=<json> …   change fields and save a version (see `set` below)
 //   npm run edit -- get <card>                     the working copy into <work>/spec.json (prints the path only)
+//   npm run edit -- add <card> <file> ["<name>"]  put a picture, video or recording on the card (a screenshot, a
+//                                                  frame of a video I mention): its id for clips and scene images
 //   npm run edit -- put <card> <file> "<message>"  save a whole spec (.json) or a design (.mts: default export
 //                                                  (spec, ctx) => spec) as a version authored by Claude
 //   npm run edit -- frames <card> <t…> [--source <file>] [--v <n>] [--px <width>]   one small contact sheet
@@ -24,8 +31,8 @@
 //   <path>=- deletes (an array item or a field) · clips+=<json> appends · clips.<id>+=<json> inserts after it.
 //   A value that isn't JSON is taken as text (story.promise=Plain words work).
 import { execFile as execFileCb } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, extname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { and, desc, eq, inArray, isNull, ne } from 'drizzle-orm';
 import { CAPTION_PRESETS, clipStarts, EDIT_FORMATS, editDuration, GRAPHIC_INFO, GRAPHICS, normalizeEdit, timelineWords, TRANSITIONS, type EditOverlay, type EditSpec, type TimelineWord } from '../../shared/edit';
@@ -42,9 +49,9 @@ import { db, runMigrations, schema } from '../src/db';
 import { requireBinary } from '../src/lib/bin';
 import { extractAudio, extractFrames } from '../src/lib/ffmpeg';
 import { getSetting } from '../src/lib/settings';
-import { mediaPath, readTranscript, type MediaRow } from '../src/services/media';
+import { mediaPath, readTranscript, saveUpload, transcriptPath, type MediaRow } from '../src/services/media';
 import { arsenalText } from '../src/studio/arsenal';
-import { pauses, refineWords, voiceEnvelope } from '../src/studio/clean-cuts';
+import { bandPauses, fitToPauses, pauses, refineWords, voiceEnvelope } from '../src/studio/clean-cuts';
 import { findEditForPiece, latestQuality, listEditVersions, listRenders, saveEditVersion, specMedia, specTranscripts } from '../src/studio/edits';
 import { listNotes } from '../src/studio/notes';
 import { previewOverlay } from '../src/studio/preview';
@@ -223,38 +230,6 @@ async function show(piece: Piece) {
   const open = listNotes(piece.id).filter((n) => n.status === 'open');
   if (open.length) out.push(`${open.length} open comment(s): npm run notes -- ${short(piece.id)}`);
   return out.join('\n');
-}
-
-/**
- * Pauses by the voice band (150–4000 Hz) against the room's own floor: phone takes whose room tone sits above
- * voiceEnvelope's quiet level (capped at 20 dB under the voice) show no pauses there, but do here.
- */
-async function bandPauses(file: string, min = 0.12): Promise<[number, number][]> {
-  const { stdout } = await execFile(requireBinary('ffmpeg'), ['-v', 'error', '-i', file, '-map', '0:a:0', '-ac', '1', '-ar', '16000', '-af', 'highpass=f=150,lowpass=f=4000', '-f', 'f32le', 'pipe:1'], {
-    encoding: 'buffer',
-    maxBuffer: 1024 * 1024 * 1024,
-  });
-  const buf = stdout as unknown as Buffer;
-  const x = new Float32Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 4));
-  const hop = 160;
-  const db = Array.from({ length: Math.floor(x.length / hop) }, (_, i) => {
-    let sum = 0;
-    for (let j = i * hop; j < (i + 1) * hop; j++) sum += x[j] * x[j];
-    return 10 * Math.log10(sum / hop + 1e-12);
-  });
-  const sorted = db.filter((v) => v > -110).sort((a, b) => a - b);
-  const level = (sorted[Math.floor(0.08 * sorted.length)] ?? -100) + 8;
-  const out: [number, number][] = [];
-  let start = -1;
-  for (let i = 0; i <= db.length; i++) {
-    const quiet = i < db.length && [db[i - 1], db[i], db[i + 1]].filter((v) => v === undefined || v < level).length >= 2;
-    if (quiet && start < 0) start = i;
-    if (!quiet && start >= 0) {
-      if ((i - start) / 100 >= min) out.push([start / 100, i / 100]);
-      start = -1;
-    }
-  }
-  return out;
 }
 
 /** Each take's words as phrases between the voice's pauses: where a cut can land. */
@@ -575,6 +550,78 @@ async function heard(piece: Piece) {
   return `What the render of v${r.versionNumber} says (Whisper):\n${out.join('\n')}`;
 }
 
+/**
+ * Whisper one stretch of a card's file alone and put its words in the file's transcript in place of what was there.
+ * Phone takes with several reps lose all but the first to Whisper; heard on their own, they come back. The transcript
+ * as it was is kept in the card's work folder.
+ */
+async function rewhisper(piece: Piece, q: string, from: number, to: number, said?: string) {
+  const m = cardFiles(piece.id).find((x) => x.id.startsWith(q) || x.originalName.includes(q));
+  if (!m) throw new Error(`No file “${q}” on the card.`);
+  if (!(to > from)) throw new Error('Usage: rewhisper <card> <file> <from> <to> (seconds of the file)');
+  const t = await readTranscript(m.id);
+  if (!t) throw new Error(`${short(m.id)} has no transcript yet.`);
+  const dir = workDir(piece.id);
+  const wav = join(dir, 'rewhisper.wav');
+  const json = join(dir, 'rewhisper.json');
+  await execFile(requireBinary('ffmpeg'), ['-y', '-v', 'error', '-ss', String(from), '-to', String(to), '-i', mediaPath(m), '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', wav]);
+  await runTool('transcribe', { audio: wav, json }, { model: getSetting('whisperModel') ?? 'small', language: 'en' }, { timeoutMs: 15 * 60_000 });
+  const heardT = JSON.parse(readFileSync(json, 'utf8')) as Transcript;
+  rmSync(wav, { force: true });
+  rmSync(json, { force: true });
+  const fresh = heardT.segments
+    .flatMap((s) => s.words ?? [])
+    .map((w) => ({ ...w, start: r2(w.start + from), end: r2(Math.min(w.end + from, to)) }))
+    .filter((w) => w.start < to)
+    // Whisper splits a hyphenated word in two ("re -hit", "allergy -existing"): one word again.
+    .reduce<{ word: string; start: number; end: number }[]>((ws, w) => {
+      const prev = ws[ws.length - 1];
+      if (prev && /^-\S/.test(w.word.trim())) Object.assign(prev, { word: prev.word + w.word.trim(), end: w.end });
+      else ws.push({ ...w });
+      return ws;
+    }, []);
+  // Out of the pauses beside them (Whisper gives a line's first word the silence before it).
+  const gaps = await bandPauses(mediaPath(m));
+  fitToPauses({ segments: [{ start: from, end: to, text: '', words: fresh }] } as unknown as Transcript, gaps).segments[0].words!.forEach((w, i) => Object.assign(fresh[i], { start: w.start, end: w.end }));
+  if (!fresh.length) return `Whisper heard no words in ${f2(from)}–${f2(to)}: the transcript is unchanged.`;
+  if (said) {
+    // Whisper's timings, the words I know were said (a name, a number it heard wrong).
+    const words = said.split(/\s+/).filter(Boolean);
+    if (words.length !== fresh.length) throw new Error(`Whisper heard ${fresh.length} words, not ${words.length}: ${fresh.map((w) => w.word.trim()).join(' ')} (the transcript is unchanged)`);
+    fresh.forEach((w, i) => (w.word = ` ${words[i]}`));
+  }
+  const backup = join(dir, `transcript-${short(m.id)}-${Date.now()}.json`);
+  writeFileSync(backup, JSON.stringify(t));
+  const inside = (w: { start: number; end: number }) => (w.start + w.end) / 2 >= from && (w.start + w.end) / 2 < to;
+  const before = t.segments.flatMap((s) => (s.words ?? []).filter(inside).map((w) => w.word.trim()));
+  for (const s of t.segments) s.words = s.words?.filter((w) => !inside(w));
+  // The new words as their own segment, in time order with the rest.
+  t.segments.push({ start: fresh[0].start, end: fresh[fresh.length - 1].end, text: fresh.map((w) => w.word).join('').trim(), words: fresh } as (typeof t.segments)[number]);
+  for (const s of t.segments) if (s.words) s.text = s.words.map((w) => w.word).join('').trim();
+  t.segments = t.segments.filter((s) => s.text.trim() || !s.words).sort((a, b) => a.start - b.start);
+  t.text = t.segments.map((s) => s.text.trim()).join(' ');
+  writeFileSync(transcriptPath(m.id), JSON.stringify(t));
+  db.update(schema.media).set({ transcriptText: t.text }).where(eq(schema.media.id, m.id)).run();
+  const line = (ws: { word: string; start: number; end: number }[]) => ws.map((w) => `${w.word.trim()}[${f2(w.start)}]`).join(' ');
+  return `${short(m.id)} ${f2(from)}–${f2(to)}\n  was: ${before.join(' ') || '(nothing)'}\n  now: ${line(fresh)}\n(the old transcript: ${backup})`;
+}
+
+/** A transcript made before words were fitted to a phone take's pauses: every word moved out of the silence. */
+async function fit(piece: Piece, q: string) {
+  const m = cardFiles(piece.id).find((x) => x.id.startsWith(q) || x.originalName.includes(q));
+  if (!m) throw new Error(`No file “${q}” on the card.`);
+  const t = await readTranscript(m.id);
+  if (!t) throw new Error(`${short(m.id)} has no transcript yet.`);
+  const fitted = fitToPauses(t, await bandPauses(mediaPath(m)));
+  const was = t.segments.flatMap((s) => s.words ?? []);
+  const now = fitted.segments.flatMap((s) => s.words ?? []);
+  const moved = now.filter((w, i) => w.start !== was[i].start || w.end !== was[i].end);
+  if (!moved.length) return `${short(m.id)}: every word already sits outside the pauses.`;
+  writeFileSync(join(workDir(piece.id), `transcript-${short(m.id)}-${Date.now()}.json`), JSON.stringify(t));
+  writeFileSync(transcriptPath(m.id), JSON.stringify(fitted));
+  return `${short(m.id)}: ${moved.length} of ${now.length} words moved out of the pauses (${moved.slice(0, 8).map((w) => `${w.word.trim()}@${f2(w.start)}`).join(' ')}${moved.length > 8 ? ' …' : ''})`;
+}
+
 async function waitFor(piece: Piece) {
   const edit = editOf(piece);
   const started = Date.now();
@@ -628,6 +675,10 @@ const out = await (async () => {
       return takes(findPiece(rest[0]), rest.slice(1));
     case 'types':
       return typesText(rest);
+    case 'fit':
+      return fit(findPiece(rest[0]), rest[1] ?? '');
+    case 'rewhisper':
+      return rewhisper(findPiece(rest[0]), rest[1] ?? '', Number(rest[2]), Number(rest[3]), rest[4]);
     case 'arsenal': {
       const p = findPiece(rest[0]);
       return arsenalText(p.workspaceId, { excludePieceId: p.id });
@@ -659,6 +710,17 @@ const out = await (async () => {
         if (made) spec = made;
       }
       return save(p, spec, message || 'Claude edit');
+    }
+    case 'add': {
+      const p = findPiece(rest[0]);
+      const file = rest[1];
+      if (!file || !existsSync(file)) throw new Error('Usage: add <card> <file> ["<name>"]');
+      const MIME: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.m4a': 'audio/mp4', '.wav': 'audio/wav', '.mp3': 'audio/mpeg' };
+      const ext = extname(file).toLowerCase();
+      if (!MIME[ext]) throw new Error(`${ext || 'A file with no extension'}: only ${Object.keys(MIME).join(' ')}`);
+      const name = rest[2] ? `${rest[2]}${ext}` : basename(file);
+      const m = await saveUpload(p.workspaceId, { stream: createReadStream(file), filename: name, mimetype: MIME[ext] }, { pieceId: p.id, source: 'upload' });
+      return `${short(m.id)} ${m.kind} ${m.originalName} on “${p.title}”`;
     }
     case 'frames':
       return frames(findPiece(rest[0]), rest.slice(1).map(Number).filter(Number.isFinite));
