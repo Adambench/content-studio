@@ -3,6 +3,8 @@
 // here; the hook and the payoff are also judged by one model call against the Knowledge rules (server/src/studio/
 // quality.ts). Below the bar, Claude fixes the edit before it renders.
 import { clipLength, clipStarts, editDuration, transitionWindows, type EditSpec, type EditStory, type TimelineWord } from './edit';
+import { SCENE_MAX_SECONDS } from './scene';
+import { sceneMaxSeconds } from './scene-library';
 import { allSounds, editMoves, entranceWantsSound } from './sound-design';
 
 export const QUALITY_CRITERIA = ['hook', 'payoff', 'pacing', 'motion', 'sfx', 'captions', 'firstFrame'] as const;
@@ -106,7 +108,7 @@ function movingSeconds(spec: EditSpec, duration: number) {
   const spans: [number, number][] = [];
   const starts = clipStarts(spec);
   spec.clips.forEach((c, i) => c.motion !== 'none' && spans.push([starts[i], starts[i] + clipLength(c)]));
-  for (const o of spec.overlays) if (o.type === 'scene' || (o.type === 'graphic' && o.template !== 'progress') || ((o.type === 'text' || o.type === 'image') && o.animation !== 'none')) spans.push([o.start, Math.min(o.end, o.start + (o.type === 'scene' ? o.end - o.start : 2))]);
+  for (const o of spec.overlays) if (o.type === 'scene' || (o.type === 'graphic' && o.template !== 'progress') || ((o.type === 'text' || o.type === 'image') && o.animation !== 'none')) spans.push([o.start, Math.min(o.end, o.start + (o.type === 'scene' && !heldScene(o) ? o.end - o.start : 2))]);
   if (spec.recipe?.kind === 'dialogue' || spec.recipe?.kind === 'chat') spans.push([0, duration]);
   spans.sort((a, b) => a[0] - b[0]);
   let total = 0;
@@ -118,6 +120,9 @@ function movingSeconds(spec: EditSpec, duration: number) {
   }
   return Math.max(0, total);
 }
+
+/** A library scene made to stay on for a whole video (a name tag, a tracker): it moves as it comes in, then sits. */
+const heldScene = (o: { preset?: string }) => sceneMaxSeconds(o.preset) > SCENE_MAX_SECONDS;
 
 const OPENERS = /^(hey|hi|hello|so|welcome|today|in this video|what's up|whats up|okay|ok|alright|um|uh)\b/i;
 

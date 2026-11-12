@@ -16,6 +16,7 @@ import { findBinary } from '../lib/bin';
 import { emit } from '../lib/events';
 import { cutSegment, gradeImage, loudness, normalizeLoudness, probe } from '../lib/ffmpeg';
 import { checkCuts, exactPlan, handlePlay } from './exact-cuts';
+import { lightOf } from './light';
 import { keptFaces } from './reframe';
 import { badRequest, HttpError, notFound } from '../lib/http';
 import { notify } from '../lib/push';
@@ -229,7 +230,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
     const picture = async (
       m: MediaRow,
       name: string,
-      cut: { start: number; duration: number; zoom: number; whole?: { focusX: number; focusY: number } | null; audio: boolean; before?: number; after?: number; fadeIn?: number; fadeOut?: number; playFrom?: number; playTo?: number },
+      cut: { start: number; duration: number; zoom: number; whole?: { focusX: number; focusY: number } | null; audio: boolean; before?: number; after?: number; fadeIn?: number; fadeOut?: number; playFrom?: number; playTo?: number; light?: boolean },
     ): Promise<ComposeSource> => {
       if (abort.signal.aborted) throw new Error('cancelled');
       progress(0.05 + 0.25 * (done / total), `Preparing footage ${done + 1} of ${total}`);
@@ -252,7 +253,14 @@ export async function renderJob({ renderId }: { renderId: string }) {
       const shots = plan.cuts.get(m.id);
       const span = { in: cut.start, out: cut.start + cut.duration, playFrom: cut.playFrom, playTo: cut.playTo };
       const play = shots ? handlePlay(span, from, to, shots.cuts, shots.fps) : cut.playFrom !== undefined || cut.playTo !== undefined ? { from: cut.playFrom ?? from, to: cut.playTo ?? to } : null;
-      await cutSegment({ file: mediaPath(m), out: join(dir, 'media', `${name}.mp4`), info, start: from, duration: to - from, zoom: cut.zoom, whole: cut.whole, audio: cut.audio && info.hasAudio, fades, play, box, lut, cwd: dir, signal: abort.signal });
+      // The take's own light put right first (measured once per file and kept), where the edit asks for it.
+      let light: string | null = null;
+      const fix = cut.light ? await lightOf(m).catch(() => null) : null;
+      if (fix) {
+        light = `light-${m.id.slice(0, 8)}.cube`;
+        if (!existsSync(join(dir, light))) await copyFile(fix.cube, join(dir, light));
+      }
+      await cutSegment({ file: mediaPath(m), out: join(dir, 'media', `${name}.mp4`), info, start: from, duration: to - from, zoom: cut.zoom, whole: cut.whole, audio: cut.audio && info.hasAudio, fades, play, box, lut, light, cwd: dir, signal: abort.signal });
       return { src: `media/${name}.mp4`, mediaStart: Math.round((cut.start - from) * 1000) / 1000, duration: to - from, silent: !info.hasAudio, framed: !!cut.whole };
     };
     const brollSources: ComposeSource[] = [];
@@ -302,7 +310,7 @@ export async function renderJob({ renderId }: { renderId: string }) {
         const joinedOut = !!next && next.mediaId === clip.mediaId && Math.abs(clip.out - next.in) < 0.02;
         const fadeIn = joinedIn ? 0 : 0.012;
         const fadeOut = !next ? 0.12 : joinedOut ? 0 : 0.012;
-        clipSources[i] = m ? await picture(m, `c${i}`, { start: clip.in, duration: clipLength(clip), zoom: clip.zoom, whole, audio: clip.volume > 0, fadeIn, fadeOut, playFrom: clip.playFrom, playTo: clip.playTo, ...handles[i] }) : null;
+        clipSources[i] = m ? await picture(m, `c${i}`, { start: clip.in, duration: clipLength(clip), zoom: clip.zoom, whole, audio: clip.volume > 0, fadeIn, fadeOut, playFrom: clip.playFrom, playTo: clip.playTo, light: spec.grade.light, ...handles[i] }) : null;
       }
       const voiceLufs = await voiceLoudness(
         drawn,

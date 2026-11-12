@@ -34,6 +34,7 @@ export const SCENE_PRESETS = [
   'ayah',
   'hadith',
   'speaker',
+  'tracker',
 ] as const;
 export type ScenePreset = (typeof SCENE_PRESETS)[number];
 export const isScenePreset = (p: unknown): p is ScenePreset => SCENE_PRESETS.includes(p as ScenePreset);
@@ -1145,9 +1146,61 @@ export const SCENE_LIBRARY: Record<ScenePreset, Info> = {
       };
     },
   },
+  tracker: {
+    label: 'Challenge tracker',
+    hint: 'A slim paper strip at the top for a challenge series: the day, what’s made so far of the goal, and a bar (filled by the money, a notch where the days are). There from the first frame; keep it on for the whole video',
+    fields: { text: 'The day and how many there are, e.g. Day 5 / 100', sub: 'Made so far and the goal, e.g. $0 / $100,000' },
+    example: { text: 'Day 5 / 100', sub: '$0 / $100,000' },
+    maxSeconds: 180,
+    seconds: () => 5,
+    build: (f, { W, H }): Built => {
+      const [day = 0, days = 0] = amounts(f.text);
+      const [made = 0, goal = 0] = amounts(f.sub);
+      const unit = f.sub.match(/[$€£]/)?.[0] ?? '';
+      const frac = (a: number, b: number) => (b > 0 ? clamp(a / b, 0, 1) : 0);
+      const PAPER = '#f7f2e8';
+      const INK = '#1e1b18';
+      const SOFT = 'rgba(30,27,24,0.55)';
+      const AMBER = '#e39b2d';
+      const left = 70;
+      const width = W - 2 * left;
+      const pad = 40;
+      const bar = width - 2 * pad;
+      const caps = { 'font-family': 'Inter', 'font-weight': 800, 'font-size': 28, 'letter-spacing': 2, color: SOFT, 'white-space': 'nowrap' };
+      return {
+        background: 'none',
+        elements: [
+          { id: 'strip', kind: 'box', style: { left, top: r(H * 0.078), width, height: 132, background: PAPER, 'border-radius': 26, 'box-shadow': '0 16px 40px rgba(0,0,0,0.28)' } },
+          { id: 'days', kind: 'box', parent: 'strip', style: { position: 'absolute', left: pad, top: 12, height: 76, display: 'flex', 'align-items': 'baseline', gap: 14 } },
+          { id: 'day', kind: 'text', parent: 'days', text: `Day ${day || plain(f.text)}`, style: { 'font-family': 'Caveat', 'font-weight': 700, 'font-size': 68, 'line-height': 1.1, color: INK, 'white-space': 'nowrap' } },
+          ...(days ? [{ id: 'of', kind: 'text' as const, parent: 'days', text: `/ ${days}`, style: caps }] : []),
+          { id: 'money', kind: 'box', parent: 'strip', style: { position: 'absolute', right: pad, top: 12, height: 76, display: 'flex', 'align-items': 'baseline', gap: 12 } },
+          { id: 'made', kind: 'text', parent: 'money', text: f.sub ? `${unit}${compact(made)}` : '', style: { 'font-family': 'Inter', 'font-weight': 800, 'font-size': 46, 'line-height': 1.65, 'letter-spacing': -0.5, color: INK, 'white-space': 'nowrap' } },
+          ...(goal ? [{ id: 'goal', kind: 'text' as const, parent: 'money', text: `/ ${unit}${compact(goal)}`, style: caps }] : []),
+          { id: 'track', kind: 'box', parent: 'strip', style: { position: 'absolute', left: pad, top: 98, width: bar, height: 8, background: 'rgba(30,27,24,0.12)', 'border-radius': 4 } },
+          { id: 'fill', kind: 'box', parent: 'track', style: { position: 'absolute', left: 0, top: 0, width: r(bar * frac(made, goal)), height: 8, background: AMBER, 'border-radius': 4, 'transform-origin': 'left center' } },
+          ...(days ? [{ id: 'notch', kind: 'box' as const, parent: 'track', style: { position: 'absolute', left: r(bar * frac(day, days)) - 2, top: -7, width: 4, height: 22, background: INK, 'border-radius': 2 } }] : []),
+        ],
+        // On the first frame it's whole (the cover): it only settles, then the bar and the notch come in.
+        tweens: [
+          { targets: 'strip', at: 0, duration: 0.45, from: { y: -16 }, to: { y: 0 }, ease: 'power3.out', sound: 'none' },
+          { targets: 'fill', at: 0.25, duration: 0.6, from: { scaleX: 0 }, to: { scaleX: 1 }, ease: 'power2.out', sound: 'none' },
+          ...(days ? [{ targets: 'notch', at: 0.35, duration: 0.4, from: { scaleY: 0 }, to: { scaleY: 1 }, ease: 'back.out(2)', sound: 'none' as const }] : []),
+        ],
+      };
+    },
+  },
 };
 
 const wordCount = (t: string) => plain(t).split(/\s+/).filter(Boolean).length;
+/** The numbers in a line, in order: “Day 5 / 100” → 5, 100; “$1.2k / $100,000” → 1200, 100000. */
+const amounts = (t: string) =>
+  [...plain(t).matchAll(/(\d[\d,]*(?:\.\d+)?)\s*([kKmM])?/g)].map((m) => Number(m[1].replace(/,/g, '')) * (m[2] ? (m[2].toLowerCase() === 'k' ? 1e3 : 1e6) : 1));
+/** 0, 850, 1.2k, 100k, 1.5M. */
+const compact = (n: number) => {
+  const short = (v: number) => String(Math.round(v * 10) / 10);
+  return n >= 1e6 ? `${short(n / 1e6)}M` : n >= 1e3 ? `${short(n / 1e3)}k` : String(Math.round(n));
+};
 
 /** Arabic letters, without the vowel marks (they take no width). */
 const letters = (t: string) => t.replace(/[ً-ٰٟۖ-ۭ\s]/g, '').length;

@@ -584,8 +584,12 @@ export type EditAudio = {
   autoSfx: boolean;
 };
 
-/** A LUT (graded with FFmpeg), a colour look over the footage and film textures over the whole video. */
-export type EditGrade = { lutMediaId: string | null; intensity: number; filter: FilterLook; textures: Textures };
+/**
+ * A LUT (graded with FFmpeg), a colour look over the footage and film textures over the whole video. `light`: each
+ * camera take on the main track first gets its own light put right (an orange room, a dim one: measured once per file,
+ * server studio/light.ts), never b-roll or pictures.
+ */
+export type EditGrade = { lutMediaId: string | null; intensity: number; filter: FilterLook; textures: Textures; light: boolean };
 export type Watermark = { mediaId: string | null; corner: 'tl' | 'tr' | 'bl' | 'br'; opacity: number; size: number };
 
 export type EditSpec = {
@@ -645,7 +649,7 @@ export function emptyEdit(): EditSpec {
     },
     overlays: [],
     audio: { nasheed: null, voiceover: null, voiceVolume: 1, enhanceVoice: false, normalize: true, sfx: [], autoSfx: true },
-    grade: { lutMediaId: null, intensity: 1, filter: 'none', textures: { ...NO_TEXTURES } },
+    grade: { lutMediaId: null, intensity: 1, filter: 'none', textures: { ...NO_TEXTURES }, light: false },
     watermark: { mediaId: null, corner: 'tr', opacity: 0.85, size: 0.16 },
     recipe: null,
     story: { promise: '', payoff: '', payoffAt: null },
@@ -722,6 +726,7 @@ function normalizeGrade(input: unknown, base = emptyEdit().grade): EditGrade {
     lutMediaId: g.lutMediaId === undefined ? base.lutMediaId : idOrNull(g.lutMediaId),
     intensity: round(num(g.intensity, base.intensity, 0, 1)),
     filter: oneOf(g.filter, FILTER_LOOKS, base.filter),
+    light: typeof g.light === 'boolean' ? g.light : base.light,
     textures: {
       grain: amount('grain'),
       vignette: amount('vignette'),

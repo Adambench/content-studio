@@ -85,6 +85,9 @@ section you need.
   checks file ownership.
 - Live updates: server `emit()` → `/api/events` SSE → `web/src/lib/live.ts`. New entities need both sides.
 - External binaries go through `findBinary` (`server/src/lib/bin.ts`): launcher apps get a minimal PATH.
+- **Daily episodes are raw** (PLAN.md *Episode style*): me talking, cut tight, the challenge tracker, my own screens
+  as proof; graphics from the library only on milestones. Each take's light is put right mechanically (`grade.light`,
+  `studio/light.ts`: main-track clips only, never screenshots).
 - Studio gotchas: timed elements must not be zero-height (put positioned content inside a full-frame `.layer`); grade
   with FFmpeg `lut3d` (HyperFrames' grading hangs headless Chrome); new built-in sounds go in compose *and* render's
   file list; transitions only overlap pictures (sound still cuts) so timings never move.
@@ -105,10 +108,14 @@ section you need.
   `npm run notes -- source <pieceId>` (the source's words around it), then `recut <pieceId> <start> <end>` (the running
   app makes it again on the same card, comments kept, and renders it).
 - `npm run edit` — editing a video from here (`-- help` for everything): `<card>` (the edit: clips with their words and
-  mid-word cut warnings, overlays, versions, renders, the card's files), `takes` (each take as lines between pauses;
+  cuts that land in sound, overlays, versions, renders, the card's files), `takes` (each take as lines between pauses;
   flags reps Whisper skipped), `types` (the edit's types, instead of reading `shared/edit.ts`), `set` / `put` (save a
-  version: a few fields, or a design `.mts` kept in `<data>/edit-work/<pieceId>/`), `frames` / `preview` (one small
-  contact sheet to Read), `check`, `render --wait`, `heard` (what the render says, by Whisper).
+  version: a few fields, or a design `.mts` kept in `<data>/edit-work/<pieceId>/`; `--dry --preview <overlayId>` looks
+  without saving), `frames` / `preview` (one small contact sheet to Read), `light` (the take's light fix, before and
+  after), `check`, `render --wait`, `heard` (what the render says, by Whisper). A series episode is a design of a few
+  lines (`studio/episode.ts`): `ctx.cut` (the lines to keep, by the times `takes` prints: cuts go into the pauses,
+  framing takes turns) and `ctx.episode` (the tracker, the captions of the episode before, how it opens, my screens
+  as proof).
 - `npm run series` — every page's series with its episodes; `-- <seriesId>` with their scripts; `new <page> "<name>"
   ["<about>"]`, `about`, `episode <seriesId> "<title>" --script <file> --notes <file> [--film]` (Claude's, as a
   version), `write <pieceId> …`, `add <pieceId> <seriesId|none>`, `order <seriesId> <pieceId>…`.

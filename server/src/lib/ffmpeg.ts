@@ -106,7 +106,7 @@ export async function extractFrames(file: string, times: number[], outPattern: (
 
 // ---------- video studio ----------
 
-const TONEMAP = 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv';
+export const TONEMAP = 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv';
 const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
 
 /** Size that fills a `boxW`×`boxH` frame (times `zoom`) without ever upscaling the source. */
@@ -172,6 +172,8 @@ export async function cutSegment(input: {
    */
   play?: { from: number; to: number } | null;
   lut?: { file: string; intensity: number } | null;
+  /** The take's own light fix (a .cube relative to `cwd`), on before the LUT. */
+  light?: string | null;
   cwd: string;
   signal?: AbortSignal;
 }) {
@@ -205,6 +207,7 @@ export async function cutSegment(input: {
     const size = fillSize(info.width ?? box.width, info.height ?? box.height, box.width, box.height, input.zoom);
     base = [exact, info.hdr && TONEMAP, `scale=${size.width}:${size.height}:flags=lanczos`, 'fps=30', hold].filter(Boolean).join(',');
   }
+  if (input.light) base = `${base},format=gbrp,lut3d=file=${input.light}:interp=tetrahedral`;
   let vf = `${base},format=yuv420p`;
   if (input.lut && input.lut.intensity > 0) {
     const lut = `lut3d=file=${input.lut.file}:interp=tetrahedral`;

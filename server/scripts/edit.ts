@@ -8,7 +8,8 @@
 //   npm run edit -- takes <card> [file…] [--words] each take's words as phrases between pauses (cut points), with times
 //   npm run edit -- rewhisper <card> <file> <from> <to> ["<words>"]   Whisper that stretch of the file on its own and
 //                                                  put its words in the transcript there (a rep `takes` marks ??); with
-//                                                  the words said, Whisper's timings carry them (one word for one word)
+//                                                  the words said, Whisper's timings carry them (one word for one word;
+//                                                  `~` joins a heard word onto the one before: "GoHighLevel ~")
 //   npm run edit -- fit <card> <file>              a transcript from before words were fitted to a phone take's pauses:
 //                                                  each word out of the silence (a clip's first word missing from captions)
 //   npm run edit -- types [name…|lists|graphics|library]   the edit's types and option lists (instead of shared/edit.ts)
@@ -19,6 +20,8 @@
 //                                                  frame of a video I mention): its id for clips and scene images
 //   npm run edit -- put <card> <file> "<message>"  save a whole spec (.json) or a design (.mts: default export
 //                                                  (spec, ctx) => spec) as a version authored by Claude
+//                                                  (--dry --preview <overlayId> [--at 0,2]: a sheet of it, nothing saved)
+//   npm run edit -- light <card>                   what the light fix does to each take (grade.light), before and after
 //   npm run edit -- frames <card> <t…> [--source <file>] [--v <n>] [--px <width>]   one small contact sheet
 //   npm run edit -- preview <card> <overlayId> [t…] [--px <width>]   an overlay as it will render, one sheet
 //   npm run edit -- check <card>                   the check before a render (one Opus call), its report
@@ -30,6 +33,24 @@
 // set paths: clips.<id|index>.<field>=<json> · overlays.<id>.<field>=… · captions.position=0.72 · story.payoffAt=24
 //   <path>=- deletes (an array item or a field) · clips+=<json> appends · clips.<id>+=<json> inserts after it.
 //   A value that isn't JSON is taken as text (story.promise=Plain words work).
+//
+// A series episode (raw: me talking, cut tight, the tracker, my own screens as proof) is one short design file:
+//   export default async (spec, ctx) => {
+//     spec.clips = await ctx.cut('<file>', [['hook', 1.0, 4.44], ['last', 22.24, 25.64], …]);   // name, from, to: the
+//       // times `takes` prints for the rep to keep. Cuts go into the pauses themselves; framing takes turns (wide,
+//       // close on the face); a line over 5.5 s reframes once. 4th item: { frame: 'tight' }, { out: 87.6 }, { file }.
+//     await ctx.episode({ day: 6, made: 0, open: 'title', title: '<my words>', proof: [{ on: 'booked', file: '<id>', at: 'meeting' }] });
+//   };
+//   day/made go on the tracker (days and goal carry on from the episode before, as do the captions); `open` is plain
+//   (tracker from the first frame), title (my own words as a card, then the tracker) or cold (nothing until the
+//   second line): left out, the one the series used least. The takes' light is put right (light: false keeps it).
+//   Notes printed before the save say where a cut found no pause and what would fix it: settle each one.
+// What goes on screen, in a raw episode:
+//   · Proof beats graphics: a screenshot or recording of the thing I talk about, on the word that names it, 2–5 s,
+//     5 s of me between two, never one that shows a private screen (look at it first: `frames --source`).
+//   · Nothing repeats what I say. A label is read in a second: a few words, one idea, up as long as its topic.
+//   · One thing to read at a time beside the captions; my face is never covered for a whole line.
+//   · Milestones (first client, first $1k, a recap) may take library scenes (`types library`); a daily one doesn't.
 import { execFile as execFileCb } from 'node:child_process';
 import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
@@ -47,12 +68,14 @@ import { runTool } from '../src/compute/run';
 import { config } from '../src/config';
 import { db, runMigrations, schema } from '../src/db';
 import { requireBinary } from '../src/lib/bin';
-import { extractAudio, extractFrames } from '../src/lib/ffmpeg';
+import { extractAudio, extractFrames, gradeImage } from '../src/lib/ffmpeg';
 import { getSetting } from '../src/lib/settings';
 import { mediaPath, readTranscript, saveUpload, transcriptPath, type MediaRow } from '../src/services/media';
 import { arsenalText } from '../src/studio/arsenal';
 import { bandPauses, fitToPauses, pauses, refineWords, voiceEnvelope } from '../src/studio/clean-cuts';
+import { cutLines, cutsSound, dressEpisode, openOf, takeSound, type CutOptions, type EpisodeOptions, type LineRow, type SeriesSoFar } from '../src/studio/episode';
 import { findEditForPiece, latestQuality, listEditVersions, listRenders, saveEditVersion, specMedia, specTranscripts } from '../src/studio/edits';
+import { lightOf, lightText } from '../src/studio/light';
 import { listNotes } from '../src/studio/notes';
 import { previewOverlay } from '../src/studio/preview';
 import { checkEdit } from '../src/studio/quality';
@@ -71,7 +94,7 @@ const opt = (name: string) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? argv[i + 1] : undefined;
 };
-const VALUED = new Set(['--source', '--v', '--px']);
+const VALUED = new Set(['--source', '--v', '--px', '--preview', '--at']);
 const args = argv.filter((a, i) => !flags.has(a) && !VALUED.has(a) && !VALUED.has(argv[i - 1]));
 
 // ---------- finding things ----------
@@ -142,16 +165,26 @@ async function wordsOf(spec: EditSpec) {
   return timelineWords(spec, await specTranscripts(spec, specMedia(spec)));
 }
 
-/** Words of the source a clip's in or out point falls inside (by Whisper's times): a cut that clips a word. */
+/**
+ * Cuts that land in the voice: loud there and in no pause the voice band shows (Whisper's word times are too loose to
+ * tell: they gave a clean cut a warning and trained nobody to read them). Where one clip runs on into the next
+ * (a reframe), nothing is cut.
+ */
 async function cutWords(spec: EditSpec) {
-  const transcripts = await specTranscripts(spec, specMedia(spec));
+  const rows = new Map(specMedia(spec).map((m) => [m.id, m]));
   const out = new Map<string, string>();
-  for (const c of spec.clips) {
-    const ws = transcripts[c.mediaId]?.segments.flatMap((x) => x.words ?? []) ?? [];
-    const inside = (t: number) => ws.find((w) => w.start + 0.03 < t && t < w.end - 0.03);
-    const a = inside(c.in);
-    const b = inside(c.out);
-    if (a || b) out.set(c.id, [a && `in cuts “${a.word.trim()}” ${f2(a.start)}–${f2(a.end)}`, b && `out cuts “${b.word.trim()}” ${f2(b.start)}–${f2(b.end)}`].filter(Boolean).join(', '));
+  const runsOn = (a: EditSpec['clips'][number] | undefined, b: EditSpec['clips'][number] | undefined) => !!a && !!b && a.mediaId === b.mediaId && Math.abs(a.out - b.in) < 0.02;
+  for (const [i, c] of spec.clips.entries()) {
+    const m = rows.get(c.mediaId);
+    const s = m && c.volume > 0 ? await takeSound(m) : null;
+    if (!s) continue;
+    const word = (t: number) => {
+      const w = s.words.find((x) => x.start - 0.05 < t && t < x.end + 0.05);
+      return w ? ` (“${w.word.trim()}” ${f2(w.start)}–${f2(w.end)})` : '';
+    };
+    const a = !runsOn(spec.clips[i - 1], c) && cutsSound(s, c.in);
+    const b = !runsOn(c, spec.clips[i + 1]) && cutsSound(s, c.out);
+    if (a || b) out.set(c.id, [a && `in lands in sound${word(c.in)}`, b && `out lands in sound${word(c.out)}`].filter(Boolean).join(', '));
   }
   return out;
 }
@@ -221,7 +254,7 @@ async function show(piece: Piece) {
   const c = spec.captions;
   const sfx = spec.audio.sfx.map((x) => `${x.mediaId.replace('builtin:', '')}@${x.at}`).join(' ');
   out.push(
-    `${spec.format} · ${f2(editDuration(spec))} s · captions ${c.enabled ? `${c.preset} ×${c.maxWords} at ${c.position}${c.font ? ` ${c.font}` : ''}` : 'off'} · autoSfx ${spec.audio.autoSfx ? 'on' : 'off'}${sfx ? ` · sfx ${sfx}` : ''}${spec.audio.nasheed ? ' · nasheed (the creator’s)' : ''} · grade ${spec.grade.filter}${spec.grade.lutMediaId ? ' + LUT' : ''}${spec.watermark.mediaId ? ' · watermark' : ''}`,
+    `${spec.format} · ${f2(editDuration(spec))} s · captions ${c.enabled ? `${c.preset} ×${c.maxWords} at ${c.position}${c.font ? ` ${c.font}` : ''}` : 'off'} · autoSfx ${spec.audio.autoSfx ? 'on' : 'off'}${sfx ? ` · sfx ${sfx}` : ''}${spec.audio.nasheed ? ' · nasheed (the creator’s)' : ''} · grade ${spec.grade.filter}${spec.grade.lutMediaId ? ' + LUT' : ''}${spec.grade.light ? ' · light fix on' : ''}${spec.watermark.mediaId ? ' · watermark' : ''}`,
   );
   out.push('clips (timeline · [file in–out] look | silence before the first and after the last word | words):', ...clipLines(spec, words, names, await cutWords(spec)));
   if (spec.overlays.length) out.push('overlays:', ...spec.overlays.map((o) => `  ${overlayLine(o)}`));
@@ -396,8 +429,39 @@ function applySet(spec: EditSpec, expr: string) {
   } else parent[at] = v;
 }
 
-/** What a design file gets besides the spec: timeline times of the cut, the words and library scenes. */
-function designContext(spec: EditSpec, words: TimelineWord[]) {
+/** The workspace's files by id or the start of one. */
+function mediaLookup(workspaceId: string) {
+  const rows = db.select().from(schema.media).where(eq(schema.media.workspaceId, workspaceId)).all();
+  return (id: string): MediaRow => {
+    const hits = rows.filter((r) => r.id === id || (id.length >= 6 && r.id.startsWith(id)));
+    if (hits.length !== 1) throw new Error(`File id “${id}” matches ${hits.length} files.`);
+    return hits[0];
+  };
+}
+
+/** The series' earlier episodes that have an edit: what each carries forward (the tracker's totals, the captions, how it opened). */
+function seriesSoFar(piece: Piece): SeriesSoFar {
+  if (!piece.seriesId) return [];
+  return db
+    .select()
+    .from(schema.pieces)
+    .where(eq(schema.pieces.seriesId, piece.seriesId))
+    .all()
+    .filter((p) => p.id !== piece.id && (p.episode ?? 0) < (piece.episode ?? Infinity))
+    .sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0))
+    .flatMap((p) => {
+      const e = findEditForPiece(p.id);
+      if (!e) return [];
+      const s = normalizeEdit(e.working);
+      const t = s.overlays.find((o) => o.id === 'kit-tracker');
+      return [{ episode: p.episode ?? 0, title: p.title, tracker: t?.type === 'scene' && t.fill ? { text: t.fill.text, sub: t.fill.sub } : null, captions: s.captions, open: openOf(s) }];
+    });
+}
+
+type Kit = { media: (id: string) => MediaRow; series: SeriesSoFar; notes: string[] };
+
+/** What a design file gets besides the spec: timeline times of the cut, the words, library scenes and the episode kit. */
+function designContext(spec: EditSpec, words: TimelineWord[], kit: Kit) {
   const starts = clipStarts(spec);
   const byId = new Map(spec.clips.map((c, i) => [c.id, { c, start: starts[i] }]));
   const get = (id: string) => {
@@ -416,7 +480,18 @@ function designContext(spec: EditSpec, words: TimelineWord[]) {
     start: (id: string) => r2(get(id).start),
     end: (id: string) => r2(get(id).start + get(id).c.out - get(id).c.in),
     /** Where the timeline is now (call again after changing spec.clips). */
-    retime: () => designContext(spec, words),
+    retime: () => designContext(spec, words, kit),
+    /**
+     * Clips for the lines to keep, [name, from, to] as `takes` prints them: each cut moved into the pause beside its
+     * words, framing by turns (wide, close on the face), a long line reframed once inside it. `spec.clips = await ctx.cut(…)`.
+     */
+    cut: async (file: string, rows: LineRow[], opts?: CutOptions) => {
+      const made = await cutLines(kit.media, spec.format, file, rows, opts);
+      kit.notes.push(...made.notes);
+      return made.clips;
+    },
+    /** The series' dress on the clips now in `spec`: tracker, captions, opening, proof shots (studio/episode.ts). */
+    episode: async (opts: EpisodeOptions) => void kit.notes.push(...(await dressEpisode(spec, opts, kit.media, kit.series))),
     /** A scene from the library, filled with these words (put it in overlays with an id, start and end). */
     library: (preset: ScenePreset, fill: Partial<SceneFill>, seconds?: number) => ({ type: 'scene' as const, ...libraryScene(preset, fill, { W, H, color: spec.captions.highlight }, seconds) }),
   };
@@ -436,7 +511,12 @@ async function save(piece: Piece, input: EditSpec, message: string) {
   const lines = [...clipLines(spec, words, files, await cutWords(spec)), ...spec.overlays.map((o) => `  ${overlayLine(o)}`)];
   const total = `${f2(editDuration(spec))} s, ${spec.clips.length} clips, ${spec.overlays.length} overlays`;
   if (dropped.length) lines.unshift(`⚠ ${dropped.join('; ')}`);
-  if (flags.has('--dry')) return `dry run (nothing saved): ${total}\n${lines.join('\n')}`;
+  if (flags.has('--dry')) {
+    // Look before saving: every version saved is one more for me to watch.
+    const look = opt('preview');
+    const sheet = look ? `\n${await preview(piece, look, [], { spec, workspaceId: piece.workspaceId })}` : '';
+    return `dry run (nothing saved): ${total}\n${lines.join('\n')}${sheet}`;
+  }
   let edit = findEditForPiece(piece.id);
   if (!edit) {
     const { createEdit } = await import('../src/studio/edits');
@@ -500,10 +580,37 @@ async function frames(piece: Piece, times: number[]) {
   }
 }
 
-async function preview(piece: Piece, overlayId: string, times: number[]) {
-  const edit = editOf(piece);
+/** What the light fix does to each camera take of the edit, with a frame before and after to look at. */
+async function light(piece: Piece) {
+  const spec = normalizeEdit(editOf(piece).working);
+  const rows = new Map(specMedia(spec).map((m) => [m.id, m]));
+  const dir = workDir(piece.id);
+  const out = [`light fix ${spec.grade.light ? 'on' : 'off'} (set <card> "<message>" grade.light=${spec.grade.light ? 'false' : 'true'})`];
+  const shots: string[] = [];
+  for (const id of new Set(spec.clips.map((c) => c.mediaId))) {
+    const m = rows.get(id);
+    if (!m || m.kind !== 'video') continue;
+    const fix = await lightOf(m);
+    out.push(`${short(id)} ${m.originalName}: ${fix ? `${lightText(fix.fix)} (its colour was ${fix.fix.was.colour.join(' ')}, middle brightness ${fix.fix.was.middle})` : 'fine as it is'}`);
+    if (!fix) continue;
+    const c = spec.clips.find((x) => x.mediaId === id)!;
+    const [before] = await extractFrames(mediaPath(m), [(c.in + c.out) / 2], () => join(dir, `light-${short(id)}-a.jpg`), 600);
+    const after = join(dir, `light-${short(id)}-b.jpg`);
+    await gradeImage(before, after, { file: fix.cube, intensity: 1 }, dir);
+    shots.push(before, after);
+  }
+  if (shots.length) {
+    const made = await sheets(shots, join(dir, 'light'), Number(opt('px')) || 300);
+    shots.forEach((f) => rmSync(f, { force: true }));
+    out.push('before, after:', ...made);
+  }
+  return out.join('\n');
+}
+
+async function preview(piece: Piece, overlayId: string, times: number[], given?: { spec: EditSpec; workspaceId: string }) {
   const px = Number(opt('px')) || 300;
-  const { images, times: at } = await previewOverlay(edit.id, overlayId, times.length ? times : undefined);
+  const at0 = times.length ? times : (opt('at') ?? '').split(',').map(Number).filter((n) => Number.isFinite(n) && n >= 0);
+  const { images, times: at } = await previewOverlay(given ? null : editOf(piece).id, overlayId, at0.length ? at0 : undefined, given);
   const dir = workDir(piece.id);
   const shots = images.map((img: Buffer, i: number) => {
     const f = join(dir, `pv-${i}.jpg`);
@@ -512,7 +619,7 @@ async function preview(piece: Piece, overlayId: string, times: number[]) {
   });
   const made = await sheets(shots, join(dir, `preview-${overlayId}`), px);
   shots.forEach((f) => rmSync(f, { force: true }));
-  return `${overlayId}, left to right at ${at.map((t: number) => f2(t)).join(', ')} s into it (the working copy):\n${made.join('\n')}`;
+  return `${overlayId}, left to right at ${at.map((t: number) => f2(t)).join(', ')} s into it (${given ? 'the dry run' : 'the working copy'}):\n${made.join('\n')}`;
 }
 
 /** What the finished video says, phrase by phrase, with ✂ where its version cuts from one clip to the next. */
@@ -588,7 +695,13 @@ async function rewhisper(piece: Piece, q: string, from: number, to: number, said
     // Whisper's timings, the words I know were said (a name, a number it heard wrong).
     const words = said.split(/\s+/).filter(Boolean);
     if (words.length !== fresh.length) throw new Error(`Whisper heard ${fresh.length} words, not ${words.length}: ${fresh.map((w) => w.word.trim()).join(' ')} (the transcript is unchanged)`);
-    fresh.forEach((w, i) => (w.word = ` ${words[i]}`));
+    // “~” for a heard word joins it onto the one before: a name Whisper heard as two words (“GoHighLevel ~”).
+    const joined: typeof fresh = [];
+    fresh.forEach((w, i) => {
+      if (words[i] === '~' && joined.length) joined[joined.length - 1].end = w.end;
+      else joined.push({ ...w, word: ` ${words[i]}` });
+    });
+    fresh.splice(0, fresh.length, ...joined);
   }
   const backup = join(dir, `transcript-${short(m.id)}-${Date.now()}.json`);
   writeFileSync(backup, JSON.stringify(t));
@@ -706,8 +819,10 @@ const out = await (async () => {
       if (/\.(json)$/.test(file)) spec = JSON.parse(readFileSync(file, 'utf8'));
       else {
         const mod = await import(resolve(file));
-        const made = await mod.default(spec, designContext(spec, await wordsOf(spec)));
+        const kit: Kit = { media: mediaLookup(p.workspaceId), series: seriesSoFar(p), notes: [] };
+        const made = await mod.default(spec, designContext(spec, await wordsOf(spec), kit));
         if (made) spec = made;
+        if (kit.notes.length) console.log(kit.notes.map((n) => `· ${n}`).join('\n'));
       }
       return save(p, spec, message || 'Claude edit');
     }
@@ -722,6 +837,8 @@ const out = await (async () => {
       const m = await saveUpload(p.workspaceId, { stream: createReadStream(file), filename: name, mimetype: MIME[ext] }, { pieceId: p.id, source: 'upload' });
       return `${short(m.id)} ${m.kind} ${m.originalName} on “${p.title}”`;
     }
+    case 'light':
+      return light(findPiece(rest[0]));
     case 'frames':
       return frames(findPiece(rest[0]), rest.slice(1).map(Number).filter(Number.isFinite));
     case 'preview': {

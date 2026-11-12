@@ -26,19 +26,25 @@ let busy: Promise<unknown> = Promise.resolve();
 
 /**
  * JPEG stills of overlay `overlayId` of an edit at `times` (seconds into the overlay; default four spread across it).
- * Takes about as long as the overlay, mostly Chrome starting.
+ * Takes about as long as the overlay, mostly Chrome starting. `given`: a spec that isn't saved (a dry run) instead of
+ * the edit's working copy.
  */
-export function previewOverlay(editId: string, overlayId: string, times?: number[]) {
-  const next = busy.then(() => run(editId, overlayId, times));
+export function previewOverlay(editId: string | null, overlayId: string, times?: number[], given?: { spec: EditSpec; workspaceId: string }) {
+  const next = busy.then(() => run(editId, overlayId, times, given));
   busy = next.catch(() => {});
   return next;
 }
 
-async function run(editId: string, overlayId: string, times?: number[]) {
-  const edit = getEdit(editId);
-  const spec = normalizeEdit(edit.working);
-  const o = spec.overlays.find((x) => x.id === overlayId);
-  if (!o) throw new Error('There’s no overlay with that id on this edit.');
+async function run(editId: string | null, overlayId: string, times?: number[], given?: { spec: EditSpec; workspaceId: string }) {
+  const edit = given || !editId ? null : getEdit(editId);
+  if (!given && !edit) throw new Error('No edit to preview.');
+  const spec = normalizeEdit(given?.spec ?? edit!.working);
+  const workspaceId = given?.workspaceId ?? edit!.workspaceId;
+  const found = spec.overlays.find((x) => x.id === overlayId);
+  if (!found) throw new Error('There’s no overlay with that id on this edit.');
+  // One held for a whole video (a name tag, a tracker) is only drawn as far as the stills asked for reach.
+  const reach = Math.max(8, ...(times ?? []).map((t) => t + 1.5));
+  const o = found.end - found.start > 20 && times?.length && reach < found.end - found.start ? ({ ...found, end: found.start + reach } as EditOverlay) : found;
   const len = o.end - o.start;
   const dir = join(config.tmpDir, `preview-${newId()}`);
   await mkdir(join(dir, 'media'), { recursive: true });
@@ -79,7 +85,7 @@ async function run(editId: string, overlayId: string, times?: number[]) {
     for (const f of GSAP_FILES) await copyFile(gsapFilePath(f), join(dir, f));
     const { html } = composeEdit({
       spec: { ...mini, captions: { ...mini.captions, fontMediaId: spec.captions.fontMediaId } },
-      mascot: getWorkspace(edit.workspaceId).mascot,
+      mascot: getWorkspace(workspaceId).mascot,
       media,
       transcripts: {},
       clipSource: () => (bgFile ? { src: `media/${bgFile}`, mediaStart: 0 } : null),

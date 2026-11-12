@@ -183,6 +183,22 @@ top (my turn, with Claude, going out today, 7-day views) and one column per page
 the kind's: personal 3, Islamic 7, clipping 14), this week and today against it, 7-day views and followers, what needs
 me there, my turn, Claude's turn, going out, posted lately.
 
+### Episode style (2026-11-12)
+
+I looked at justyn.ai's edits (a new picture every 1–3 s, a designed graphic per sentence, text behind his head) and
+decided against that for the personal brand: his editing is what he sells; mine is a challenge diary, where people stay
+for the stakes, the progress and the proof. So two tiers. **Daily episodes (about 9 in 10) are raw**: me talking, cut
+tight on the pauses, framing changing at every cut, the challenge tracker on top (day, money made of the goal), clean
+captions, my sign-off, and my own screenshots or recordings on the lines they prove. **Milestones (first client, first
+$1k, a recap, a trailer) take a heavier edit** with library scenes. Not every episode opens the same way (plain, my own
+words as a title card, or cold; hooks differ on purpose, to test them). No text-behind-me cut-out (it needs a
+segmentation model). Editing stays cheap: an episode is a design of a few lines (`npm run edit -- help`), the cuts,
+framing, tracker and light fix are mechanical. Filming: light in front of me (a window or a lamp), phone at eye level,
+earphones out, a tidy background; the light fix only rescues what's left. The video skills (talking-head-recut,
+hyperframes-video-beats, broll, embedded-captions) were read once and their rules that apply went into the kit and the
+edit help (proof on the word that names it, 2–5 s, 5 s of me between two, one thing to read at a time); they stay
+name-only.
+
 ### Android (2026-10-15)
 
 Capacitor around `web/`, installed and updated by Obtainium from GitHub Releases. Pairing by QR (one-time code →

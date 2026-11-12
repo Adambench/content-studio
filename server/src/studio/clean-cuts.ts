@@ -196,8 +196,27 @@ export function snapCuts(
   words: TranscriptWord[],
   /** Whether two shots may become one again (false for a cut made on purpose: a line taken out). */
   mayJoin: (a: EditClip, b: EditClip) => boolean = () => true,
+  /** Pauses found another way (`bandPauses`, for a phone take whose room is louder than the envelope's quiet level). */
+  extra: [number, number][] = [],
+  /** The silence kept before the first word's sound and after the last one's (seconds). */
+  air: { lead?: number; tail?: number } = {},
 ): EditClip[] {
+  const lead = air.lead ?? 0.12;
+  const tail = air.tail ?? 0.16;
   const ws = words.filter((w) => w.word.trim()).sort((a, b) => a.start - b.start);
+  // The envelope's pauses between two times, with the extra ones that reach in there, overlapping ones as one.
+  const pauses = (e: Envelope, from: number, to: number, min = MIN_GAP, soft = false): [number, number][] => {
+    const own = envelopePauses(e, from, to, min, soft);
+    if (!extra.length) return own;
+    const all = [...own, ...extra.filter((g) => g[1] > from && g[0] < to).map((g): [number, number] => [Math.max(g[0], from), Math.min(g[1], to)])].filter((g) => g[1] - g[0] >= min).sort((a, b) => a[0] - b[0]);
+    const out: [number, number][] = [];
+    for (const g of all) {
+      const last = out[out.length - 1];
+      if (last && g[0] <= last[1]) last[1] = Math.max(last[1], g[1]);
+      else out.push([g[0], g[1]]);
+    }
+    return out;
+  };
   const mid = (w: TranscriptWord) => (w.start + w.end) / 2;
   const firstWord = (c: EditClip) => ws.findIndex((w) => mid(w) >= c.in && mid(w) < c.out);
   const lastWord = (c: EditClip, from: number) => {
@@ -249,7 +268,7 @@ export function snapCuts(
     if (!joined(merged[i - 1], c)) {
       const from = Math.max(0, before ? before.end : k.start - 1, k.start - 1.2);
       const g = inPause(k, from);
-      if (g) inAt = Math.max(g[0], g[1] - 0.12, before ? before.end : 0);
+      if (g) inAt = Math.max(g[0], g[1] - lead, before ? before.end : 0);
       else {
         // No pause: the deepest dip just before the word. Whisper's edges can be off, so the dip may sit a little
         // inside the word before's times (a word is loud; the gap between two is where it's quietest).
@@ -263,7 +282,7 @@ export function snapCuts(
       const g = outPause(l, to);
       if (g) {
         // A little of the pause kept as air, never more than half of it.
-        outAt = Math.min(g[1] - 0.03, g[0] + Math.min(0.16, (g[1] - g[0]) * 0.5));
+        outAt = Math.min(g[1] - 0.03, g[0] + Math.min(tail, (g[1] - g[0]) * 0.5));
         if (after) outAt = Math.min(outAt, after.start + stretch(after));
       } else {
         const hi = Math.min(env.seconds, l.end + EDGE, after ? after.start + stretch(after) : Infinity);
@@ -285,3 +304,4 @@ export function cutInSpeech(env: Envelope, t: number) {
 }
 
 const round = (n: number) => Math.round(n * 1000) / 1000;
+const envelopePauses = pauses;
