@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { BOARD_COLUMNS, COLUMN_LABELS, columnOf, isWritingColumn, VIDEO_COLUMNS, type BoardColumn, type BoardItem } from '@shared/board';
+import { CarouselView } from '@/components/card/CarouselView';
 import { ReviewView, useVideoVersions } from '@/components/card/ReviewView';
 import { useDraft } from '@/components/card/useDraft';
 import { CardHeader, WriteView } from '@/components/card/WriteView';
@@ -13,7 +14,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { usePhone } from '@/hooks/useMediaQuery';
 import { api, ApiError, errorMessage } from '@/lib/api';
 import { LIST_ORDER, pagePath, sectionOf, sectionsFor, writes } from '@/lib/nav';
-import { keys, queryClient, useBoardData, usePiece } from '@/lib/queries';
+import { keys, queryClient, useBoardData, useCarousel, usePiece } from '@/lib/queries';
 import type { PieceDetail } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -47,14 +48,16 @@ function Sidebar({ items, current, columns }: { items: BoardItem[]; current: Boa
 /**
  * Everything on a card, whatever its stage: on a page I write for, its document (Script, Notes, footage) and its video
  * (renders, comments, Approve), whichever the stage needs first; a clip has only its video. While I write, the video
- * shows once one was made (a card sent back keeps its renders).
+ * shows once one was made (a card sent back keeps its renders). A carousel shows its slides there (CarouselView).
  */
 function CardBody({ piece, item, writer }: { piece: PieceDetail; item: BoardItem; writer: boolean }) {
   const draft = useDraft(piece);
   const { current } = useVideoVersions(piece.id);
+  const carousel = useCarousel(piece.id).data ?? [];
   const writing = writer && isWritingColumn(item.column);
   const doc = writer && <WriteView piece={piece} draft={draft} />;
-  const video = (!writing || !!current) && <ReviewView piece={piece} item={item} draft={draft} />;
+  // A carousel shows its slides where a video would play.
+  const video = carousel.length ? <CarouselView piece={piece} item={item} draft={draft} versions={carousel} /> : (!writing || !!current) && <ReviewView piece={piece} item={item} draft={draft} />;
   const [first, second] = writing ? [doc, video] : [video, doc];
   return (
     <div className="space-y-8 px-4 pt-2 pb-10 md:px-12 md:pt-5 md:pb-20">
@@ -83,7 +86,7 @@ export function CardPage() {
     );
   const p = piece.data;
   const page = board.data.pages.find((w) => w.id === p.workspaceId);
-  const item = board.data.items.find((i) => i.id === p.id) ?? ({ id: p.id, workspaceId: p.workspaceId, title: p.title, stage: p.stage, column: columnOf(p.stage), position: p.position, updatedAt: p.updatedAt, durationMs: null, rendering: false, openComments: 0, nextPostAt: null, failed: null, postedAt: null, series: null, footage: 0 } satisfies BoardItem);
+  const item = board.data.items.find((i) => i.id === p.id) ?? ({ id: p.id, workspaceId: p.workspaceId, title: p.title, stage: p.stage, column: columnOf(p.stage), position: p.position, updatedAt: p.updatedAt, durationMs: null, slides: null, rendering: false, openComments: 0, nextPostAt: null, failed: null, postedAt: null, series: null, footage: 0 } satisfies BoardItem);
   const kind = page?.kind ?? 'personal';
   const section = sectionOf(kind);
   const sectionLabel = sectionsFor(kind).find((s) => s.id === section)?.label ?? 'Home';

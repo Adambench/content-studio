@@ -456,6 +456,46 @@ public class StudioPlugin extends Plugin {
         }
     }
 
+    /** A carousel's slides: saved to the gallery and/or shared all at once (Slides). */
+    @PluginMethod
+    public void shareImages(PluginCall call) {
+        JSArray ids = call.getArray("mediaIds");
+        JSArray names = call.getArray("names");
+        String folder = call.getString("folder", "Carousel");
+        boolean save = Boolean.TRUE.equals(call.getBoolean("save", false));
+        boolean share = Boolean.TRUE.equals(call.getBoolean("share", true));
+        Pairing pairing = Pairing.read(getContext());
+        if (pairing == null) {
+            call.reject("Pair the app with your computer first.");
+            return;
+        }
+        List<String> mediaIds;
+        List<String> fileNames;
+        try {
+            mediaIds = ids == null ? new ArrayList<>() : ids.toList();
+            fileNames = names == null ? new ArrayList<>() : names.toList();
+        } catch (Exception e) {
+            call.reject("mediaIds must be a list", e);
+            return;
+        }
+        if (mediaIds.isEmpty()) {
+            call.reject("No slides to share.");
+            return;
+        }
+        io.execute(() -> {
+            try {
+                List<File> files = Slides.fetch(getContext(), pairing, mediaIds, fileNames);
+                int saved = save ? Slides.save(getContext(), files, folder) : 0;
+                if (share) getActivity().runOnUiThread(() -> getActivity().startActivity(Slides.shareIntent(getContext(), files)));
+                JSObject result = new JSObject();
+                result.put("saved", saved);
+                call.resolve(result);
+            } catch (Exception e) {
+                call.reject(e.getMessage() == null ? "Couldn’t get the slides." : e.getMessage(), e);
+            }
+        });
+    }
+
     @PluginMethod
     public void listDownloads(PluginCall call) {
         JSObject result = new JSObject();

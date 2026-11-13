@@ -18,6 +18,11 @@
 //   npm run edit -- get <card>                     the working copy into <work>/spec.json (prints the path only)
 //   npm run edit -- add <card> <file> ["<name>"]  put a picture, video or recording on the card (a screenshot, a
 //                                                  frame of a video I mention): its id for clips and scene images
+//   npm run edit -- carousel <card> ["<message>" <png…|folder>]   a carousel (Instagram, 4:5 slides, 20 at most): the
+//                                                  slides in order (a folder: its images by name) saved as a version
+//                                                  authored by Claude; Review shows them, Approve posts them, the card
+//                                                  exports them. --media <id,id…>: pictures already on the card instead.
+//                                                  Without a message: its versions. Comments on it pin to a slide.
 //   npm run edit -- put <card> <file> "<message>"  save a whole spec (.json) or a design (.mts: default export
 //                                                  (spec, ctx) => spec) as a version authored by Claude
 //                                                  (--dry --preview <overlayId> [--at 0,2]: a sheet of it, nothing saved)
@@ -52,7 +57,7 @@
 //   · One thing to read at a time beside the captions; my face is never covered for a whole line.
 //   · Milestones (first client, first $1k, a recap) may take library scenes (`types library`); a daily one doesn't.
 import { execFile as execFileCb } from 'node:child_process';
-import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { and, desc, eq, inArray, isNull, ne } from 'drizzle-orm';
@@ -77,6 +82,8 @@ import { cutLines, cutsSound, dressEpisode, openOf, takeSound, type CutOptions, 
 import { findEditForPiece, latestQuality, listEditVersions, listRenders, saveEditVersion, specMedia, specTranscripts } from '../src/studio/edits';
 import { lightOf, lightText } from '../src/studio/light';
 import { listNotes } from '../src/studio/notes';
+import { listCarousel, saveCarousel } from '../src/studio/carousel';
+import { getPiece } from '../src/services/pieces';
 import { previewOverlay } from '../src/studio/preview';
 import { checkEdit } from '../src/studio/quality';
 import { queueRender } from '../src/studio/render';
@@ -94,7 +101,7 @@ const opt = (name: string) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? argv[i + 1] : undefined;
 };
-const VALUED = new Set(['--source', '--v', '--px', '--preview', '--at']);
+const VALUED = new Set(['--source', '--v', '--px', '--preview', '--at', '--media']);
 const args = argv.filter((a, i) => !flags.has(a) && !VALUED.has(a) && !VALUED.has(argv[i - 1]));
 
 // ---------- finding things ----------
@@ -836,6 +843,28 @@ const out = await (async () => {
       const name = rest[2] ? `${rest[2]}${ext}` : basename(file);
       const m = await saveUpload(p.workspaceId, { stream: createReadStream(file), filename: name, mimetype: MIME[ext] }, { pieceId: p.id, source: 'upload' });
       return `${short(m.id)} ${m.kind} ${m.originalName} on “${p.title}”`;
+    }
+    case 'carousel': {
+      const p = findPiece(rest[0]);
+      const [message, ...paths] = rest.slice(1);
+      if (!message) {
+        const list = listCarousel(p.id);
+        return list.length ? list.map((v) => `v${v.number} ${v.author.padEnd(6)} ${v.slides.length} slides  ${v.message}\n   ${v.slides.map((x) => short(x.mediaId)).join(' ')}`).join('\n') : `“${p.title}” has no carousel.`;
+      }
+      const media = opt('media')?.split(',').map((x) => x.trim()).filter(Boolean);
+      const files = paths.flatMap((f) => {
+        if (!existsSync(f)) throw new Error(`${f}: no such file or folder`);
+        if (!statSync(f).isDirectory()) return [f];
+        return readdirSync(f).filter((x) => /\.(png|jpe?g|webp)$/i.test(x)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map((x) => join(f, x));
+      });
+      const ids = media?.map((m) => {
+        const row = db.select({ id: schema.media.id }).from(schema.media).where(eq(schema.media.pieceId, p.id)).all().find((r) => r.id.startsWith(m));
+        if (!row) throw new Error(`${m}: not a file on “${p.title}”`);
+        return row.id;
+      });
+      if (!files.length && !ids?.length) throw new Error('Usage: carousel <card> "<message>" <png…|folder>   (or --media <id,id…>)');
+      const v = await saveCarousel(p.id, { files, mediaIds: ids }, message, 'claude');
+      return `v${v.number} of “${p.title}”: ${v.mediaIds.length} slides (${getPiece(p.id).stage})`;
     }
     case 'light':
       return light(findPiece(rest[0]));

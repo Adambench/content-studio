@@ -45,6 +45,7 @@ export function Meta({ item }: { item: BoardItem }) {
         <span className={m}>rendering</span>
       ) : null;
     case 'review':
+      if (item.slides) return <span className={m}>{item.slides} slides</span>;
       return item.durationMs ? <span className={m}>{duration(item.durationMs)}</span> : null;
     case 'scheduled':
       return item.failed ? (

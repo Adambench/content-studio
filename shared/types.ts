@@ -216,6 +216,11 @@ export type MediaSource = 'upload' | 'capture' | 'share' | 'render' | 'clip' | '
 export type ProxyStatus = 'none' | 'queued' | 'running' | 'done' | 'error';
 export type RenderStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled';
 
+/** One slide of a carousel: an image on the card. */
+export type CarouselSlide = { mediaId: string; width: number | null; height: number | null; name: string };
+/** One saved version of a card's carousel (server/src/studio/carousel.ts), its slides in order. */
+export type CarouselVersion = { id: string; number: number; author: 'you' | 'claude'; message: string; createdAt: number; slides: CarouselSlide[] };
+
 export type TranscriptWord = { start: number; end: number; word: string };
 export type TranscriptSegment = { start: number; end: number; text: string; words?: TranscriptWord[] };
 export type Transcript = { language: string; duration: number; text: string; segments: TranscriptSegment[] };

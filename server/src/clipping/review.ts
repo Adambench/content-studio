@@ -14,6 +14,7 @@ import { badRequest, HttpError, notFound } from '../lib/http';
 import { accountLabel, listAccounts } from '../publish/accounts';
 import { createPosts, deletePost, planPosts } from '../publish/posts';
 import { getPiece, getWorkspace } from '../services/pieces';
+import { currentCarousel } from '../studio/carousel';
 import { findEditForPiece } from '../studio/edits';
 import { markReviewed } from '../studio/notes';
 import { discardClip } from './make';
@@ -56,6 +57,9 @@ function buildClip(piece: typeof schema.pieces.$inferSelect): ReviewClip {
     copy,
     watermark: !!(edit && normalizeEdit(edit.working).watermark.mediaId),
   };
+  // A carousel: its newest version is what's approved and posted (the first slide stands for it, like a render).
+  const carousel = currentCarousel(piece.id);
+  const cover = carousel ? db.select().from(schema.media).where(eq(schema.media.id, carousel.mediaIds[0])).get() : undefined;
   const rendering = lastRender && (lastRender.status !== 'done' || !renderMedia) && lastRender.status !== 'cancelled' ? { status: lastRender.status, progress: lastRender.progress, stage: lastRender.stage, error: lastRender.error } : null;
   return {
     pieceId: piece.id,
@@ -64,10 +68,15 @@ function buildClip(piece: typeof schema.pieces.$inferSelect): ReviewClip {
     workspace: { id: ws.id, name: ws.name, color: ws.color as WorkspaceColor },
     stage: piece.stage,
     updatedAt: piece.updatedAt,
-    render: renderMedia ? { mediaId: renderMedia.id, durationMs: renderMedia.durationMs, width: renderMedia.width, height: renderMedia.height, hasThumb: renderMedia.hasThumb } : null,
-    renderVersion: versionOf(renderMedia?.id),
+    render: cover
+      ? { mediaId: cover.id, durationMs: null, width: cover.width, height: cover.height, hasThumb: cover.hasThumb }
+      : renderMedia
+        ? { mediaId: renderMedia.id, durationMs: renderMedia.durationMs, width: renderMedia.width, height: renderMedia.height, hasThumb: renderMedia.hasThumb }
+        : null,
+    slides: carousel?.mediaIds ?? null,
+    renderVersion: carousel ? carousel.number : versionOf(renderMedia?.id),
     previousRender: previousMedia ? { mediaId: previousMedia.id, hasThumb: previousMedia.hasThumb, version: versionOf(previousMedia.id) } : null,
-    rendering,
+    rendering: carousel ? null : rendering,
     moment: momentRow ? toMoment(momentRow, piece.stage) : null,
     campaign: campaign && { id: campaign.id, title: campaign.title, brand: campaign.brand, link: campaign.link, platforms: campaign.platforms },
     source: source && { id: source.id, title: source.title, link: source.link },
@@ -114,8 +123,8 @@ function approvable(piece: typeof schema.pieces.$inferSelect) {
 /** The schedule an approval makes: the render to each usable account, at its next good time (now when just late). */
 function queueInput(clip: ReviewClip, tiktokPrivacy?: TikTokPrivacy) {
   return {
-    format: 'video' as const,
-    mediaIds: [clip.render!.mediaId],
+    format: clip.slides?.length ? ('photo' as const) : ('video' as const),
+    mediaIds: clip.slides?.length ? clip.slides : [clip.render!.mediaId],
     targets: clip.accounts
       .filter((a) => !a.reconnect)
       .map((a) => ({ accountId: a.id, options: {} })),

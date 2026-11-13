@@ -1,4 +1,4 @@
-import { dirname } from 'node:path';
+import { dirname, extname } from 'node:path';
 import { and, desc, eq, isNotNull, isNull, like, or } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -83,14 +83,17 @@ export async function mediaRoutes(app: FastifyInstance) {
     return { ...row, transcript };
   });
 
-  app.get<{ Params: { id: string }; Querystring: { download?: string } }>('/api/media/:id/file', async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { download?: string; name?: string } }>('/api/media/:id/file', async (req, reply) => {
     const row = getMedia(req.params.id);
     const path = mediaPath(row);
     reply.header('Cache-Control', 'private, max-age=31536000, immutable');
     if (req.query.download) {
+      // `name`: the file's name in Downloads (a carousel's slide: "<title> · v3 · 01.png"), its own extension kept.
+      const asked = req.query.name?.replace(/[\\/:*?"<>|\p{Cc}]+/gu, '-').trim().slice(0, 180);
+      const name = asked ? `${asked}${extname(row.fileName)}` : row.originalName;
       // A plain name for clients that don't read the UTF-8 one (a render is called "<title> · v3.mp4").
-      const plain = row.originalName.replace(/[^\x20-\x7e]+/g, '-').replace(/["\\/]/g, '-');
-      reply.header('Content-Disposition', `attachment; filename="${plain}"; filename*=UTF-8''${encodeURIComponent(row.originalName).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`);
+      const plain = name.replace(/[^\x20-\x7e]+/g, '-').replace(/["\\/]/g, '-');
+      reply.header('Content-Disposition', `attachment; filename="${plain}"; filename*=UTF-8''${encodeURIComponent(name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`);
     }
     return reply.type(row.mime).sendFile(row.fileName, dirname(path));
   });

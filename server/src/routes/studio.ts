@@ -23,6 +23,7 @@ import { createEdit, editDetail, findEditForPiece, getEdit, listEditVersions, li
 import { proxyPath } from '../studio/proxy';
 import { keptFaces } from '../studio/reframe';
 import { checkEdit } from '../studio/quality';
+import { listCarousel } from '../studio/carousel';
 import { addNote, deleteNote, listNotes, markReviewed, updateNote } from '../studio/notes';
 import { NOTE_MAX, NOTE_STATUSES } from '../../../shared/notes';
 import { builtinSfxPath, cancelRender, getRender, GSAP_FILES, gsapFilePath, queueRender, renderVersion, runtimePath } from '../studio/render';
@@ -64,6 +65,11 @@ export async function studioRoutes(app: FastifyInstance) {
     return listEditVersions(edit.id).map((v) => ({ ...v, footage: footage.has(v.id) }));
   });
 
+  /** A carousel's versions, newest first, each with its slides (studio/carousel.ts); empty for a video. */
+  app.get<{ Params: { id: string } }>('/api/pieces/:id/carousel', async (req) => {
+    getPiece(req.params.id);
+    return listCarousel(req.params.id);
+  });
   /** Comments pinned to moments of the finished video, for Claude to fix (studio/notes.ts). */
   app.get<{ Params: { id: string } }>('/api/pieces/:id/notes', async (req) => {
     getPiece(req.params.id);

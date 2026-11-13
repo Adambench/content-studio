@@ -91,7 +91,7 @@ export function Player({ mediaId, label, name, onVideo, className }: { mediaId: 
 }
 
 /** What a video waits for, and its one button: Approve in Review, else where it is. */
-function Status({ piece, item }: { piece: PieceDetail; item: BoardItem | undefined }) {
+export function Status({ piece, item }: { piece: PieceDetail; item: BoardItem | undefined }) {
   const pack = usePackage(piece.id);
   const notes = useNotes(piece.id);
   const posts = usePiecePosts(piece.id);
@@ -144,7 +144,8 @@ function Status({ piece, item }: { piece: PieceDetail; item: BoardItem | undefin
   );
 
   if (column === 'review') {
-    const at = plan.data?.targets.map((t) => t.at).filter((t): t is number => !!t).sort((a, b) => a - b)[0];
+    const at = plan.data?.targets.filter((t) => !t.problem).map((t) => t.at).filter((t): t is number => !!t).sort((a, b) => a - b)[0];
+    const problem = plan.data?.targets.find((t) => t.problem)?.problem;
     return (
       <div className="space-y-3">
         {failing && (
@@ -155,7 +156,7 @@ function Status({ piece, item }: { piece: PieceDetail; item: BoardItem | undefin
         <Button size="lg" className="h-13 w-full text-base" disabled={busy || !!open || !!failing || !pack.data?.render} onClick={approve}>
           {busy && <Spinner />} Approve
         </Button>
-        <p className="text-sm text-muted-foreground">{open ? `${open} open comment${open === 1 ? '' : 's'}` : at ? `Goes out ${postWhen(at)}` : plan.data?.error ?? ''}</p>
+        <p className="text-sm text-muted-foreground">{open ? `${open} open comment${open === 1 ? '' : 's'}` : at ? `Goes out ${postWhen(at)}` : (problem ?? plan.data?.error ?? '')}</p>
         {open > 0 && fixButton}
       </div>
     );
@@ -225,7 +226,7 @@ function Looks({ piece }: { piece: PieceDetail }) {
 }
 
 /** The post's caption and hashtags (Instagram), saved as I type. */
-function PostText({ draft: { draft, change } }: { draft: CardDraft }) {
+export function PostText({ draft: { draft, change } }: { draft: CardDraft }) {
   const ig = draft.platforms.instagram;
   const set = (patch: Partial<typeof ig>) => change((d) => ({ ...d, platforms: { ...d.platforms, instagram: { ...d.platforms.instagram, ...patch } } }));
   return (

@@ -199,6 +199,8 @@ export type ReviewClip = {
   updatedAt: number;
   /** The latest finished render: what gets approved. */
   render: { mediaId: string; durationMs: number | null; width: number | null; height: number | null; hasThumb: boolean } | null;
+  /** A carousel's slides (its newest version), in order: posted as a carousel instead of a video. `render` is the first. */
+  slides?: string[] | null;
   /** The edit version the latest render shows. */
   renderVersion: number | null;
   /** The render before it, for before/after after Claude changes the edit. */

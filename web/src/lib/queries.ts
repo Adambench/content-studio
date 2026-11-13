@@ -6,6 +6,7 @@ import type { KnowledgeRule } from '@shared/knowledge';
 import type { PageStyle, ReferenceVideo } from '@shared/references';
 import type { Toolbox } from '@shared/toolbox';
 import type { VideoNote } from '@shared/notes';
+import type { CarouselVersion } from '@shared/types';
 import type { ReviewClip } from '@shared/clipping';
 import type { BoardData, CampaignLink, Series } from '@shared/board';
 import type { ApprovePlan } from '@shared/dashboard';
@@ -98,6 +99,8 @@ export const useRenders = (pieceId: string) => useQuery(rendersQuery(pieceId));
 /** Every saved version of a piece's edit (under the renders key, so a render's events refresh it too). */
 export const versionsQuery = (pieceId: string) => queryOptions({ queryKey: [...keys.renders(pieceId), 'versions'], queryFn: () => api<VersionRow[]>(`/pieces/${pieceId}/versions`) });
 export const useVersions = (pieceId: string) => useQuery(versionsQuery(pieceId));
+/** A carousel's versions with their slides, newest first (empty for a video); under the piece's key, so its events refresh it. */
+export const useCarousel = (pieceId: string) => useQuery({ queryKey: [...keys.piece(pieceId), 'carousel'], queryFn: () => api<CarouselVersion[]>(`/pieces/${pieceId}/carousel`), enabled: !!pieceId });
 
 
 export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: () => api<AppSettings>('/settings') });

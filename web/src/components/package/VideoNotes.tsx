@@ -219,12 +219,18 @@ export function NoteList({
   mediaId,
   version,
   className,
+  place = span,
+  onPick,
 }: {
   pieceId: string;
   video: HTMLVideoElement | null;
   mediaId: string;
   version: number | null;
   className?: string;
+  /** Where a comment is pinned (a carousel: "Slide 3"); a video's is its moment. */
+  place?: (n: VideoNote) => string;
+  /** A click on where it's pinned (a carousel shows the slide); a video seeks there. */
+  onPick?: (n: VideoNote) => void;
 }) {
   const notes = useNotes(pieceId);
   const list = notes.data ?? [];
@@ -289,12 +295,12 @@ export function NoteList({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => seekTo(video, n.at)}
+                onClick={() => (onPick ? onPick(n) : seekTo(video, n.at))}
                 className={cn('text-xs tabular-nums hover:underline', n.status === 'open' ? 'text-foreground' : 'text-muted-foreground')}
               >
-                {span(n)}
+                {place(n)}
               </button>
-              {!onRender(n, mediaId, version) && n.version != null && <span className="text-xs text-muted-foreground">on the render of v{n.version}</span>}
+              {!onRender(n, mediaId, version) && n.version != null && <span className="text-xs text-muted-foreground">on {onPick ? '' : 'the render of '}v{n.version}</span>}
               <div className="ml-auto flex shrink-0 opacity-60 group-hover:opacity-100">
                 {n.status === 'open' ? (
                   <Button size="icon-sm" variant="ghost" className="size-6" onClick={() => setStatus(n, 'done')} aria-label="Close it: done">

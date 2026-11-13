@@ -226,6 +226,25 @@ export const renders = sqliteTable(
   (t) => [index('renders_edit_idx').on(t.editId)],
 );
 
+/**
+ * One version of a card's carousel: its slides in order (image media on the card, source `render`). The newest is
+ * what Review shows, Approve posts and the export saves (studio/carousel.ts).
+ */
+export const carouselVersions = sqliteTable(
+  'carousel_versions',
+  {
+    id: id(),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    pieceId: text('piece_id').notNull().references(() => pieces.id, { onDelete: 'cascade' }),
+    number: integer('number').notNull(),
+    author: text('author').$type<'you' | 'claude'>().notNull(),
+    message: text('message').notNull().default(''),
+    mediaIds: text('media_ids', { mode: 'json' }).$type<string[]>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('carousel_versions_piece_idx').on(t.pieceId)],
+);
+
 /** A comment pinned to a moment (or a stretch) of a piece's finished video, for Claude to fix (shared/notes.ts). */
 export const videoNotes = sqliteTable(
   'video_notes',

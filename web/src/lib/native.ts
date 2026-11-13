@@ -64,6 +64,11 @@ type StudioPlugin = {
   /** Save a video to the phone (the gallery's Movies/Content Studio); it then plays from there, offline too. App only (lib/downloads.ts). */
   download(o: { mediaId: string; name: string }): Promise<void>;
   listDownloads(): Promise<{ downloads: DownloadItem[] }>;
+  /**
+   * A carousel's slides, fetched from the computer in order: `save` puts them in the gallery (Pictures/Content Studio/
+   * <folder>), `share` opens Android's share sheet with all of them (Instagram makes a carousel of them).
+   */
+  shareImages(o: { mediaIds: string[]; names: string[]; folder: string; save: boolean; share: boolean }): Promise<{ saved: number }>;
   canLock(): Promise<{ available: boolean }>;
   unlock(o: { title: string; subtitle?: string }): Promise<{ ok: boolean }>;
   addListener(event: 'share', fn: (s: SharePayload) => void): Promise<PluginListenerHandle>;

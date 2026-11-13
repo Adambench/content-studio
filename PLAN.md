@@ -884,3 +884,12 @@ Build (after the mockup):
   video yet); off Scheduled its posts that haven't gone out are cancelled (refused while one is going out); Posted is
   one I posted myself; Review makes it unwatched again. What went out stays out (`moveCard`, `clipping/review.ts`;
   the old stage `PATCH` goes the same way). Claude still can't approve: `update_piece` refuses Ready too
+- [x] Carousels (2026-11-13): a card can be a carousel instead of a video. Claude saves its slides as versions
+  (`npm run edit -- carousel`, `carousel_versions`); the card shows the newest to swipe through (arrows, ← →,
+  thumbnails), the older versions a click away, comments pinned to a slide (Claude reads the slide's file in
+  `npm run notes`), Approve as for a video (posted as a photo carousel; Instagram's API takes 10 slides, the app 20:
+  more than 10 are posted by hand). *Post it*: the laptop downloads every slide in order into Downloads/<title · vN>,
+  the phone (Android 0.5.0) shares them all to Instagram (one carousel, caption copied) or saves them to Pictures/
+  Content Studio/<title · vN>; *Copy caption* everywhere. The board says "15 slides". Tried on a copy of the data in
+  headless Chrome (laptop and phone layouts, a slide comment, the download names); the phone's share and save
+  not tried on the phone itself

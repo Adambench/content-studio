@@ -65,6 +65,8 @@ export type BoardItem = {
   updatedAt: number;
   /** The newest render's length. */
   durationMs: number | null;
+  /** A carousel's slide count (its newest version); null for a video. */
+  slides: number | null;
   /** A render is queued or drawing. */
   rendering: boolean;
   openComments: number;

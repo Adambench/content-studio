@@ -116,6 +116,10 @@ section you need.
   lines (`studio/episode.ts`): `ctx.cut` (the lines to keep, by the times `takes` prints: cuts go into the pauses,
   framing takes turns) and `ctx.episode` (the tracker, the captions of the episode before, how it opens, my screens
   as proof).
+- `npm run edit -- carousel <card> "<message>" <png…|folder>` — a carousel (Instagram 4:5, 20 slides at most) saved as
+  a version (`studio/carousel.ts`, table `carousel_versions`): the card shows its slides instead of a video (versions,
+  comments pinned to a slide, Approve posts them as a photo carousel up to the API's 10, *Post it* exports them: the
+  laptop into Downloads/<title · vN>, the phone shares them to Instagram or saves them to Pictures/Content Studio).
 - `npm run series` — every page's series with its episodes; `-- <seriesId>` with their scripts; `new <page> "<name>"
   ["<about>"]`, `about`, `episode <seriesId> "<title>" --script <file> --notes <file> [--film]` (Claude's, as a
   version), `write <pieceId> …`, `add <pieceId> <seriesId|none>`, `order <seriesId> <pieceId>…`.

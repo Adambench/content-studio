@@ -8,8 +8,9 @@ import { FIXING_STAGE, REVIEW_STAGE } from '../../../shared/types';
 import { db, newId, now, schema } from '../db';
 import { emit } from '../lib/events';
 import { badRequest, notFound } from '../lib/http';
-import { formatTime } from '../services/media';
+import { formatTime, mediaPath } from '../services/media';
 import { getPiece, getWorkspace } from '../services/pieces';
+import { carouselOfSlide, currentCarousel, currentCarousels } from './carousel';
 import { findEditForPiece, specMedia, specTranscripts } from './edits';
 import { lessonsText } from '../knowledge/lessons';
 
@@ -53,7 +54,10 @@ export function addNote(pieceId: string, body: { mediaId?: string | null; at: nu
   if (body.mediaId) {
     const m = db.select().from(schema.media).where(and(eq(schema.media.id, body.mediaId), eq(schema.media.pieceId, pieceId))).get();
     if (!m || m.source !== 'render') throw badRequest('That isn’t one of this video’s renders.');
-    version = db.select({ n: schema.renders.versionNumber }).from(schema.renders).where(eq(schema.renders.mediaId, m.id)).get()?.n ?? null;
+    // A carousel's slide: `at` is the slide's index in its version.
+    const slide = m.kind === 'image' ? carouselOfSlide(pieceId, m.id) : null;
+    version = slide ? slide.number : (db.select({ n: schema.renders.versionNumber }).from(schema.renders).where(eq(schema.renders.mediaId, m.id)).get()?.n ?? null);
+    if (slide) length = slide.slides - 1;
     if (m.durationMs) length = m.durationMs / 1000;
   }
   const at = round(Math.max(0, Math.min(body.at, length)));
@@ -127,8 +131,13 @@ export function followComments(pieceId: string) {
   return stage;
 }
 
-/** The newest finished video of a piece (what "looks good" is said about). */
+/**
+ * The newest finished video of a piece (what "looks good" is said about); for a carousel, its newest version's first
+ * slide (each version's slides are new files, so a new version asks for another look).
+ */
 export function latestRenderId(pieceId: string) {
+  const slides = currentCarousel(pieceId);
+  if (slides) return slides.mediaIds[0] ?? null;
   return (
     db
       .select({ id: schema.media.id })
@@ -161,6 +170,7 @@ export function reviewStates(pieces: Pick<typeof schema.pieces.$inferSelect, 'id
     .orderBy(asc(schema.media.createdAt))
     .all())
     if (m.pieceId) newest.set(m.pieceId, m.id);
+  for (const [pieceId, c] of currentCarousels(ids)) if (c.mediaIds[0]) newest.set(pieceId, c.mediaIds[0]);
   const gone = new Set(
     db
       .select({ pieceId: schema.posts.pieceId })
@@ -251,9 +261,24 @@ export async function notesText(pieceId: string, opts: { all?: boolean; lessons?
     }
     return specs.get(n) ?? null;
   };
-  const out = [`Comments on “${piece.title}” (piece ${pieceId}${head ? `, edit at v${head}` : ''}):`];
+  // A carousel's comments pin to a slide (`at` = its index): the slide's file, to look at.
+  const carousel = currentCarousel(pieceId);
+  const slideFile = (mediaId: string | null) => {
+    const m = mediaId ? db.select().from(schema.media).where(eq(schema.media.id, mediaId)).get() : undefined;
+    return m ? mediaPath(m) : null;
+  };
+  const out = [`Comments on “${piece.title}” (piece ${pieceId}${carousel ? `, carousel at v${carousel.number}: npm run edit -- carousel` : head ? `, edit at v${head}` : ''}):`];
   for (const [i, n] of notes.entries()) {
     out.push('');
+    if (carousel) {
+      out.push(`${i + 1}. [${n.id}] slide ${Math.round(n.at) + 1} of v${n.version ?? '?'}${n.status === 'open' ? '' : ` · ${n.status}`}: ${n.text}`);
+      const file = slideFile(n.mediaId);
+      if (file) out.push(`   the slide: ${file}`);
+      if (n.version && carousel.number > n.version) out.push(`   the carousel changed since v${n.version}: find the slide by what it says`);
+      if (n.reply) out.push(`   last answer: ${n.reply}`);
+      if (n.lessonId) out.push(`   taught the lesson ${n.lessonId}`);
+      continue;
+    }
     out.push(`${i + 1}. [${n.id}] ${span(n.at, n.end)} (${secs(n.at, n.end)}) on the render of v${n.version ?? '?'}${n.status === 'open' ? '' : ` · ${n.status}`}: ${n.text}`);
     const spec = specOf(n.version);
     if (spec) for (const l of await context(spec, n.at, n.end)) out.push(`   ${l}`);

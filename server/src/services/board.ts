@@ -2,6 +2,7 @@
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { columnOf, type BoardData, type BoardItem } from '../../../shared/board';
 import { db, schema } from '../db';
+import { currentCarousels } from '../studio/carousel';
 import { reviewStates } from '../studio/notes';
 
 /** Footage I shared for a video (not what the app made: renders, cuts, voices). */
@@ -55,6 +56,7 @@ function boardItems(workspaceIds: string[]): BoardItem[] {
     .all();
 
   const review = reviewStates(pieces);
+  const carousels = currentCarousels(ids);
   const seriesIds = [...new Set(pieces.map((p) => p.seriesId).filter((s): s is string => !!s))];
   const seriesNames = new Map(seriesIds.length ? db.select({ id: schema.series.id, name: schema.series.name }).from(schema.series).where(inArray(schema.series.id, seriesIds)).all().map((s) => [s.id, s.name]) : []);
   return pieces.map((p): BoardItem => {
@@ -72,6 +74,7 @@ function boardItems(workspaceIds: string[]): BoardItem[] {
       position: p.position,
       updatedAt: p.updatedAt,
       durationMs: renders.get(p.id) ?? null,
+      slides: carousels.get(p.id)?.mediaIds.length ?? null,
       rendering: drawing.has(p.id),
       openComments: review.get(p.id)?.open ?? 0,
       nextPostAt: upcoming.length ? Math.min(...upcoming) : null,

@@ -225,6 +225,13 @@
       "when": 1794068837754,
       "tag": "0031_series_name_gone",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1794545929839,
+      "tag": "0032_carousels",
+      "breakpoints": true
     }
   ]
 }

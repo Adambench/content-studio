@@ -322,15 +322,32 @@ function freePath(dir: string, name: string) {
   return path;
 }
 
-/** A video downloaded from a card goes straight to Downloads, and a notification says so (a click shows it in its folder). */
+/**
+ * A video downloaded from a card goes straight to Downloads, and a notification says so (a click shows it in its
+ * folder). A carousel's slides (`folder` in the link) go into Downloads/<folder>, replacing an earlier save of the same
+ * slide, with one notification for the lot (a click opens the folder).
+ */
+const folderNoticed = new Map<string, number>();
 function saveDownloads() {
   session.defaultSession.on('will-download', (_e, item) => {
-    const path = freePath(app.getPath('downloads'), item.getFilename());
+    let folder: string | null = null;
+    try {
+      folder = new URL(item.getURL()).searchParams.get('folder')?.replace(/[\\/:*?"<>|]+/g, '-').replace(/^\.+/, '').trim() || null;
+    } catch {
+      folder = null;
+    }
+    const dir = folder ? join(app.getPath('downloads'), folder) : app.getPath('downloads');
+    if (folder) mkdirSync(dir, { recursive: true });
+    const path = folder ? join(dir, item.getFilename()) : freePath(dir, item.getFilename());
     item.setSavePath(path);
     item.once('done', (_e, state) => {
       if (state !== 'completed') return;
-      const notification = new Notification({ title: 'Downloaded', body: basename(path), icon: iconPath });
-      notification.on('click', () => shell.showItemInFolder(path));
+      if (folder) {
+        if (Date.now() - (folderNoticed.get(folder) ?? 0) < 30_000) return;
+        folderNoticed.set(folder, Date.now());
+      }
+      const notification = new Notification({ title: 'Downloaded', body: folder ? `Downloads/${folder}` : basename(path), icon: iconPath });
+      notification.on('click', () => (folder ? void shell.openPath(dir) : shell.showItemInFolder(path)));
       notification.show();
     });
   });

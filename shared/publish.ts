@@ -141,7 +141,7 @@ export function postProblems(input: {
       if (seconds > L.maxSeconds) error('Reels can be 15 minutes at most.');
       if (media[0].size > L.maxBytes) error('Reels can be 1 GB at most.');
     }
-    if (format === 'photo' && media.length > L.maxPhotos) error(`Instagram carousels take up to ${L.maxPhotos} photos.`);
+    if (format === 'photo' && media.length > L.maxPhotos) error(`Instagram's API posts ${L.maxPhotos} slides at most: export it and post it from the Instagram app (20 there).`);
     if (format === 'photo' && media.some((m) => m.width && m.height && (m.width / m.height < 0.8 || m.width / m.height > 1.91))) {
       warn('Instagram photos must be between 4:5 and 1.91:1 — taller or wider ones are cropped from the centre.');
     }
