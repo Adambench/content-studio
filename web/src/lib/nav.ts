@@ -30,7 +30,7 @@ export function sectionsFor(kind: string): Section[] {
 export const sectionOf = (kind: string): SectionId => (writes(kind) ? 'videos' : 'clips');
 
 /** A page's cards as a list (the card page's sidebar, the phone): what waits for me, what's being made, what I'm writing, then what's gone out. */
-export const LIST_ORDER: readonly BoardColumn[] = ['review', 'editing', 'film', 'writing', 'ideas', 'scheduled', 'posted'];
+export const LIST_ORDER: readonly BoardColumn[] = ['review', 'editing', 'film', 'writing', 'ideas', 'scheduled', 'posted', 'garbage'];
 
 /** The section I last opened on each page, so its tab takes me back there. */
 export const lastSection = createStore<Record<string, SectionId>>({}, 'cs.lastSection');

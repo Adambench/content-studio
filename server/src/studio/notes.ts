@@ -181,7 +181,7 @@ export function reviewStates(pieces: Pick<typeof schema.pieces.$inferSelect, 'id
   );
   for (const p of pieces) {
     const c = counts.get(p.id) ?? { open: 0, all: 0 };
-    const state = reviewState({ renderId: newest.get(p.id) ?? null, reviewedMediaId: p.reviewedMediaId, open: c.open, comments: c.all, out: gone.has(p.id) || p.stage === 'posted' });
+    const state = reviewState({ renderId: newest.get(p.id) ?? null, reviewedMediaId: p.reviewedMediaId, open: c.open, comments: c.all, out: gone.has(p.id) || p.stage === 'posted' || p.stage === 'garbage' });
     out.set(p.id, { state, open: c.open });
   }
   return out;

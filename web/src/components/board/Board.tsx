@@ -24,6 +24,8 @@ export function ordered(column: BoardColumn, items: BoardItem[]) {
       return list.sort((a, b) => Number(!!b.failed) - Number(!!a.failed) || (a.nextPostAt ?? Infinity) - (b.nextPostAt ?? Infinity));
     case 'review':
       return list.sort((a, b) => a.updatedAt - b.updatedAt);
+    case 'garbage':
+      return list.sort((a, b) => b.updatedAt - a.updatedAt);
     case 'editing':
       return list.sort((a, b) => b.updatedAt - a.updatedAt);
     default:
@@ -57,6 +59,8 @@ export function Meta({ item }: { item: BoardItem }) {
       ) : null;
     case 'posted':
       return <span className={m}>{dayText(item.postedAt ?? item.updatedAt)}</span>;
+    case 'garbage':
+      return <span className={m}>{dayText(item.updatedAt)}</span>;
     default:
       if (item.footage) return <span className={m}>{item.footage} clip{item.footage === 1 ? '' : 's'}</span>;
       return item.series ? <span className={m}>Ep {item.series.episode}</span> : null;

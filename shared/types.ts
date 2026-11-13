@@ -94,6 +94,7 @@ export const DEFAULT_STAGES: Stage[] = [
   { id: 'ready', name: 'Ready' },
   { id: 'scheduled', name: 'Scheduled' },
   { id: 'posted', name: 'Posted' },
+  { id: 'garbage', name: 'Garbage' },
 ];
 
 /**
@@ -107,6 +108,7 @@ export const CLIPPING_STAGES: Stage[] = [
   { id: 'ready', name: 'Ready' },
   { id: 'scheduled', name: 'Scheduled' },
   { id: 'posted', name: 'Posted' },
+  { id: 'garbage', name: 'Garbage' },
 ];
 
 /** An Islamic page's board: originals (idea → script → record → edit) and lecture clips (made → reviewed) meet in Ready. */
@@ -121,6 +123,7 @@ export const ISLAMIC_STAGES: Stage[] = [
   { id: 'ready', name: 'Ready' },
   { id: 'scheduled', name: 'Scheduled' },
   { id: 'posted', name: 'Posted' },
+  { id: 'garbage', name: 'Garbage' },
 ];
 
 /**
@@ -138,6 +141,7 @@ export const BOARD_STAGES: Stage[] = [
   { id: 'ready', name: 'Approved' },
   { id: 'scheduled', name: 'Scheduled' },
   { id: 'posted', name: 'Posted' },
+  { id: 'garbage', name: 'Garbage' },
 ];
 
 /** Where clips wait for my yes or no. */

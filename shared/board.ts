@@ -1,8 +1,9 @@
 // The board (PLAN.md Phase 14): one set of columns for every page, the same on Home (every page) and on a page's
 // sections. A card's column comes from its stage; I can move a card to any column (since 2026-11-08: onto Scheduled
-// approves it, off Scheduled cancels its posts, Posted is one I posted myself).
+// approves it, off Scheduled cancels its posts, Posted is one I posted myself; since 2026-11-13 Garbage is one I won't
+// post after all: its posts that hadn't gone out are cancelled, it stays there until I move it).
 
-export const BOARD_COLUMNS = ['ideas', 'writing', 'film', 'editing', 'review', 'scheduled', 'posted'] as const;
+export const BOARD_COLUMNS = ['ideas', 'writing', 'film', 'editing', 'review', 'scheduled', 'posted', 'garbage'] as const;
 export type BoardColumn = (typeof BOARD_COLUMNS)[number];
 
 export const COLUMN_LABELS: Record<BoardColumn, string> = {
@@ -13,16 +14,17 @@ export const COLUMN_LABELS: Record<BoardColumn, string> = {
   review: 'Review',
   scheduled: 'Scheduled',
   posted: 'Posted',
+  garbage: 'Garbage',
 };
 
 /** Where I write. */
 export const WRITING_COLUMNS = ['ideas', 'writing', 'film'] as const satisfies readonly BoardColumn[];
 export type WritingColumn = (typeof WRITING_COLUMNS)[number];
 /** Where Claude edits and I watch, approve and see it go out. */
-export const VIDEO_COLUMNS = ['editing', 'review', 'scheduled', 'posted'] as const satisfies readonly BoardColumn[];
+export const VIDEO_COLUMNS = ['editing', 'review', 'scheduled', 'posted', 'garbage'] as const satisfies readonly BoardColumn[];
 
 /** The stage a column puts a card in (Scheduled: approved and queued, Ready when it can't be queued). */
-export const COLUMN_STAGE: Record<BoardColumn, string> = { ideas: 'idea', writing: 'script', film: 'film', editing: 'edit', review: 'review', scheduled: 'scheduled', posted: 'posted' };
+export const COLUMN_STAGE: Record<BoardColumn, string> = { ideas: 'idea', writing: 'script', film: 'film', editing: 'edit', review: 'review', scheduled: 'scheduled', posted: 'posted', garbage: 'garbage' };
 
 export const isWritingColumn = (c: BoardColumn): c is WritingColumn => (WRITING_COLUMNS as readonly string[]).includes(c);
 
@@ -46,6 +48,8 @@ export function columnOf(stage: string): BoardColumn {
       return 'scheduled';
     case 'posted':
       return 'posted';
+    case 'garbage':
+      return 'garbage';
     default:
       return 'ideas';
   }

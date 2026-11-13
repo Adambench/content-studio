@@ -232,6 +232,13 @@
       "when": 1794545929839,
       "tag": "0032_carousels",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1794546892783,
+      "tag": "0033_garbage",
+      "breakpoints": true
     }
   ]
 }

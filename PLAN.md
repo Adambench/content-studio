@@ -893,3 +893,7 @@ Build (after the mockup):
   Content Studio/<title · vN>; *Copy caption* everywhere. The board says "15 slides". Tried on a copy of the data in
   headless Chrome (laptop and phone layouts, a slide comment, the download names); the phone's share and save
   not tried on the phone itself
+- [x] Garbage (2026-11-13): a column after Posted for a card I won't post after all (stage `garbage`, every page:
+  migration 0033). Dragged there or picked on its page, its posts that hadn't gone out are cancelled; nothing moves it
+  out by itself (renders, comments, Claude's saves); dragged back out it's an ordinary card again. Newest first, with
+  the day it went in
