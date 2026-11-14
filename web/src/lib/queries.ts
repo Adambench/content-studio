@@ -100,7 +100,8 @@ export const useRenders = (pieceId: string) => useQuery(rendersQuery(pieceId));
 export const versionsQuery = (pieceId: string) => queryOptions({ queryKey: [...keys.renders(pieceId), 'versions'], queryFn: () => api<VersionRow[]>(`/pieces/${pieceId}/versions`) });
 export const useVersions = (pieceId: string) => useQuery(versionsQuery(pieceId));
 /** A carousel's versions with their slides, newest first (empty for a video); under the piece's key, so its events refresh it. */
-export const useCarousel = (pieceId: string) => useQuery({ queryKey: [...keys.piece(pieceId), 'carousel'], queryFn: () => api<CarouselVersion[]>(`/pieces/${pieceId}/carousel`), enabled: !!pieceId });
+export const carouselQuery = (pieceId: string) => queryOptions({ queryKey: [...keys.piece(pieceId), 'carousel'], queryFn: () => api<CarouselVersion[]>(`/pieces/${pieceId}/carousel`) });
+export const useCarousel = (pieceId: string) => useQuery({ ...carouselQuery(pieceId), enabled: !!pieceId });
 
 
 export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: () => api<AppSettings>('/settings') });

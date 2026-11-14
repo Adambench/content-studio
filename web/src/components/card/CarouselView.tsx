@@ -6,6 +6,7 @@ import type { CarouselVersion } from '@shared/types';
 import { NoteList } from '@/components/package/VideoNotes';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { usePhone } from '@/hooks/useMediaQuery';
 import { api, errorMessage, fileUrl, mediaFileUrl } from '@/lib/api';
 import { isNative, Studio } from '@/lib/native';
 import { keys, queryClient } from '@/lib/queries';
@@ -91,12 +92,19 @@ function Slides({ version, index, onIndex }: { version: CarouselVersion; index: 
   );
 }
 
-/** Every slide small, to jump to one. */
+/** Every slide small, to jump to one: one row to scroll on the phone, wrapped on the laptop. */
 function Thumbs({ version, index, onIndex }: { version: CarouselVersion; index: number; onIndex: (i: number) => void }) {
+  const row = useRef<HTMLDivElement>(null);
+  // The slide on screen stays in sight in the row.
+  useEffect(() => {
+    const r = row.current;
+    const el = r?.children[index] as HTMLElement | undefined;
+    if (r && el && r.scrollWidth > r.clientWidth) r.scrollTo({ left: el.offsetLeft - (r.clientWidth - el.offsetWidth) / 2, behavior: 'smooth' });
+  }, [index]);
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div ref={row} className="-mx-4 flex gap-1.5 overflow-x-auto px-4 py-1 [scrollbar-width:none] md:mx-0 md:flex-wrap md:overflow-visible md:px-0">
       {version.slides.map((s, i) => (
-        <button key={s.mediaId} type="button" onClick={() => onIndex(i)} aria-label={`Slide ${i + 1}`} className={cn('w-12 overflow-hidden rounded-[5px] ring-offset-2 ring-offset-background', i === index ? 'ring-2 ring-foreground' : 'opacity-60 hover:opacity-100')}>
+        <button key={s.mediaId} type="button" onClick={() => onIndex(i)} aria-label={`Slide ${i + 1}`} className={cn('w-12 shrink-0 overflow-hidden rounded-[5px] ring-offset-2 ring-offset-background', i === index ? 'ring-2 ring-foreground' : 'opacity-60 hover:opacity-100')}>
           <img src={mediaFileUrl(s.mediaId)} alt="" loading="lazy" className="aspect-[4/5] w-full object-cover" />
         </button>
       ))}
@@ -146,13 +154,24 @@ function SlideComment({ pieceId, version, index }: { pieceId: string; version: C
   );
 }
 
+/** A phone's browser can hand pictures to its share sheet (Instagram among them). */
+const browserShares = () => {
+  try {
+    return !isNative && !!navigator.canShare?.({ files: [new File([''], 'x.png', { type: 'image/png' })] });
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Posting it myself: the caption to paste, and the slides in order. The laptop saves them in one folder in Downloads
- * (the desktop app; a browser saves them side by side); the phone shares them to Instagram or saves them to the
- * gallery (Pictures/Content Studio/<folder>).
+ * (the desktop app; a browser saves them side by side); the app shares them to Instagram or saves them to the gallery
+ * (Pictures/Content Studio/<folder>); a phone's browser hands them to its share sheet.
  */
 function PostIt({ piece, version, draft }: { piece: PieceDetail; version: CarouselVersion; draft: CardDraft }) {
   const [busy, setBusy] = useState<'share' | 'save' | 'download' | null>(null);
+  const phoneLayout = usePhone();
+  const shares = phoneLayout && browserShares();
   const ig = draft.draft.platforms.instagram;
   const caption = [ig.caption.trim(), ig.hashtags.trim()].filter(Boolean).join('\n\n');
   const folder = folderName(piece.title, version);
@@ -179,6 +198,27 @@ function PostIt({ piece, version, draft }: { piece: PieceDetail; version: Carous
       else toast(`${saved} slides saved to Pictures/Content Studio`);
     } catch (err) {
       toast.error(errorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function browserShare() {
+    setBusy('share');
+    try {
+      const copied = await copy(true);
+      const files = await Promise.all(
+        ids.map(async (id, i) => {
+          const blob = await (await fetch(mediaFileUrl(id))).blob();
+          return new File([blob], `${names[i]}.${blob.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png'}`, { type: blob.type });
+        }),
+      );
+      await navigator.share({ files });
+      toast(copied ? 'Caption copied: paste it in Instagram' : 'Pick Instagram, then Feed');
+    } catch (err) {
+      // Too long fetching for the browser to still count the tap: the slides are cached now, so a second tap works.
+      if (err instanceof DOMException && err.name === 'NotAllowedError') toast('Tap Share again');
+      else if (!(err instanceof DOMException && err.name === 'AbortError')) toast.error(errorMessage(err));
     } finally {
       setBusy(null);
     }
@@ -211,6 +251,10 @@ function PostIt({ piece, version, draft }: { piece: PieceDetail; version: Carous
               {busy === 'save' ? <Spinner /> : <ImageDown />} Save to phone
             </Button>
           </>
+        ) : shares ? (
+          <Button onClick={browserShare} disabled={!!busy}>
+            {busy === 'share' ? <Spinner /> : <Share2 />} Share {ids.length} slides
+          </Button>
         ) : (
           <Button onClick={download} disabled={!!busy}>
             {busy === 'download' ? <Spinner /> : <Download />} Download {ids.length} slides
@@ -226,7 +270,7 @@ function PostIt({ piece, version, draft }: { piece: PieceDetail; version: Carous
 
 /**
  * A carousel Claude made: its newest version's slides to swipe through, comments pinned to a slide, the other versions
- * a click away, and on the right what it waits for (Approve), the comments, posting it myself and the post's text.
+ * a click away, and on the right what it waits for (Approve), posting it myself, the comments and the post's text.
  */
 export function CarouselView({ piece, item, draft, versions }: { piece: PieceDetail; item: BoardItem | undefined; draft: CardDraft; versions: CarouselVersion[] }) {
   const newest = versions[0];
@@ -266,6 +310,7 @@ export function CarouselView({ piece, item, draft, versions }: { piece: PieceDet
       </div>
       <div className="min-w-0 space-y-9">
         <Status piece={piece} item={item} />
+        <PostIt piece={piece} version={shown} draft={draft} />
         <NoteList
           pieceId={piece.id}
           video={null}
@@ -278,7 +323,6 @@ export function CarouselView({ piece, item, draft, versions }: { piece: PieceDet
             setIndex(Math.round(n.at));
           }}
         />
-        <PostIt piece={piece} version={shown} draft={draft} />
         <PostText draft={draft} />
       </div>
     </div>

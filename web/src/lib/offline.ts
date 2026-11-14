@@ -2,13 +2,13 @@ import { hashKey } from '@tanstack/react-query';
 import { normalizeDraft, type DraftContent } from '@shared/types';
 import type { BoardData } from '@shared/board';
 import { api, ApiError } from './api';
-import { keys, pieceQuery, queryClient, rendersQuery, versionsQuery } from './queries';
+import { carouselQuery, keys, pieceQuery, queryClient, rendersQuery, versionsQuery } from './queries';
 import type { PieceDetail } from './types';
 import { createStore, serverReachable } from './ui-state';
 
 /*
  * Offline on the phone. The Android app keeps on the phone (IndexedDB) what it needs to open without the computer:
- * the board, every card on it (script, notes, footage) and their versions, fetched ahead while the computer answers.
+ * the board, every card on it (script, notes, footage), their versions and a carousel's slides, fetched ahead while the computer answers.
  * What I write meanwhile waits in the outbox and goes when the computer is back. Videos play offline once downloaded
  * (lib/downloads.ts).
  */
@@ -91,12 +91,15 @@ async function ahead(board: BoardData) {
     }
     // A few at a time, so what I open isn't kept waiting.
     const fresh = { staleTime: 10 * 60_000 };
+    const carousels = new Set(board.items.filter((i) => i.slides).map((i) => i.id));
     for (const id of ids) {
       if (!serverReachable.get()) break;
       await Promise.allSettled([
         queryClient.prefetchQuery({ ...pieceQuery(id), ...fresh }),
         queryClient.prefetchQuery({ ...rendersQuery(id), ...fresh }),
         queryClient.prefetchQuery({ ...versionsQuery(id), ...fresh }),
+        // A carousel's slides list (the pictures come when it's opened, then from the WebView's cache).
+        ...(carousels.has(id) ? [queryClient.prefetchQuery({ ...carouselQuery(id), ...fresh })] : []),
       ]);
     }
   } catch (err) {
