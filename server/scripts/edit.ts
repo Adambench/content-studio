@@ -714,11 +714,28 @@ async function rewhisper(piece: Piece, q: string, from: number, to: number, said
   writeFileSync(backup, JSON.stringify(t));
   const inside = (w: { start: number; end: number }) => (w.start + w.end) / 2 >= from && (w.start + w.end) / 2 < to;
   const before = t.segments.flatMap((s) => (s.words ?? []).filter(inside).map((w) => w.word.trim()));
-  for (const s of t.segments) s.words = s.words?.filter((w) => !inside(w));
-  // The new words as their own segment, in time order with the rest.
-  t.segments.push({ start: fresh[0].start, end: fresh[fresh.length - 1].end, text: fresh.map((w) => w.word).join('').trim(), words: fresh } as (typeof t.segments)[number]);
-  for (const s of t.segments) if (s.words) s.text = s.words.map((w) => w.word).join('').trim();
-  t.segments = t.segments.filter((s) => s.text.trim() || !s.words).sort((a, b) => a.start - b.start);
+  // Every word in time order, the new ones as a segment of their own: an old segment keeping words on both sides of the
+  // stretch (or only after it) is split there, with its start and end taken from its words. Sorting the segments by
+  // their old start put an old segment's later words before the new ones (Day 8's “-brand … agency” before “And at the
+  // same time, I'll have a sub”), and the captions with them.
+  type Seg = (typeof t.segments)[number];
+  type Word = NonNullable<Seg['words']>[number];
+  const tagged: { w: Word; k: number }[] = t.segments.flatMap((s, k) => (s.words ?? []).filter((w) => !inside(w)).map((w) => ({ w, k })));
+  tagged.push(...fresh.map((w) => ({ w, k: -1 })));
+  tagged.sort((a, b) => a.w.start - b.w.start);
+  const runs: { k: number; words: Word[] }[] = [];
+  for (const { w, k } of tagged) {
+    const last = runs[runs.length - 1];
+    if (last && last.k === k) last.words.push(w);
+    else runs.push({ k, words: [w] });
+  }
+  const wordless = t.segments.filter((s) => !s.words);
+  t.segments = [
+    ...wordless,
+    ...runs.map(({ k, words }) => ({ ...(k >= 0 ? t.segments[k] : {}), start: words[0].start, end: words[words.length - 1].end, words, text: words.map((w) => w.word).join('').trim() }) as Seg),
+  ]
+    .filter((s) => s.text.trim() || !s.words)
+    .sort((a, b) => a.start - b.start);
   t.text = t.segments.map((s) => s.text.trim()).join(' ');
   writeFileSync(transcriptPath(m.id), JSON.stringify(t));
   db.update(schema.media).set({ transcriptText: t.text }).where(eq(schema.media.id, m.id)).run();
