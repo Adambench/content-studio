@@ -445,7 +445,8 @@ export const SCENE_LIBRARY: Record<ScenePreset, Info> = {
       const y = (p: number) => -p * 42;
       const scale = (p: number) => 1 - p * 0.07;
       const fade = (p: number) => (p > 2 ? 0 : 1 - p * 0.22);
-      const step = n > 1 ? Math.max(0.9, (len - 2.4) / (n - 1)) : 0;
+      // Every card holds an equal share of the time (in by 0.7 s, out in the last 0.5 s), so the first one isn't a flash.
+      const step = Math.max(0.9, (len - 1.2) / n);
       const elements: El[] = [];
       const tweens: SceneTween[] = [];
       if (f.text) {
@@ -461,7 +462,7 @@ export const SCENE_LIBRARY: Record<ScenePreset, Info> = {
         tweens.push({ targets: `k${j}`, at: 0.1 + (n - 1 - j) * 0.07, duration: 0.6, from: { y: r(H * 0.5), opacity: 0, rotation: j % 2 ? 5 : -5, scale: scale(j) }, to: { y: y(j), opacity: fade(j), rotation: 0, scale: scale(j) }, ease: 'expo.out', sound: j === n - 1 ? 'whoosh' : 'none' });
       }
       for (let k = 0; k + 1 < n; k++) {
-        const at = 1.2 + k * step;
+        const at = 0.45 + (k + 1) * step;
         tweens.push({ targets: `k${k}`, at, duration: 0.5, to: { y: -r(H * 0.3), rotationX: 70, opacity: 0, transformPerspective: 1400 }, ease: 'power2.in' });
         for (let j = k + 1; j < n; j++) tweens.push({ targets: `k${j}`, at: at + 0.12, duration: 0.5, to: { y: y(j - k - 1), scale: scale(j - k - 1), opacity: fade(j - k - 1) }, ease: 'power3.out', sound: 'none' });
       }

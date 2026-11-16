@@ -59,7 +59,17 @@ function write(pieceId: string, message: string) {
 const line = (s: ReturnType<typeof getSeries>) =>
   [`[${s.id}] ${s.name} (${s.episodes.length} episode${s.episodes.length === 1 ? '' : 's'})`, s.about && `  ${s.about.replace(/\n+/g, '\n  ')}`, ...s.episodes.map((e) => `  Ep ${e.episode} · ${e.column} · ${e.title} [${e.id}]`)].filter(Boolean).join('\n');
 
-const [cmd, a, b, ...more] = args;
+/** A card or series id from its first characters (as `npm run edit` takes them); anything else as it is. */
+function fullId(id: string | undefined) {
+  if (!id || id === 'none' || id.length >= 36) return id;
+  const rows = [...db.select({ id: schema.pieces.id }).from(schema.pieces).all(), ...db.select({ id: schema.series.id }).from(schema.series).all()];
+  const hits = rows.filter((r) => r.id.startsWith(id));
+  return hits.length === 1 ? hits[0].id : id;
+}
+const [cmd0, ...rest] = args;
+const known = ['new', 'about', 'episode', 'write', 'add', 'order'];
+// The page of `new` and the title of `episode` aren't ids; every other argument may be shortened.
+const [cmd, a, b, ...more] = cmd0 === 'new' ? args : cmd0 === 'episode' ? [cmd0, fullId(rest[0]), ...rest.slice(1)] : known.includes(cmd0) ? [cmd0, ...rest.map((x) => (/^[0-9a-f-]{4,}$/.test(x) ? fullId(x)! : x))] : [fullId(cmd0), ...rest];
 if (cmd === 'new') {
   if (!a || !b) throw new Error('Usage: series new <page> "<name>" ["<about>"]');
   console.log(line(createSeries(page(a).id, { name: b, about: more.join(' ') })));
@@ -82,7 +92,7 @@ if (cmd === 'new') {
   console.log(p.seriesId ? `${p.title}: Ep ${p.episode} of ${getSeries(p.seriesId).name}` : `${p.title}: no series`);
 } else if (cmd === 'order') {
   if (!a || !b) throw new Error('Usage: series order <seriesId> <pieceId>…');
-  console.log(line(orderEpisodes(a, [b, ...more])));
+  console.log(line(orderEpisodes(a, [b, ...more].filter((x): x is string => !!x))));
 } else if (cmd) {
   const s = getSeries(cmd);
   console.log(line(s));
