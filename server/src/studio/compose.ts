@@ -359,7 +359,19 @@ export function composeEdit(input: ComposeInput) {
     // A scene that shows the words itself (an ayah and its meaning) keeps the captions off while it's on.
     // So does a hook card that asks for it: one thing to read at a time.
     const quiet = spec.overlays.filter(holdsCaptions);
-    const pages = captionPages(words, c, duration).filter((p) => !quiet.some((o) => (p.start + p.end) / 2 >= o.start && (p.start + p.end) / 2 < o.end));
+    // A page that only reaches into one ends where it starts (or starts where it ends): none is left over a scene that
+    // took the frame (Day 8: “to help” sat on a dark type scene for a fifth of a second).
+    const pages = captionPages(words, c, duration)
+      .filter((p) => !quiet.some((o) => (p.start + p.end) / 2 >= o.start && (p.start + p.end) / 2 < o.end))
+      .map((p) => {
+        let { start, end } = p;
+        for (const o of quiet) {
+          if (start < o.start && end > o.start) end = o.start;
+          if (start < o.end && end > o.end) start = o.end;
+        }
+        return start === p.start && end === p.end ? p : { ...p, start, end };
+      })
+      .filter((p) => p.end - p.start >= 0.1);
     pages.forEach((p, i) => {
       body.push(`<div id="p${i}" class="clip layer cap" data-start="${n(p.start)}" data-duration="${n(p.end - p.start)}" data-track-index="3"><div class="line"><div class="ci">${captionHtml(c.preset, p, i)}</div></div></div>`);
       tl.push(...captionTweens(c.preset, c, p, i));
