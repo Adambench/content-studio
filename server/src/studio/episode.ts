@@ -88,6 +88,7 @@ export async function cutLines(media: (id: string) => MediaRow, format: EditSpec
 
   const clips: EditClip[] = [];
   let turn: 'wide' | 'close' = opts.start ?? 'wide';
+  let before: { id: string; mediaId: string; to: number; words: number; len: number } | null = null;
   for (const [id, from, to, more = {}] of rows) {
     const { file: other, frame: asked, ...fields } = more;
     const m = media(other ?? file);
@@ -96,6 +97,11 @@ export async function cutLines(media: (id: string) => MediaRow, format: EditSpec
     if (s?.words.length) {
       const said = s.words.filter((w) => (w.start + w.end) / 2 >= from && (w.start + w.end) / 2 < to);
       if (!said.length) notes.push(`${id}: no words between ${from} and ${to}`);
+      // A word or two alone before a stop is a false start, and the restart says it again (Day 9: “Which” · stop ·
+      // “Which by the way…”, Whisper wrote one “which”, I joined both and it was said twice). The restart alone.
+      if (before && before.mediaId === m.id && before.words <= 2 && before.len < 0.7 && from - before.to >= 0 && from - before.to <= 2)
+        notes.push(`${before.id}: ${before.words === 1 ? 'one word' : 'two words'} alone, ${r2(from - before.to)} s before ${id}: a false start? The restart most often says it again, whatever Whisper wrote: use ${id} alone, or listen`);
+      before = { id, mediaId: m.id, to, words: said.length, len: to - from };
       c = snapCuts([c], m.id, s.env, s.words, () => false, s.band, { lead: opts.lead ?? 0.08, tail: opts.tail ?? 0.12 })[0] ?? c;
       // A stumble inside the line (Day 8, a rep kept with “the reason this … w-would”: I had to ask for it to be cut):
       // a stop mid-sentence, or a short word Whisper stretched over most of a second (it covers a restart or a
