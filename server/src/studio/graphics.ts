@@ -810,7 +810,7 @@ export function graphicsCss(ctx: GraphicContext) {
 .rk-top { background: ${color}; }
 .rk-top .rk-n, .rk-top .rk-t { color: #111; }
 .rk-top .acc { color: #fff; -webkit-text-stroke: .1em #111; paint-order: stroke fill; }
-.sp { margin: 0 7%; background: rgba(10,10,10,.82); border-radius: 36px; padding: 44px 46px 50px; }
+.g .sp { margin: 0 7%; background: rgba(10,10,10,.82); border-radius: 36px; padding: 44px 46px 50px; } /* .g: a scene's line drawings are .sp too (Day 8's flow sat under this panel) */
 .sp-h { font: 900 62px/1.08 ${font('Montserrat')}; color: #fff; margin-bottom: 30px; }
 .sp-bar { position: relative; height: 88px; margin: 0 44px; }
 .sp-seg { position: absolute; top: 40px; height: 8px; background: rgba(255,255,255,.18); }
