@@ -109,7 +109,8 @@ export const SCENE_LIBRARY: Record<ScenePreset, Info> = {
       const lines = items(f, 1, 5);
       const n = lines.length;
       const last = n - 1;
-      const sizes = lines.map((l, i) => (i === last ? fit(l, 860, 230, 90, 0.46) : fit(l, 860, 104, 44, 0.57)));
+      // A long line gets smaller, never cut at the frame's edge (Day 8: a 29-letter last line at the old 90 px floor was).
+      const sizes = lines.map((l, i) => (i === last ? fit(l, 860, 230, 54, 0.46) : fit(l, 860, 104, 36, 0.57)));
       const heights = sizes.map((s, i) => r(s * (i === last ? 1.05 : 1.2)));
       const gap = 24;
       const total = heights.reduce((a, b) => a + b, 0) + gap * last + 40;

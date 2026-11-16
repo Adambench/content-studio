@@ -97,6 +97,17 @@ export async function cutLines(media: (id: string) => MediaRow, format: EditSpec
       const said = s.words.filter((w) => (w.start + w.end) / 2 >= from && (w.start + w.end) / 2 < to);
       if (!said.length) notes.push(`${id}: no words between ${from} and ${to}`);
       c = snapCuts([c], m.id, s.env, s.words, () => false, s.band, { lead: opts.lead ?? 0.08, tail: opts.tail ?? 0.12 })[0] ?? c;
+      // A stumble inside the line (Day 8, a rep kept with “the reason this … w-would”: I had to ask for it to be cut):
+      // a stop mid-sentence, or a short word Whisper stretched over most of a second (it covers a restart or a
+      // garbled word). Only the sound tells, so it's said: take another rep, or join clean parts at real pauses.
+      said.forEach((w, i) => {
+        const next = said[i + 1];
+        if (!next) return;
+        const stop = next.start - w.end;
+        const letters = w.word.replace(/[^\p{L}\p{N}]/gu, '').length;
+        if (stop >= 0.45 && !/[.,!?;:…]$/.test(w.word.trim())) notes.push(`${id}: stops ${r2(stop)} s after “${w.word.trim()}” mid-sentence (${r2(w.end)}–${r2(next.start)}): a stumble? Listen, or take another rep`);
+        else if (letters <= 6 && w.end - w.start >= 0.75) notes.push(`${id}: “${w.word.trim()}” lasts ${r2(w.end - w.start)} s (${r2(w.start)}–${r2(w.end)}): a garbled or restarted word? Listen, or take another rep`);
+      });
       // No pause where a cut had to go: said with what would fix it, since only the words tell which it is.
       const k = said[0];
       const l = said[said.length - 1];
@@ -145,6 +156,12 @@ export type EpisodeOptions = {
   days?: number;
   made?: number | string;
   goal?: number | string;
+  /**
+   * Where the tracker shows: `ends` (left out) with the first line and again on the sign-off, where the words are about
+   * the day and the money; `whole` all the way through; `none`. Held a whole video it is in the way of everything else
+   * at the top and says nothing new after the first seconds (my comment on Day 8, 2026-11-15).
+   */
+  tracker?: 'ends' | 'whole' | 'none';
   /** How it opens; left out, the one the series' recent episodes used least (`title` only with `title` words). */
   open?: EpisodeOpen;
   /** The title card's words: my own, as I say them. */
@@ -164,6 +181,8 @@ export type EpisodeOptions = {
   captions?: Partial<CaptionSettings>;
   /** false: the takes' light stays as filmed (it's put right otherwise: `grade.light`). */
   light?: boolean;
+  /** false: the takes' sound stays as recorded (its room noise is taken out otherwise: `audio.denoise`). */
+  denoise?: boolean;
 };
 
 /** What the series' earlier episodes carry into this one. */
@@ -172,8 +191,8 @@ export type SeriesSoFar = { episode: number; title: string; tracker: { text: str
 /** How an edit opens, read back from what `dressEpisode` put on it. */
 export function openOf(spec: EditSpec): EpisodeOpen | null {
   if (spec.overlays.some((o) => o.id === 'kit-open')) return 'title';
-  const t = spec.overlays.find((o) => o.id === 'kit-tracker');
-  return t ? (t.start > 0.5 ? 'cold' : 'plain') : null;
+  const t = spec.overlays.filter((o) => o.id.startsWith('kit-tracker'));
+  return t.length ? (t.some((o) => o.start <= 0.5) ? 'plain' : 'cold') : null;
 }
 
 const KIT = /^kit-/;
@@ -191,6 +210,8 @@ export async function dressEpisode(spec: EditSpec, opts: EpisodeOptions, media: 
   spec.overlays = spec.overlays.filter((o) => !KIT.test(o.id));
 
   spec.grade = { ...spec.grade, light: opts.light !== false };
+  // My own takes: the room noise out, and no sound effect unless the design puts one there.
+  spec.audio = { ...spec.audio, denoise: opts.denoise !== false, autoSfx: false };
   // The captions of the episode before (whatever it was edited with), unless said.
   const before = series[series.length - 1];
   if (opts.captions || before) spec.captions = { ...spec.captions, ...(before?.captions ?? {}), ...(opts.captions ?? {}) };
@@ -217,12 +238,23 @@ export async function dressEpisode(spec: EditSpec, opts: EpisodeOptions, media: 
   const made = money(opts.made, part(was?.sub, 0));
   const goal = money(opts.goal, part(was?.sub, 1));
   const fill = { text: `Day ${opts.day}${days ? ` / ${days}` : ''}`, sub: made ? `${made}${goal ? ` / ${goal}` : ''}` : '' };
-  if (total - trackerFrom > 1) {
-    const { problems, ...scene } = libraryScene('tracker', fill, { W, H, color: spec.captions.highlight }, r2(total - trackerFrom));
-    if (problems.length) notes.push(`tracker: ${problems.join('; ')}`);
-    spec.overlays.push({ id: 'kit-tracker', type: 'scene', start: trackerFrom, end: r2(total), ...scene });
-    notes.push(`tracker: ${fill.text} · ${fill.sub || 'no money line'}${opts.made === undefined && was ? ' (the money as in the episode before: say `made` when it changed)' : ''}`);
+  // Where it shows: with the first line (when a title card leaves it 2.5 s there) and on the sign-off (the last lines,
+  // 3 s at least), or the whole way when asked; a video too short for two visits gets one.
+  const where = opts.tracker ?? 'ends';
+  const spans: { id: string; from: number; to: number }[] = [];
+  if (where === 'whole' || (where === 'ends' && total < 15)) spans.push({ id: 'kit-tracker', from: trackerFrom, to: total });
+  else if (where === 'ends') {
+    if (firstEnd - trackerFrom >= 2.5) spans.push({ id: 'kit-tracker', from: trackerFrom, to: firstEnd });
+    let i = spec.clips.length - 1;
+    while (i > 1 && total - starts[i] < 3) i--;
+    if (i > 0) spans.push({ id: 'kit-tracker-end', from: starts[i], to: total });
   }
+  for (const s of spans.filter((s) => s.to - s.from > 1)) {
+    const { problems, ...scene } = libraryScene('tracker', fill, { W, H, color: spec.captions.highlight }, r2(s.to - s.from));
+    if (problems.length) notes.push(`tracker: ${problems.join('; ')}`);
+    spec.overlays.push({ id: s.id, type: 'scene', start: r2(s.from), end: r2(s.to), ...scene });
+  }
+  notes.push(`tracker (${where}${spans.length ? `: ${spans.map((s) => `${r2(s.from)}–${r2(s.to)} s`).join(', ')}` : ''}): ${fill.text} · ${fill.sub || 'no money line'}${opts.made === undefined && was ? ' (the money as in the episode before: say `made` when it changed)' : ''}`);
 
   // Proof: my own screens over the line that talks about them, in on the word that names them.
   const shown: { on: string; start: number; end: number }[] = [];

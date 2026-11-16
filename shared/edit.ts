@@ -172,26 +172,26 @@ export const CAPTION_PRESET_LABELS: Record<CaptionPreset, { label: string; hint:
 
 /** What switching to a preset also changes, so each looks right out of the box. */
 export const CAPTION_PRESET_DEFAULTS: Record<CaptionPreset, Pick<CaptionSettings, 'uppercase' | 'maxWords' | 'position'>> = {
-  bold: { uppercase: true, maxWords: 3, position: 0.68 },
-  karaoke: { uppercase: true, maxWords: 4, position: 0.68 },
-  clean: { uppercase: false, maxWords: 5, position: 0.72 },
+  bold: { uppercase: true, maxWords: 2, position: 0.68 },
+  karaoke: { uppercase: true, maxWords: 2, position: 0.68 },
+  clean: { uppercase: false, maxWords: 2, position: 0.72 },
   subtitle: { uppercase: false, maxWords: 8, position: 0.86 },
   pop: { uppercase: true, maxWords: 1, position: 0.62 },
-  box: { uppercase: true, maxWords: 3, position: 0.68 },
-  marker: { uppercase: false, maxWords: 4, position: 0.7 },
-  reveal: { uppercase: true, maxWords: 4, position: 0.68 },
-  bounce: { uppercase: true, maxWords: 3, position: 0.68 },
+  box: { uppercase: true, maxWords: 2, position: 0.68 },
+  marker: { uppercase: false, maxWords: 2, position: 0.7 },
+  reveal: { uppercase: true, maxWords: 2, position: 0.68 },
+  bounce: { uppercase: true, maxWords: 2, position: 0.68 },
   impact: { uppercase: true, maxWords: 2, position: 0.64 },
-  neon: { uppercase: true, maxWords: 3, position: 0.68 },
-  outline: { uppercase: true, maxWords: 3, position: 0.68 },
-  retro: { uppercase: true, maxWords: 3, position: 0.66 },
-  glitch: { uppercase: true, maxWords: 3, position: 0.68 },
-  comic: { uppercase: true, maxWords: 3, position: 0.66 },
-  handwritten: { uppercase: false, maxWords: 4, position: 0.7 },
-  editorial: { uppercase: false, maxWords: 5, position: 0.72 },
-  typewriter: { uppercase: false, maxWords: 5, position: 0.72 },
-  minimal: { uppercase: false, maxWords: 5, position: 0.78 },
-  arcade: { uppercase: true, maxWords: 3, position: 0.7 },
+  neon: { uppercase: true, maxWords: 2, position: 0.68 },
+  outline: { uppercase: true, maxWords: 2, position: 0.68 },
+  retro: { uppercase: true, maxWords: 2, position: 0.66 },
+  glitch: { uppercase: true, maxWords: 2, position: 0.68 },
+  comic: { uppercase: true, maxWords: 2, position: 0.66 },
+  handwritten: { uppercase: false, maxWords: 2, position: 0.7 },
+  editorial: { uppercase: false, maxWords: 2, position: 0.72 },
+  typewriter: { uppercase: false, maxWords: 2, position: 0.72 },
+  minimal: { uppercase: false, maxWords: 2, position: 0.78 },
+  arcade: { uppercase: true, maxWords: 2, position: 0.7 },
 };
 
 export type CaptionSettings = {
@@ -580,8 +580,17 @@ export type EditAudio = {
   /** Normalise the final mix to −14 LUFS, what TikTok, Instagram and YouTube play at. */
   normalize: boolean;
   sfx: SfxCue[];
-  /** A sound effect on the frame of every move that has none (shared/sound-design.ts). */
+  /**
+   * A sound effect on the frame of every move that has none (shared/sound-design.ts). Off unless asked for: a sound
+   * nobody needs is noise (my comments on Day 8, 2026-11-15).
+   */
   autoSfx: boolean;
+  /**
+   * The room noise of my own takes taken out before the mix is made louder (a quiet phone recording's rumble and hiss:
+   * measured once per file from its quietest stretch, server studio/room-noise.ts). Never on a source with sound all
+   * the way through; a clean take is left as recorded.
+   */
+  denoise: boolean;
 };
 
 /**
@@ -648,7 +657,7 @@ export function emptyEdit(): EditSpec {
       font: null,
     },
     overlays: [],
-    audio: { nasheed: null, voiceover: null, voiceVolume: 1, enhanceVoice: false, normalize: true, sfx: [], autoSfx: true },
+    audio: { nasheed: null, voiceover: null, voiceVolume: 1, enhanceVoice: false, normalize: true, sfx: [], autoSfx: false, denoise: false },
     grade: { lutMediaId: null, intensity: 1, filter: 'none', textures: { ...NO_TEXTURES }, light: false },
     watermark: { mediaId: null, corner: 'tr', opacity: 0.85, size: 0.16 },
     recipe: null,
@@ -711,6 +720,7 @@ function normalizeAudio(input: unknown, base = emptyEdit().audio): EditAudio {
     enhanceVoice: typeof a.enhanceVoice === 'boolean' ? a.enhanceVoice : base.enhanceVoice,
     normalize: typeof a.normalize === 'boolean' ? a.normalize : base.normalize,
     autoSfx: typeof a.autoSfx === 'boolean' ? a.autoSfx : base.autoSfx,
+    denoise: typeof a.denoise === 'boolean' ? a.denoise : base.denoise,
     sfx: list(a.sfx ?? base.sfx)
       .filter((s) => typeof s.mediaId === 'string')
       .map((s) => ({ id: str(s.id, '') || newEditId(), mediaId: s.mediaId as string, at: round(num(s.at, 0, 0)), volume: round(num(s.volume, 0.8, 0, 2)) })),

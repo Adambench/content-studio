@@ -9,7 +9,8 @@
 //   npm run edit -- rewhisper <card> <file> <from> <to> ["<words>"]   Whisper that stretch of the file on its own and
 //                                                  put its words in the transcript there (a rep `takes` marks ??); with
 //                                                  the words said, Whisper's timings carry them (one word for one word;
-//                                                  `~` joins a heard word onto the one before: "GoHighLevel ~")
+//                                                  `~` joins a heard word onto the one before: "GoHighLevel ~"; `_` is a space inside
+//                                                  one shown word: "them_(HexaClicks)")
 //   npm run edit -- fit <card> <file>              a transcript from before words were fitted to a phone take's pauses:
 //                                                  each word out of the silence (a clip's first word missing from captions)
 //   npm run edit -- types [name…|lists|graphics|library]   the edit's types and option lists (instead of shared/edit.ts)
@@ -47,14 +48,18 @@
 //     await ctx.episode({ day: 6, made: 0, open: 'title', title: '<my words>', proof: [{ on: 'booked', file: '<id>', at: 'meeting' }] });
 //   };
 //   day/made go on the tracker (days and goal carry on from the episode before, as do the captions); `open` is plain
-//   (tracker from the first frame), title (my own words as a card, then the tracker) or cold (nothing until the
-//   second line): left out, the one the series used least. The takes' light is put right (light: false keeps it).
+//   (tracker over the first line), title (my own words as a card) or cold (nothing until the second line): left
+//   out, the one the series used least. The tracker shows with the first line and again on the sign-off (tracker:
+//   'whole' | 'none'). The takes' light is put right and their room noise taken out (light / denoise: false keep them);
+//   no sound effects, captions two words at a time.
 //   Notes printed before the save say where a cut found no pause and what would fix it: settle each one.
 // What goes on screen, in a raw episode:
 //   · Proof beats graphics: a screenshot or recording of the thing I talk about, on the word that names it, 2–5 s,
 //     5 s of me between two, never one that shows a private screen (look at it first: `frames --source`).
-//   · Nothing repeats what I say. A label is read in a second: a few words, one idea, up as long as its topic.
-//   · One thing to read at a time beside the captions; my face is never covered for a whole line.
+//   · Text on screen says my words exactly as I say them (then the captions wait: hidesCaptions) or isn't there:
+//     never a second wording to read beside the captions, never a line under a line. Up 3 s at least.
+//   · One thing at a time: nothing comes in while another graphic, a transition or the tracker is still up, and
+//     nothing sits on top of anything else; my face is never covered for a whole line.
 //   · Milestones (first client, first $1k, a recap) may take library scenes (`types library`); a daily one doesn't.
 import { execFile as execFileCb } from 'node:child_process';
 import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -210,6 +215,24 @@ function clipLines(spec: EditSpec, words: TimelineWord[], names: Map<string, str
   });
 }
 
+/**
+ * Graphics on screen at the same moment (half a second or more): one covers or crowds the other, or the eyes get two
+ * things to read (my comments on Day 8: a pop over the tracker, a title while another was still up). Said so it's
+ * settled before the render; a picture with its own label is the one pair that belongs together.
+ */
+function together(spec: EditSpec) {
+  const out: string[] = [];
+  const list = spec.overlays.filter((o) => o.type !== 'broll' || o.layout !== 'full');
+  list.forEach((a, i) =>
+    list.slice(i + 1).forEach((b) => {
+      const from = Math.max(a.start, b.start);
+      const to = Math.min(a.end, b.end);
+      if (to - from >= 0.5) out.push(`  ⚠ ${a.id} and ${b.id} are on screen together ${f2(from)}–${f2(to)} s: one at a time (move, shorten or drop one)`);
+    }),
+  );
+  return out;
+}
+
 function overlayLine(o: EditOverlay) {
   const when = `${f2(o.start)}–${f2(o.end)}`;
   const hides = 'hidesCaptions' in o && o.hidesCaptions ? ' (captions wait)' : '';
@@ -264,7 +287,7 @@ async function show(piece: Piece) {
     `${spec.format} · ${f2(editDuration(spec))} s · captions ${c.enabled ? `${c.preset} ×${c.maxWords} at ${c.position}${c.font ? ` ${c.font}` : ''}` : 'off'} · autoSfx ${spec.audio.autoSfx ? 'on' : 'off'}${sfx ? ` · sfx ${sfx}` : ''}${spec.audio.nasheed ? ' · nasheed (the creator’s)' : ''} · grade ${spec.grade.filter}${spec.grade.lutMediaId ? ' + LUT' : ''}${spec.grade.light ? ' · light fix on' : ''}${spec.watermark.mediaId ? ' · watermark' : ''}`,
   );
   out.push('clips (timeline · [file in–out] look | silence before the first and after the last word | words):', ...clipLines(spec, words, names, await cutWords(spec)));
-  if (spec.overlays.length) out.push('overlays:', ...spec.overlays.map((o) => `  ${overlayLine(o)}`));
+  if (spec.overlays.length) out.push('overlays:', ...spec.overlays.map((o) => `  ${overlayLine(o)}`), ...together(spec));
   const used = new Set(spec.clips.map((x) => x.mediaId));
   out.push('files on the card:', ...files.map((m) => fileLine(m, used.has(m.id))));
   const open = listNotes(piece.id).filter((n) => n.status === 'open');
@@ -460,7 +483,7 @@ function seriesSoFar(piece: Piece): SeriesSoFar {
       const e = findEditForPiece(p.id);
       if (!e) return [];
       const s = normalizeEdit(e.working);
-      const t = s.overlays.find((o) => o.id === 'kit-tracker');
+      const t = s.overlays.find((o) => o.id.startsWith('kit-tracker'));
       return [{ episode: p.episode ?? 0, title: p.title, tracker: t?.type === 'scene' && t.fill ? { text: t.fill.text, sub: t.fill.sub } : null, captions: s.captions, open: openOf(s) }];
     });
 }
@@ -515,7 +538,7 @@ async function save(piece: Piece, input: EditSpec, message: string) {
   });
   const words = await wordsOf(spec);
   const files = new Map(cardFiles(piece.id).map((m) => [m.id, short(m.id)]));
-  const lines = [...clipLines(spec, words, files, await cutWords(spec)), ...spec.overlays.map((o) => `  ${overlayLine(o)}`)];
+  const lines = [...clipLines(spec, words, files, await cutWords(spec)), ...spec.overlays.map((o) => `  ${overlayLine(o)}`), ...together(spec)];
   const total = `${f2(editDuration(spec))} s, ${spec.clips.length} clips, ${spec.overlays.length} overlays`;
   if (dropped.length) lines.unshift(`⚠ ${dropped.join('; ')}`);
   if (flags.has('--dry')) {
@@ -703,10 +726,11 @@ async function rewhisper(piece: Piece, q: string, from: number, to: number, said
     const words = said.split(/\s+/).filter(Boolean);
     if (words.length !== fresh.length) throw new Error(`Whisper heard ${fresh.length} words, not ${words.length}: ${fresh.map((w) => w.word.trim()).join(' ')} (the transcript is unchanged)`);
     // “~” for a heard word joins it onto the one before: a name Whisper heard as two words (“GoHighLevel ~”).
+    // “_” is a space inside one shown word: who a “them” is, in the captions (“them_(HexaClicks)”).
     const joined: typeof fresh = [];
     fresh.forEach((w, i) => {
       if (words[i] === '~' && joined.length) joined[joined.length - 1].end = w.end;
-      else joined.push({ ...w, word: ` ${words[i]}` });
+      else joined.push({ ...w, word: ` ${words[i].replace(/_/g, ' ')}` });
     });
     fresh.splice(0, fresh.length, ...joined);
   }

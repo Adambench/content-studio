@@ -87,7 +87,9 @@ section you need.
 - External binaries go through `findBinary` (`server/src/lib/bin.ts`): launcher apps get a minimal PATH.
 - **Daily episodes are raw** (PLAN.md *Episode style*): me talking, cut tight, the challenge tracker, my own screens
   as proof; graphics from the library only on milestones. Each take's light is put right mechanically (`grade.light`,
-  `studio/light.ts`: main-track clips only, never screenshots).
+  `studio/light.ts`: main-track clips only, never screenshots) and its room noise taken out (`audio.denoise`,
+  `studio/room-noise.ts`). No sound effects unless I ask (`audio.autoSfx` off), no transitions, captions two words at
+  a time, the tracker only with the first line and the sign-off, one graphic at a time in my exact words.
 - Studio gotchas: timed elements must not be zero-height (put positioned content inside a full-frame `.layer`); grade
   with FFmpeg `lut3d` (HyperFrames' grading hangs headless Chrome); new built-in sounds go in compose *and* render's
   file list; transitions only overlap pictures (sound still cuts) so timings never move.

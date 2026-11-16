@@ -280,7 +280,7 @@ export function studioTools(workspaceId: string, ownPiece: (pieceId: string) => 
             voiceVolume: z.number().min(0).max(2).optional(),
             enhanceVoice: z.boolean().optional(),
             normalize: z.boolean().optional(),
-            autoSfx: z.boolean().optional().describe('A sound effect on the frame of every move (scene tweens, overlay entrances, snap zooms) that has none. On by default; off for a serious or religious video'),
+            autoSfx: z.boolean().optional().describe('A sound effect on the frame of every move (scene tweens, overlay entrances, snap zooms) that has none. Off by default: only for a designed motion video with no one talking on camera, never over a talking video, a serious or a religious one'),
             voiceover: z
               .object({ mediaId: z.string(), volume: z.number().min(0).max(2).optional() })
               .nullable()

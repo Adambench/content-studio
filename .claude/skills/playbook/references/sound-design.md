@@ -33,9 +33,10 @@ A sound effect marks a moment that already matters. It doesn't create importance
 - **On the frame:** the cue's time is the frame where the thing happens (text appears, the cut lands). Risers end on
   that frame, so they start their own length earlier.
 - **Between words where possible.** An effect over a key word hides it. Put it in the gap just before or after.
-- **Never on every cut.** A cut isn't a move. A 30-second talking-head clip usually wants 2 to 5 effects, and an
-  effect more often than every 5 to 8 seconds turns into noise there. Leave whole stretches with only the voice.
-  Motion videos are different (below).
+- **A talking video wants none it doesn't need.** A cut isn't a move, and a pop on a title, a whoosh on a transition
+  or a graphic coming in is noise over the voice: the default there is no effect at all (transitions and graphics
+  `sound: false`). One only where the picture really makes that sound, or a beat of the story needs marking, and never
+  more often than every 8 to 10 seconds. Motion videos are different (below).
 - **Consistency per page.** The same pop for the hook card, the same whoosh for cutaways: it becomes part of the
   page's look.
 
@@ -45,7 +46,8 @@ In a designed motion video (faceless explainers, kinetic type, scenes, graphics)
 frame: a pop as something springs in, a swish as it slides, a hit as a big word slams down, typing as letters appear,
 a scribble as a line draws itself. That's what makes the motion feel physical, and it's what the best motion pages do.
 
-- The app does this by itself: *Sound on every move* (`audio.autoSfx`, on by default) reads every move of the edit and
+- The app does this by itself when asked: *Sound on every move* (`audio.autoSfx`, off by default, never on for a
+  video of someone talking) reads every move of the edit and
   puts a matching sound on its frame unless one is there already, so it follows every change of timing. Don't place
   cues by hand for moves.
 - Add cues by hand only for the story's beats: the riser that ends on the payoff, the boom on the reveal, a ding on the

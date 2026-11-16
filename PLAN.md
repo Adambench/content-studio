@@ -199,6 +199,18 @@ hyperframes-video-beats, broll, embedded-captions) were read once and their rule
 edit help (proof on the word that names it, 2–5 s, 5 s of me between two, one thing to read at a time); they stay
 name-only.
 
+**After Day 8 (2026-11-15).** I asked for one heavier, "more premium" episode and then left 13 comments on it; what
+they changed, for every episode: **no sound effects** unless I ask (`audio.autoSfx` is off by default, the check no
+longer asks a talking video for sounds); **the takes' room noise is taken out** before the mix is made louder
+(`audio.denoise`, `studio/room-noise.ts`: my phone takes sit at −30 LUFS with the room 17 dB under the voice, and
+levelling to −14 raised both); **the tracker shows with the first line and on the sign-off**, not the whole video
+(`tracker: 'whole' | 'none'`); **captions one or two words at a time**; **no transitions** on footage filmed in one
+setup; graphics simple and from one family (a pop at the top, a card with my picture, a line of type), **one at a time,
+nothing on top of anything, 3 s at least**; text on screen is **my exact words** (the captions wait) or isn't there, and
+never a line under a line; a picture from someone else's site **says where it's from**; a **stumbled or garbled word
+is never kept** (the cutter now flags a stop mid-sentence and a stretched short word). A premium episode is this, done
+carefully: fewer things, each one earning its place, not more of them.
+
 ### Android (2026-10-15)
 
 Capacitor around `web/`, installed and updated by Obtainium from GitHub Releases. Pairing by QR (one-time code →

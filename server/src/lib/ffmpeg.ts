@@ -160,6 +160,8 @@ export async function cutSegment(input: {
   /** Show all of the picture, laid out in a frame-sized file over a blurred, darkened copy of itself. */
   whole?: { focusX: number; focusY: number } | null;
   audio: boolean;
+  /** The take's sound from another file on the same times (its room noise taken out: studio/room-noise.ts). */
+  sound?: string | null;
   /**
    * Fades on the sound at the clip's own in and out (seconds from the file's start, and the clip's length), so a cut
    * never clicks or leaves half a syllable: a few milliseconds each side, longer where the video ends.
@@ -224,7 +226,7 @@ export async function cutSegment(input: {
       // The picture from a quarter frame before its first frame (so that frame is the first in, whatever the rounding),
       // the sound from exactly the cut's start.
       '-ss', t(Math.max(0, p0 - frame / 4)), '-t', t(p1 - p0), '-i', input.file,
-      ...(input.audio ? ['-ss', t(a), '-t', t(b - a), '-i', input.file] : []),
+      ...(input.audio ? ['-ss', t(a), '-t', t(b - a), '-i', input.sound ?? input.file] : []),
       '-map', '0:v:0', ...(input.audio ? ['-map', '1:a:0?'] : ['-an']),
       // A single-input graph (even with split/blend inside) is still a simple -vf graph.
       '-vf', vf,

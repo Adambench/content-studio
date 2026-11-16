@@ -219,19 +219,31 @@ export function measureEdit(spec: EditSpec, words: TimelineWord[]): QualityItem[
     moving >= 0.4 ? '' : 'Add camera moves on the still clips, animated graphics on the key points, or a designed scene.',
   );
 
-  // Sound on motion.
+  // Sound. A video of someone talking wants none it doesn't need: a pop on a title, a whoosh on a cut or a graphic is
+  // noise over the voice (the creator's comments on Day 8). A designed motion video that turned Sound on every move
+  // on, or a format video, is judged the old way: its moves land with a sound.
   const moves = events.filter((e) => e.motion);
   const hit = moves.filter((e) => e.sound).length;
   const cover = moves.length ? hit / moves.length : 1;
   const missed = moves.filter((e) => !e.sound).slice(0, 4);
-  const sfxScore = !moves.length ? 7 : cover >= 0.8 ? 10 : cover >= 0.6 ? 8 : cover >= 0.4 ? 6 : cover >= 0.2 ? 4 : 2;
-  const sfxItem = item(
-    'sfx',
-    sfxScore,
-    moves.length ? `${hit} of ${moves.length} motion events have a sound on their frame` : 'no motion events',
-    !moves.length ? 'Nothing moves, so there is nothing to hit.' : cover >= 0.8 ? 'Motion lands with sound.' : 'Motion without sound feels flat.',
-    missed.length && cover < 0.8 ? `${spec.audio.autoSfx ? 'Add' : 'Turn on Sound on every move (audio.autoSfx), or add'} a non-musical effect on: ${missed.map((e) => `${e.what} at ${r1(e.at)} s`).join('; ')}.` : '',
-  );
+  const sounds = allSounds(spec);
+  const designed = spec.audio.autoSfx || !!spec.recipe;
+  const sfxScore = designed ? (!moves.length ? 7 : cover >= 0.8 ? 10 : cover >= 0.6 ? 8 : cover >= 0.4 ? 6 : cover >= 0.2 ? 4 : 2) : !sounds.length ? 10 : sounds.length <= Math.max(1, duration / 10) ? 8 : sounds.length <= Math.max(2, duration / 5) ? 5 : 3;
+  const sfxItem = designed
+    ? item(
+        'sfx',
+        sfxScore,
+        moves.length ? `${hit} of ${moves.length} motion events have a sound on their frame` : 'no motion events',
+        !moves.length ? 'Nothing moves, so there is nothing to hit.' : cover >= 0.8 ? 'Motion lands with sound.' : 'Motion without sound feels flat.',
+        missed.length && cover < 0.8 ? `Add a non-musical effect on: ${missed.map((e) => `${e.what} at ${r1(e.at)} s`).join('; ')}.` : '',
+      )
+    : item(
+        'sfx',
+        sfxScore,
+        sounds.length ? `${sounds.length} sound effect${sounds.length === 1 ? '' : 's'} over the voice (at ${sounds.slice(0, 6).map((c) => `${r1(c.at)} s`).join(', ')}${sounds.length > 6 ? '…' : ''})` : 'no sound effects: the voice has the room',
+        !sounds.length ? 'Nothing fights the voice.' : sfxScore >= 8 ? 'A sound or two, each for a reason.' : 'Sounds on titles, graphics and cuts are noise over a talking video.',
+        sfxScore >= 8 ? '' : 'Take the sounds off the transitions and graphics (sound: false) and the cues that mark nothing; keep one only where the picture makes that sound.',
+      );
 
   // Captions.
   const c = spec.captions;
