@@ -1,11 +1,11 @@
-// Stills of one overlay (a scene Claude wrote, or any graphic) as it will render: the overlay alone over a still of the
-// footage under it, rendered by HyperFrames at a low frame rate, then a few frames pulled out. This is how Claude sees
+// Stills of one overlay (a scene Claude wrote, or any graphic) as it will render: the overlay alone over stills of the
+// footage under it (one per clip it plays over), rendered by HyperFrames at a low frame rate, then a few frames pulled out. This is how Claude sees
 // what it designed before the creator does.
 import { execFile as execFileCb } from 'node:child_process';
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { promisify } from 'node:util';
-import { clipAt, EDIT_FORMATS, emptyEdit, normalizeEdit, type EditOverlay, type EditSpec } from '../../../shared/edit';
+import { clipStarts, EDIT_FORMATS, emptyEdit, normalizeEdit, type EditOverlay, type EditSpec } from '../../../shared/edit';
 import { config } from '../config';
 import { newId } from '../db';
 import { requireBinary } from '../lib/bin';
@@ -50,23 +50,30 @@ async function run(editId: string | null, overlayId: string, times?: number[], g
   await mkdir(join(dir, 'media'), { recursive: true });
   await mkdir(join(dir, 'fonts'), { recursive: true });
   try {
-    // The picture under it: the main track's frame where the overlay starts, framed as in the edit.
-    const hit = clipAt(spec, o.start + 0.01);
+    // The picture under it: a still of each main-track clip the overlay plays over, held for as long as it does and
+    // framed as in the edit (a scene that runs across a cut has the right footage either side of it).
+    const starts = clipStarts(spec);
+    const under = spec.clips
+      .map((clip, i) => ({ clip, start: starts[i], from: Math.max(starts[i], o.start), to: Math.min(starts[i] + clip.out - clip.in, o.end) }))
+      .filter((u) => u.to - u.from > 0.02);
     const media = new Map<string, ComposeMedia>();
     const mini: EditSpec = { ...emptyEdit(), format: spec.format, captions: { ...spec.captions, enabled: false }, overlays: [{ ...o, start: 0, end: len } as EditOverlay] };
-    let bgFile: string | null = null;
-    if (hit) {
-      const m = getMedia(hit.clip.mediaId);
-      bgFile = m.kind === 'image' ? `bg${extname(m.fileName).toLowerCase()}` : 'bg.jpg';
-      if (m.kind === 'image') await copyFile(mediaPath(m), join(dir, 'media', bgFile));
-      else await extractFrames(mediaPath(m), [hit.clip.in + (o.start - hit.start)], () => join(dir, 'media', 'bg.jpg'), 1920);
-      media.set('bg', { id: 'bg', kind: 'image', assetType: null, width: m.width, height: m.height, durationMs: null });
-      mini.clips = [{ ...hit.clip, mediaId: 'bg', in: 0, out: len, transition: null }];
-    } else {
+    const bgFiles: string[] = [];
+    for (const [k, u] of under.entries()) {
+      const m = getMedia(u.clip.mediaId);
+      const file = m.kind === 'image' ? `bg${k}${extname(m.fileName).toLowerCase()}` : `bg${k}.jpg`;
+      if (m.kind === 'image') await copyFile(mediaPath(m), join(dir, 'media', file));
+      else await extractFrames(mediaPath(m), [u.clip.in + (u.from - u.start) + 0.01], () => join(dir, 'media', file), 1920);
+      media.set(`bg${k}`, { id: `bg${k}`, kind: 'image', assetType: null, width: m.width, height: m.height, durationMs: null });
+      bgFiles.push(file);
+      // The last one runs to the overlay's end, whatever rounding did to the others.
+      mini.clips.push({ ...u.clip, mediaId: `bg${k}`, in: 0, out: k === under.length - 1 ? Math.max(u.to - u.from, len - (u.from - o.start)) : u.to - u.from, transition: null });
+    }
+    if (!under.length) {
       // Nothing under it (a video made of scenes): black, so the preview still lasts as long as the overlay.
       const { width, height } = EDIT_FORMATS[spec.format];
-      bgFile = 'bg.png';
-      await execFile(requireBinary('ffmpeg'), ['-y', '-v', 'error', '-f', 'lavfi', '-i', `color=black:s=${width}x${height}`, '-frames:v', '1', join(dir, 'media', bgFile)]);
+      bgFiles.push('bg.png');
+      await execFile(requireBinary('ffmpeg'), ['-y', '-v', 'error', '-f', 'lavfi', '-i', `color=black:s=${width}x${height}`, '-frames:v', '1', join(dir, 'media', 'bg.png')]);
       media.set('bg', { id: 'bg', kind: 'image', assetType: null, width, height, durationMs: null });
       mini.clips = normalizeEdit({ clips: [{ mediaId: 'bg', in: 0, out: len }] }).clips;
     }
@@ -88,7 +95,7 @@ async function run(editId: string | null, overlayId: string, times?: number[], g
       mascot: getWorkspace(workspaceId).mascot,
       media,
       transcripts: {},
-      clipSource: () => (bgFile ? { src: `media/${bgFile}`, mediaStart: 0 } : null),
+      clipSource: (i) => (bgFiles[i] ? { src: `media/${bgFiles[i]}`, mediaStart: 0 } : null),
       brollSource: () => null,
       fileUrl: (id) => `media/${files.get(id) ?? id}`,
       fontUrl: (file) => `fonts/${file}`,
