@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { mediaUrl } from '@/lib/api';
 import { ago, secs } from '@/lib/format';
+import { Studio } from '@/lib/native';
 import { useComment } from '@/lib/queries';
+import { toast } from 'sonner';
 import type { CardDetail, Comment, Render } from '@shared/types';
 
 /** The render to show: the one picked, else the newest finished one, else the newest. */
@@ -152,11 +154,17 @@ export function Review({ detail, render }: { detail: CardDetail; render: Render 
           <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setFrom(from == null ? (video.current?.currentTime ?? time) : null)} title="Comment on a stretch: mark where it starts, play on, then write">
             {from == null ? 'From here' : 'Moment'}
           </Button>
-          <Button asChild variant="ghost" size="icon-sm" aria-label="Download">
-            <a href={mediaUrl(`/media/render/${render.id}?download=1`)}>
+          {Studio ? (
+            <Button variant="ghost" size="icon-sm" aria-label="Save to the phone" onClick={() => void Studio!.download({ mediaId: render.id, name: `${detail.card.title} v${render.n}` }).then(() => toast('Saving to Movies/Content Studio'))}>
               <DownloadIcon />
-            </a>
-          </Button>
+            </Button>
+          ) : (
+            <Button asChild variant="ghost" size="icon-sm" aria-label="Download">
+              <a href={mediaUrl(`/media/render/${render.id}?download=1`)}>
+                <DownloadIcon />
+              </a>
+            </Button>
+          )}
         </div>
       )}
 

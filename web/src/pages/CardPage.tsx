@@ -198,7 +198,7 @@ export function CardPage() {
   const left = (
     <div className="flex flex-col gap-8">
       <Doc card={card} hooks={detail.hooks} />
-      <Files cardId={card.id} inputs={detail.inputs} uploader={uploader} />
+      <Files cardId={card.id} pageId={card.pageId} inputs={detail.inputs} uploader={uploader} />
     </div>
   );
   const right = (

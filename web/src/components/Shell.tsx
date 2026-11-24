@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { PageDot } from '@/components/PageDot';
+import { ShareSheet } from '@/components/ShareSheet';
 import { api } from '@/lib/api';
 import { queryClient, keys, usePages } from '@/lib/queries';
 import { usePhone } from '@/lib/usePhone';
@@ -83,6 +84,7 @@ export function Shell() {
         <main className="min-h-0 flex-1 overflow-y-auto">
           <Outlet />
         </main>
+        <ShareSheet />
       </div>
     );
   }

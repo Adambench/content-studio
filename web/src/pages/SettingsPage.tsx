@@ -62,7 +62,7 @@ function PairHere() {
   const [error, setError] = useState('');
   const scan = async () => {
     const { text } = await Studio!.scanQrCode();
-    const [s, c] = text.split('#');
+    const [s, c] = (text ?? '').split('#');
     if (s && c) await done(s, c);
   };
   const done = async (s: string, c: string) => {

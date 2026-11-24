@@ -198,6 +198,11 @@ export async function registerApi(app: FastifyInstance) {
     return sendFile(reply, files.file, { download: req.query.download ? `${getCard(listRenderCard(req.params.id)).title}.mp4` : undefined });
   });
   app.get<P>('/media/poster/:id', async (req, reply) => sendFile(reply, renderFiles(req.params.id).poster));
+  // The Android app's downloads ask for /api/media/<id>/file: a render, or one of a card's files.
+  app.get<P>('/api/media/:id/file', async (req, reply) => {
+    const render = get<{ id: string }>('SELECT id FROM renders WHERE id = ?', req.params.id);
+    return sendFile(reply, render ? renderFiles(render.id).file : inputPath(getInput(req.params.id).id));
+  });
   app.get<{ Params: { id: string; n: string } }>('/media/slide/:id/:n', async (req, reply) => {
     const slides = versionSlides(getVersion(req.params.id));
     return sendFile(reply, slides[Number(req.params.n)] ?? null);

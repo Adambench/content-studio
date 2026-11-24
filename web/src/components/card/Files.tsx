@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { mediaUrl, uploadFile } from '@/lib/api';
 import { bytes, secs } from '@/lib/format';
+import { pickToCard, Studio } from '@/lib/native';
 import { keys, queryClient, useInputActions } from '@/lib/queries';
 import { ROLE_LABEL } from '@shared/recipes';
 import type { Input, InputRole } from '@shared/types';
@@ -72,15 +73,21 @@ function Row({ input, cardId }: { input: Input; cardId: string }) {
   );
 }
 
-export function Files({ cardId, inputs, uploader }: { cardId: string; inputs: Input[]; uploader: ReturnType<typeof useUploader> }) {
+export function Files({ cardId, pageId, inputs, uploader }: { cardId: string; pageId: string; inputs: Input[]; uploader: ReturnType<typeof useUploader> }) {
   const pick = useRef<HTMLInputElement>(null);
+  // On the phone the files go through the app's background queue (it carries on with the app closed).
+  const add = async () => {
+    if (!Studio) return pick.current?.click();
+    const n = await pickToCard({ id: cardId, pageId });
+    if (n) toast(`${n} file${n === 1 ? '' : 's'} uploading`);
+  };
   return (
     <section>
       <div className="mb-2 flex items-center gap-2">
         <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Files</h3>
         <span className="text-xs text-muted-foreground">{inputs.length || ''}</span>
         <div className="flex-1" />
-        <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => pick.current?.click()}>
+        <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => void add()}>
           <PaperclipIcon /> Add
         </Button>
         <input ref={pick} type="file" multiple hidden onChange={(e) => e.target.files && void uploader.send([...e.target.files])} />
