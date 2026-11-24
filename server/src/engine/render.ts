@@ -1,5 +1,5 @@
-// Renders a HyperFrames project to MP4 in its own process (Chrome's headless shell draws each frame, FFmpeg
-// encodes). A child process so a cancel can stop it outright and a crash can't take the server down.
+// Renders a HyperFrames project to MP4 (or a transparent MOV/WebM overlay) in its own process (Chrome's headless
+// shell draws each frame, FFmpeg encodes). A child process so a cancel can stop it outright and a crash can't take the server down.
 
 import { existsSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { Browser, computeExecutablePath, install } from '@puppeteer/browsers';
 import { config } from '../config.ts';
 import { run, searchPath } from '../lib/proc.ts';
+import { sleep } from '../lib/util.ts';
 
 const CHROME_DIR = join(config.toolsDir, 'chrome');
 
@@ -20,8 +21,16 @@ export async function ensureChrome(onProgress?: (fraction: number) => void): Pro
   const buildId = await chromeBuild();
   const path = computeExecutablePath({ browser: Browser.CHROMEHEADLESSSHELL, buildId, cacheDir: CHROME_DIR });
   if (existsSync(path)) return path;
-  await install({ browser: Browser.CHROMEHEADLESSSHELL, buildId, cacheDir: CHROME_DIR, downloadProgressCallback: (done, total) => onProgress?.(total ? done / total : 0) });
-  return path;
+  // A dropped download is tried again (ai-server's line sometimes breaks long transfers).
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await install({ browser: Browser.CHROMEHEADLESSSHELL, buildId, cacheDir: CHROME_DIR, downloadProgressCallback: (done, total) => onProgress?.(total ? done / total : 0) });
+      return path;
+    } catch (err) {
+      if (attempt >= 4) throw err;
+      await sleep(3000 * attempt);
+    }
+  }
 }
 
 export async function chromeInstalled(): Promise<boolean> {

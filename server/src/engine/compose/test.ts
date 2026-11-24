@@ -1,5 +1,5 @@
-// A small HyperFrames project for measuring renders on a machine: a title over footage (or a gradient) with a few
-// GSAP moves and two-word captions, 1080 × 1920 at 30 fps.
+// A small HyperFrames project for measuring renders on a machine: a title over footage (or a gradient, or nothing:
+// a transparent overlay) with a few GSAP moves and two-word captions, 1080 × 1920 at 30 fps.
 
 import { copyFileSync, existsSync, linkSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -31,14 +31,16 @@ export function linkAsset(dir: string, source: string, name: string): string {
   return `assets/${name}`;
 }
 
-export function writeTestProject(dir: string, opts: { seconds: number; video?: string }) {
+export function writeTestProject(dir: string, opts: { seconds: number; video?: string; transparent?: boolean }) {
   copyGsap(dir);
   const d = opts.seconds;
   const words = ['Rendered', 'on the', 'AI server', 'frame by', 'frame'];
   const per = d / words.length;
   const media = opts.video
     ? `<video id="bg" class="clip" data-start="0" data-duration="${d}" data-track-index="0" src="${linkAsset(dir, opts.video, 'footage.mp4')}" muted playsinline style="object-fit: cover"></video>`
-    : `<div id="bg" class="clip" data-start="0" data-duration="${d}" data-track-index="0" style="background: radial-gradient(circle at 30% 20%, #3f3f46, #09090b 70%)"></div>`;
+    : opts.transparent
+      ? ''
+      : `<div id="bg" class="clip" data-start="0" data-duration="${d}" data-track-index="0" style="background: radial-gradient(circle at 30% 20%, #3f3f46, #09090b 70%)"></div>`;
   const caps = words
     .map((w, i) => `<div id="cap${i}" class="clip cap" data-start="${(i * per).toFixed(3)}" data-duration="${per.toFixed(3)}" data-track-index="2"><span>${w}</span></div>`)
     .join('\n      ');
@@ -52,7 +54,7 @@ export function writeTestProject(dir: string, opts: { seconds: number; video?: s
     <script src="assets/gsap.min.js"></script>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { width: 1080px; height: 1920px; overflow: hidden; background: #000; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: ${opts.transparent ? 'transparent' : '#000'}; }
       #main { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: system-ui, sans-serif; }
       .clip { position: absolute; inset: 0; visibility: hidden; }
       #title { display: flex; align-items: flex-start; justify-content: center; padding-top: 360px; }

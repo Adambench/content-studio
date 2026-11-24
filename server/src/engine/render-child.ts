@@ -1,9 +1,10 @@
-// The render process (see render.ts): node render-child.ts <projectDir> <out.mp4> <fps> <quality> <gpu|cpu>
+// The render process (see render.ts): node render-child.ts <projectDir> <out> <fps> <quality> <gpu|cpu>
+// The format follows the file: .mp4, or .mov / .webm with transparency (overlays for FFmpeg to lay on footage).
 // Prints "@progress 0.412 <stage>" lines; exits 0 when the file is written.
 
 const [projectDir, out, fps, quality, device] = process.argv.slice(2);
 if (!projectDir || !out) {
-  console.error('usage: render-child.ts <projectDir> <out.mp4> <fps> <quality> <gpu|cpu>');
+  console.error('usage: render-child.ts <projectDir> <out.mp4|.mov|.webm> <fps> <quality> <gpu|cpu>');
   process.exit(2);
 }
 
@@ -17,7 +18,7 @@ try {
   const job = createRenderJob({
     fps: Number(fps) || 30,
     quality: (quality as 'draft' | 'standard' | 'high') || 'standard',
-    format: 'mp4',
+    format: out.endsWith('.mov') ? 'mov' : out.endsWith('.webm') ? 'webm' : 'mp4',
     useGpu: device !== 'cpu',
     strictness: 'best-effort',
     entryFile: 'index.html',
