@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2023", "DOM", "DOM.Iterable", "WebWorker"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
@@ -10,7 +10,8 @@
     "noEmit": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "types": ["vite/client", "vite-plugin-pwa/client"],
+    "allowImportingTsExtensions": true,
+    "types": ["vite/client"],
     "paths": { "@/*": ["./src/*"], "@shared/*": ["../shared/*"] }
   },
   "include": ["src", "../shared", "vite.config.ts"]

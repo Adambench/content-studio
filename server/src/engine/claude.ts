@@ -37,7 +37,8 @@ export function claudeStatus(): { loggedIn: boolean; detail: string } {
   if (!existsSync(creds)) return { loggedIn: false, detail: 'Not logged in: run `claude` on this machine and /login' };
   try {
     const c = JSON.parse(readFileSync(creds, 'utf8')) as { claudeAiOauth?: { subscriptionType?: string } };
-    return { loggedIn: !!c.claudeAiOauth, detail: c.claudeAiOauth?.subscriptionType ? `Claude ${c.claudeAiOauth.subscriptionType}` : 'Logged in' };
+    const plan = c.claudeAiOauth?.subscriptionType;
+    return { loggedIn: !!c.claudeAiOauth, detail: plan ? `Logged in (${plan[0]!.toUpperCase()}${plan.slice(1)})` : 'Logged in' };
   } catch {
     return { loggedIn: true, detail: 'Logged in' };
   }
