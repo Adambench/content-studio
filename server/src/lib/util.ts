@@ -20,8 +20,8 @@ export const notFound = (what: string) => new HttpError(404, `${what} not found`
 type Listener = (e: LiveEvent) => void;
 const listeners = new Set<Listener>();
 
-export function emit(entity: Entity, id: string, cardId?: string) {
-  const event: LiveEvent = cardId ? { entity, id, cardId } : { entity, id };
+export function emit(entity: Entity, id: string, videoId?: string) {
+  const event: LiveEvent = videoId ? { entity, id, videoId } : { entity, id };
   for (const l of listeners) {
     try {
       l(event);
@@ -36,7 +36,7 @@ export function subscribe(l: Listener): () => void {
   return () => listeners.delete(l);
 }
 
-/** A position between two neighbours (fractional ordering): no renumbering when a card moves. */
+/** A position between two neighbours (fractional ordering): no renumbering when something moves. */
 export function between(before: number | null, after: number | null): number {
   if (before === null && after === null) return 1000;
   if (before === null) return after! - 1000;

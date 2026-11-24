@@ -1,36 +1,33 @@
-import { existsSync } from 'node:fs';
+import { existsSync, statfsSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import type { Readable } from 'node:stream';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import type { CardDetail, Hook, InputRole, LiveEvent, SystemInfo } from '../../../shared/types.ts';
+import type { InputRole, LiveEvent, SystemInfo, VideoDetail } from '../../../shared/types.ts';
 import { config } from '../config.ts';
 import { get } from '../db/db.ts';
 import { claudeStatus, claudeUsage } from '../engine/claude.ts';
 import { chromeInstalled } from '../engine/render.ts';
 import { thumbPath } from '../jobs/kinds.ts';
-import { enqueue, getJob, jobState, listJobs } from '../jobs/queue.ts';
+import { enqueue, getJob, listJobs } from '../jobs/queue.ts';
 import { cancelJob } from '../jobs/runner.ts';
 import { findBinary } from '../lib/proc.ts';
 import { HttpError, notFound, subscribe } from '../lib/util.ts';
-import { approveCard, createCard, createPage, deleteCard, deletePage, getCard, listCards, listDrafts, listPages, saveDraft, trashCard, updateCard, updatePage } from '../services/board.ts';
-import { addComment, deleteComment, listComments, updateComment } from '../services/comments.ts';
+import { addLesson, brain, toggleLesson, writeBrandFile } from '../services/brain.ts';
+import { createBrand, deleteBrand, listBrands, updateBrand } from '../services/brands.ts';
 import { forgetDevice, listDevices, newPairCode, pair } from '../services/devices.ts';
 import { appendChunk, deleteInput, getInput, inputPath, listInputs, saveStream, startUpload, updateInput, uploadState } from '../services/inputs.ts';
-import { createRule, deleteRule, listRules, updateRule } from '../services/rules.ts';
-import { getVersion, listRenders, listVersions, renderFiles, versionSlides } from '../services/versions.ts';
+import { addNote, deleteNote, listNotes, updateNote } from '../services/notes.ts';
+import { answer, fixNotes, goNow, makeWhenUploaded, sendMessage, stop } from '../services/runs.ts';
+import { listThread } from '../services/thread.ts';
+import { getVersion, listVersions, versionFiles } from '../services/versions.ts';
+import { approveVideo, createVideo, deleteVideo, getVideo, listVideos, markSeen, setPosted, updateVideo } from '../services/videos.ts';
 
 type P = { Params: { id: string } };
 
-function latestHooks(cardId: string): Hook[] | null {
-  const job = get<{ id: string }>("SELECT id FROM jobs WHERE card_id = ? AND kind = 'hooks' AND status = 'done' ORDER BY created_at DESC LIMIT 1", cardId);
-  if (!job) return null;
-  const steps = jobState(job.id).steps as { answer?: { hooks: Hook[] } } | undefined;
-  return steps?.answer?.hooks ?? null;
-}
-
-export function cardDetail(id: string): CardDetail {
-  return { card: getCard(id), inputs: listInputs(id), versions: listVersions(id), renders: listRenders(id), comments: listComments(id), jobs: listJobs({ cardId: id, limit: 10 }), hooks: latestHooks(id) };
+export function videoDetail(id: string): VideoDetail {
+  const run = listJobs({ videoId: id, active: true }).find((j) => j.kind === 'agent') ?? null;
+  return { video: getVideo(id), inputs: listInputs(id), versions: listVersions(id), notes: listNotes(id), thread: listThread(id), job: run };
 }
 
 /** Send a file with HTTP ranges (seeking in a video), or 404. */
@@ -40,74 +37,93 @@ function sendFile(reply: FastifyReply, path: string | null, opts: { download?: s
   return reply.sendFile(basename(path), dirname(path), { cacheControl: true, maxAge: 3600_000 });
 }
 
+const downloadName = (videoId: string, n: number, ext: string) => `${getVideo(videoId).title.replace(/[^\p{L}\p{N} -]/gu, '').trim() || 'video'} v${n}${ext}`;
+
 export async function registerApi(app: FastifyInstance) {
   app.get('/api/health', async () => ({ ok: true, version: config.version }));
 
   app.get('/api/system', async (): Promise<SystemInfo & { usage: unknown }> => {
-    const gpu = findBinary('nvidia-smi') ? 'NVIDIA' : null;
     const tools = [
       { name: 'ffmpeg', ok: !!findBinary('ffmpeg'), detail: findBinary('ffmpeg') ?? 'not installed' },
       { name: 'ffprobe', ok: !!findBinary('ffprobe'), detail: findBinary('ffprobe') ?? 'not installed' },
       { name: 'uv', ok: !!findBinary('uv'), detail: findBinary('uv') ?? 'not installed' },
       { name: 'chrome', ok: await chromeInstalled(), detail: 'Chrome headless shell for HyperFrames' },
     ];
-    return { version: config.version, host: config.hostname, gpu, tools, claude: claudeStatus(), usage: claudeUsage() };
+    let diskFree: number | null = null;
+    try {
+      const fs = statfsSync(config.studioDir);
+      diskFree = fs.bavail * fs.bsize;
+    } catch {
+      // Unknown is fine.
+    }
+    return { version: config.version, host: config.hostname, gpu: findBinary('nvidia-smi') ? 'NVIDIA' : null, tools, claude: claudeStatus(), studioDir: config.studioDir, diskFree, usage: claudeUsage() };
   });
 
-  // ------------------------------------------------------------ pages
-  app.get('/api/pages', async () => listPages());
-  app.post('/api/pages', async (req) => createPage(req.body as never));
-  app.patch<P>('/api/pages/:id', async (req) => updatePage(req.params.id, req.body));
-  app.delete<P>('/api/pages/:id', async (req) => {
-    deletePage(req.params.id);
+  // ------------------------------------------------------------ brands
+  app.get('/api/brands', async () => listBrands());
+  app.post('/api/brands', async (req) => createBrand(req.body));
+  app.patch<P>('/api/brands/:id', async (req) => updateBrand(req.params.id, req.body));
+  app.delete<P>('/api/brands/:id', async (req) => {
+    deleteBrand(req.params.id);
     return { ok: true };
   });
 
-  // ------------------------------------------------------------ cards
-  app.get<{ Querystring: { pageId?: string; trash?: string } }>('/api/board', async (req) => listCards({ pageId: req.query.pageId, trash: req.query.trash === '1' }));
-  app.post('/api/cards', async (req) => createCard(req.body as never));
-  app.get<P>('/api/cards/:id', async (req) => cardDetail(req.params.id));
-  app.patch<P>('/api/cards/:id', async (req) => updateCard(req.params.id, req.body, 'you'));
-  app.delete<P & { Querystring: { hard?: string } }>('/api/cards/:id', async (req) => {
-    if (req.query.hard === '1') deleteCard(req.params.id);
-    else trashCard(req.params.id);
+  // ------------------------------------------------------------ videos
+  app.get<{ Querystring: { brandId?: string } }>('/api/videos', async (req) => listVideos({ brandId: req.query.brandId }));
+  // New, from the inbox's box: with something said, Claude starts at once (that's my go).
+  app.post('/api/videos', async (req) => {
+    const body = z.object({ text: z.string().max(20_000).optional(), go: z.boolean().default(true) }).passthrough().parse(req.body ?? {});
+    const video = createVideo(req.body);
+    if (body.text?.trim() && body.go) sendMessage(video.id, { text: body.text });
+    return getVideo(video.id);
+  });
+  app.get<P>('/api/videos/:id', async (req) => videoDetail(req.params.id));
+  app.patch<P>('/api/videos/:id', async (req) => updateVideo(req.params.id, req.body));
+  app.delete<P>('/api/videos/:id', async (req) => {
+    stop(req.params.id);
+    deleteVideo(req.params.id);
     return { ok: true };
   });
-  app.post<P>('/api/cards/:id/approve', async (req) => approveCard(req.params.id));
-
-  app.get<P>('/api/cards/:id/drafts', async (req) => listDrafts(req.params.id));
-  app.post<{ Params: { id: string; draftId: string } }>('/api/cards/:id/drafts/:draftId/restore', async (req) => {
-    const draft = listDrafts(req.params.id).find((d) => d.id === req.params.draftId);
-    if (!draft) throw notFound('Draft');
-    const card = getCard(req.params.id);
-    saveDraft(card.id, 'you', card.script, card.notes, 'Before restoring an older draft');
-    return updateCard(card.id, { script: draft.script, notes: draft.notes }, 'you');
+  app.post<P>('/api/videos/:id/seen', async (req) => {
+    markSeen(req.params.id);
+    return { ok: true };
   });
 
-  // ------------------------------------------------------------ the buttons: Write, Hooks, Make, Fix
-  app.post<P>('/api/cards/:id/write', async (req) => enqueue('write', { cardId: getCard(req.params.id).id, input: z.object({ instruction: z.string().max(2000).default('') }).parse(req.body ?? {}), single: true }));
-  app.post<P>('/api/cards/:id/hooks', async (req) => enqueue('hooks', { cardId: getCard(req.params.id).id, single: true }));
-  app.post<P>('/api/cards/:id/make', async (req) => {
-    const card = getCard(req.params.id);
-    const body = z.object({ recipe: z.string().optional() }).parse(req.body ?? {});
-    return enqueue('make', { cardId: card.id, input: { recipe: body.recipe ?? card.recipe }, single: true });
+  // What starts Claude.
+  app.post<P>('/api/videos/:id/messages', async (req) => sendMessage(req.params.id, req.body));
+  app.post<P>('/api/videos/:id/go', async (req) => goNow(req.params.id));
+  app.post<P>('/api/videos/:id/fix', async (req) => fixNotes(req.params.id));
+  app.post<P>('/api/videos/:id/answer', async (req) => answer(req.params.id, req.body));
+  app.post<P>('/api/videos/:id/make-when-uploaded', async (req) => {
+    makeWhenUploaded(req.params.id, z.object({ count: z.number().int().min(1).max(200) }).parse(req.body).count);
+    return getVideo(req.params.id);
   });
-  app.post<P>('/api/cards/:id/fix', async (req) => {
-    const card = getCard(req.params.id);
-    if (!card.openComments) throw new HttpError(409, 'No open comments to fix');
-    return enqueue('fix', { cardId: card.id, single: true });
+  app.post<P>('/api/videos/:id/stop', async (req) => {
+    stop(req.params.id);
+    return { ok: true };
   });
-  app.post<P>('/api/cards/:id/test-render', async (req) => {
+
+  app.post<P>('/api/videos/:id/approve', async (req) => approveVideo(req.params.id, z.object({ n: z.number().int().min(1) }).parse(req.body).n));
+  app.post<P>('/api/videos/:id/posted', async (req) => setPosted(req.params.id, z.object({ posted: z.boolean().default(true) }).parse(req.body ?? {}).posted));
+
+  app.post<P>('/api/videos/:id/test-render', async (req) => {
     const body = z.object({ seconds: z.number().min(1).max(120).default(10), inputId: z.string().optional(), gpu: z.boolean().default(true) }).parse(req.body ?? {});
-    return enqueue('test-render', { cardId: getCard(req.params.id).id, input: body });
+    return enqueue('test-render', { videoId: getVideo(req.params.id).id, input: body });
   });
 
-  // ------------------------------------------------------------ inputs
-  app.put<P & { Querystring: { name?: string; mime?: string; role?: string } }>('/api/cards/:id/inputs', async (req) => {
+  // ------------------------------------------------------------ notes
+  app.post<P>('/api/videos/:id/notes', async (req) => addNote(getVideo(req.params.id).id, req.body));
+  app.patch<P>('/api/notes/:id', async (req) => updateNote(req.params.id, req.body));
+  app.delete<P>('/api/notes/:id', async (req) => {
+    deleteNote(req.params.id);
+    return { ok: true };
+  });
+
+  // ------------------------------------------------------------ files
+  app.put<P & { Querystring: { name?: string; mime?: string; role?: string } }>('/api/videos/:id/inputs', async (req) => {
     const name = req.query.name || 'file';
     const mime = req.query.mime || String(req.headers['content-type'] || 'application/octet-stream');
-    const role = (req.query.role || null) as InputRole;
-    return saveStream(req.params.id, req.body as Readable, name, mime, role);
+    return saveStream(req.params.id, req.body as Readable, name, mime, (req.query.role || null) as InputRole);
   });
   app.patch<P>('/api/inputs/:id', async (req) => updateInput(req.params.id, req.body));
   app.delete<P>('/api/inputs/:id', async (req) => {
@@ -126,25 +142,25 @@ export async function registerApi(app: FastifyInstance) {
     return { offset: out.offset, mediaId: out.mediaId };
   });
 
-  // ------------------------------------------------------------ comments
-  app.post<P>('/api/cards/:id/comments', async (req) => addComment(req.params.id, req.body));
-  app.patch<P>('/api/comments/:id', async (req) => updateComment(req.params.id, req.body));
-  app.delete<P>('/api/comments/:id', async (req) => {
-    deleteComment(req.params.id);
-    return { ok: true };
+  // ------------------------------------------------------------ brain
+  app.get('/api/brain', async () => brain());
+  app.post('/api/brain/lessons', async (req) => {
+    const b = z.object({ scope: z.string(), text: z.string().trim().min(3).max(400) }).parse(req.body);
+    addLesson(b.scope, b.text);
+    return brain();
   });
-
-  // ------------------------------------------------------------ rules
-  app.get<{ Querystring: { pageId?: string } }>('/api/rules', async (req) => listRules({ pageId: req.query.pageId || null }));
-  app.post('/api/rules', async (req) => createRule(req.body as never));
-  app.patch<P>('/api/rules/:id', async (req) => updateRule(req.params.id, req.body));
-  app.delete<P>('/api/rules/:id', async (req) => {
-    deleteRule(req.params.id);
-    return { ok: true };
+  app.patch('/api/brain/lessons', async (req) => {
+    const b = z.object({ scope: z.string(), line: z.number().int().min(0), on: z.boolean() }).parse(req.body);
+    toggleLesson(b.scope, b.line, b.on);
+    return brain();
+  });
+  app.put<P>('/api/brain/brands/:id', async (req) => {
+    writeBrandFile(req.params.id, z.object({ text: z.string().max(100_000) }).parse(req.body).text);
+    return brain();
   });
 
   // ------------------------------------------------------------ jobs
-  app.get<{ Querystring: { cardId?: string; active?: string } }>('/api/jobs', async (req) => listJobs({ cardId: req.query.cardId, active: req.query.active === '1' }));
+  app.get<{ Querystring: { videoId?: string; active?: string } }>('/api/jobs', async (req) => listJobs({ videoId: req.query.videoId, active: req.query.active === '1' }));
   app.get<P>('/api/jobs/:id', async (req) => getJob(req.params.id));
   app.post<P>('/api/jobs/:id/cancel', async (req) => cancelJob(req.params.id));
 
@@ -191,27 +207,27 @@ export async function registerApi(app: FastifyInstance) {
   });
   app.get<P>('/media/thumb/:id', async (req, reply) => {
     const input = getInput(req.params.id);
-    return sendFile(reply, thumbPath(input.cardId, input.id));
+    return sendFile(reply, thumbPath(input.videoId, input.id));
   });
-  app.get<P & { Querystring: { download?: string } }>('/media/render/:id', async (req, reply) => {
-    const files = renderFiles(req.params.id);
-    return sendFile(reply, files.file, { download: req.query.download ? `${getCard(listRenderCard(req.params.id)).title}.mp4` : undefined });
+  app.get<P & { Querystring: { download?: string } }>('/media/version/:id', async (req, reply) => {
+    const v = getVersion(req.params.id);
+    return sendFile(reply, versionFiles(v).file, { download: req.query.download ? downloadName(v.videoId, v.n, '.mp4') : undefined });
   });
-  app.get<P>('/media/poster/:id', async (req, reply) => sendFile(reply, renderFiles(req.params.id).poster));
-  // The Android app's downloads ask for /api/media/<id>/file: a render, or one of a card's files.
+  app.get<P>('/media/poster/:id', async (req, reply) => sendFile(reply, versionFiles(getVersion(req.params.id)).poster));
+  app.get<{ Params: { id: string; k: string }; Querystring: { download?: string } }>('/media/slide/:id/:k', async (req, reply) => {
+    const v = getVersion(req.params.id);
+    const k = Number(req.params.k);
+    return sendFile(reply, versionFiles(v).slides[k] ?? null, { download: req.query.download ? downloadName(v.videoId, v.n, ` ${k + 1}.png`) : undefined });
+  });
+  // The Android app's downloads ask for /api/media/<id>/file: a version (its video), or one of a video's files.
   app.get<P>('/api/media/:id/file', async (req, reply) => {
-    const render = get<{ id: string }>('SELECT id FROM renders WHERE id = ?', req.params.id);
-    return sendFile(reply, render ? renderFiles(render.id).file : inputPath(getInput(req.params.id).id));
+    if (get('SELECT 1 FROM versions WHERE id = ?', req.params.id)) {
+      const v = getVersion(req.params.id);
+      const f = versionFiles(v);
+      return sendFile(reply, f.file ?? f.slides[0] ?? null, { download: downloadName(v.videoId, v.n, f.file ? '.mp4' : '.png') });
+    }
+    const input = get<{ id: string }>('SELECT id FROM inputs WHERE id = ?', req.params.id);
+    if (!input) throw notFound('File');
+    return sendFile(reply, inputPath(input.id));
   });
-  app.get<{ Params: { id: string; n: string } }>('/media/slide/:id/:n', async (req, reply) => {
-    const slides = versionSlides(getVersion(req.params.id));
-    return sendFile(reply, slides[Number(req.params.n)] ?? null);
-  });
-
-}
-
-function listRenderCard(renderId: string): string {
-  const r = get<{ card_id: string }>('SELECT card_id FROM renders WHERE id = ?', renderId);
-  if (!r) throw notFound('Render');
-  return r.card_id;
 }

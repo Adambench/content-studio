@@ -11,26 +11,27 @@ import { getSetting, run as sql, setSetting } from '../db/db.ts';
 import { JobWait } from '../jobs/queue.ts';
 import { newId, now } from '../lib/util.ts';
 
-export type Task = 'write' | 'hooks' | 'pick' | 'plan' | 'review' | 'fix' | 'lesson' | 'market' | 'test';
+export type Task = 'agent' | 'write' | 'pick' | 'review' | 'lesson' | 'market' | 'test';
 
 /** Every creative choice and review on Opus; reading the market's videos is lighter work. */
-const MODEL: Record<Task, string> = { write: 'opus', hooks: 'opus', pick: 'opus', plan: 'opus', review: 'opus', fix: 'opus', lesson: 'opus', market: 'sonnet', test: 'haiku' };
+const MODEL: Record<Task, string> = { agent: 'opus', write: 'opus', pick: 'opus', review: 'opus', lesson: 'opus', market: 'sonnet', test: 'haiku' };
 
 const BACKGROUND_LIMIT = 0.8;
 
 type Usage = { fiveHour?: { utilization: number; resetsAt: number }; sevenDay?: { utilization: number; resetsAt: number }; status?: string; updatedAt: number };
 
-function baseOptions(): Options {
+/** Claude's environment: the Pro login, never an API key. Also what the terminal's `claude` gets. */
+export function claudeEnv(): Record<string, string> {
   // An ANTHROPIC_API_KEY in the environment would take precedence over the login and bill that key: drop it.
   const { ANTHROPIC_API_KEY: _drop, ...env } = process.env;
   // The login can be a long-lived token (`claude setup-token`) kept in the keys file instead of ~/.claude.
   const token = keys().CLAUDE_CODE_OAUTH_TOKEN;
-  return {
-    cwd: config.claudeDir,
-    env: { ...env, ...(token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}), CLAUDE_AGENT_SDK_CLIENT_APP: `content-studio/${config.version}`, ENABLE_CLAUDEAI_MCP_SERVERS: 'false' },
-    // None of my personal Claude Code settings, hooks or CLAUDE.md files.
-    settingSources: [],
-  };
+  return { ...(env as Record<string, string>), ...(token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}), CLAUDE_AGENT_SDK_CLIENT_APP: `content-studio/${config.version}`, ENABLE_CLAUDEAI_MCP_SERVERS: 'false' };
+}
+
+function baseOptions(): Options {
+  // One-off answers load none of my Claude Code settings, hooks, skills or CLAUDE.md files.
+  return { cwd: config.claudeDir, env: claudeEnv(), settingSources: [] };
 }
 
 export function claudeStatus(): { loggedIn: boolean; detail: string } {
@@ -59,9 +60,9 @@ export function waitForUsage() {
   throw new JobWait(`Waiting for Claude's 5-hour usage to come down (${Math.round(five.utilization * 100)} %), until about ${at}`, delay);
 }
 
-type RateInfo = { status?: string; rateLimitType?: string; utilization?: number; resetsAt?: number; unifiedWindows?: Record<string, { utilization: number; resetsAt: number }> };
+export type RateInfo = { status?: string; rateLimitType?: string; utilization?: number; resetsAt?: number; unifiedWindows?: Record<string, { utilization: number; resetsAt: number }> };
 
-function recordRate(info: RateInfo) {
+export function recordRate(info: RateInfo) {
   const w = info.unifiedWindows ?? {};
   const pick = (name: string) => w[name] ?? (info.rateLimitType === name && info.utilization !== undefined && info.resetsAt ? { utilization: info.utilization, resetsAt: info.resetsAt } : undefined);
   const five = pick('five_hour');
@@ -75,7 +76,7 @@ function recordRate(info: RateInfo) {
   } satisfies Usage);
 }
 
-const isUsageError = (text: string) => /usage limit|rate.?limit|limit reached|out of extra usage/i.test(text);
+export const isUsageError = (text: string) => /usage limit|rate.?limit|limit reached|out of extra usage/i.test(text);
 
 export type Image = { path: string } | { data: string; mediaType: 'image/jpeg' | 'image/png' };
 
@@ -98,7 +99,7 @@ export type AskInput<S extends z.ZodType> = {
   model?: string;
   /** I pressed for it and I'm waiting: never wait for the usage window. */
   now?: boolean;
-  cardId?: string | null;
+  videoId?: string | null;
   jobId?: string | null;
   signal?: AbortSignal;
 };
@@ -147,22 +148,29 @@ export async function ask<S extends z.ZodType>(input: AskInput<S>): Promise<z.in
     if (isUsageError(text)) setSetting('claudeLimitedUntil', now() + 60 * 60_000);
     throw err;
   } finally {
-    sql(
-      'INSERT INTO claude_calls (id, task, model, card_id, job_id, input_tokens, output_tokens, cache_read, cache_write, ms, ok, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      newId(),
-      input.task,
-      model,
-      input.cardId ?? null,
-      input.jobId ?? null,
-      usage.input_tokens ?? 0,
-      usage.output_tokens ?? 0,
-      usage.cache_read_input_tokens ?? 0,
-      usage.cache_creation_input_tokens ?? 0,
-      now() - started,
-      ok,
-      now(),
-    );
+    recordCall({ task: input.task, model, videoId: input.videoId ?? null, jobId: input.jobId ?? null, usage, ms: now() - started, ok });
   }
+}
+
+export type CallUsage = { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
+
+/** Every Claude run counted, by task, so the targets can be checked. */
+export function recordCall(c: { task: Task; model: string; videoId: string | null; jobId: string | null; usage: CallUsage; ms: number; ok: boolean }) {
+  sql(
+    'INSERT INTO claude_calls (id, task, model, video_id, job_id, input_tokens, output_tokens, cache_read, cache_write, ms, ok, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    newId(),
+    c.task,
+    c.model,
+    c.videoId,
+    c.jobId,
+    c.usage.input_tokens ?? 0,
+    c.usage.output_tokens ?? 0,
+    c.usage.cache_read_input_tokens ?? 0,
+    c.usage.cache_creation_input_tokens ?? 0,
+    c.ms,
+    c.ok,
+    now(),
+  );
 }
 
 /** The text of a skill (SKILL.md, or one of its files) to paste into a prompt: background calls load no skills. */

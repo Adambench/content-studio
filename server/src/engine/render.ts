@@ -61,7 +61,7 @@ export async function renderProject(projectDir: string, out: string, opts: Rende
         PATH: searchPath(),
         PRODUCER_HEADLESS_SHELL_PATH: chrome,
         PRODUCER_MAX_WORKERS: String(workers),
-        HYPERFRAMES_EXTRACT_CACHE_DIR: join(config.workDir, 'hf-cache'),
+        HYPERFRAMES_EXTRACT_CACHE_DIR: join(config.dataDir, 'cache', 'hyperframes'),
         HYPERFRAMES_EXTRACT_CACHE_MAX_MB: '4096',
         // No telemetry from a private machine.
         HYPERFRAMES_TELEMETRY: '0',

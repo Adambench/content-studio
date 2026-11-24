@@ -7,28 +7,25 @@ import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir, hostname } from 'node:os';
 import { basename, extname, join } from 'node:path';
 import { Readable } from 'node:stream';
-import type { CardDetail, CardSummary, Job, Page, Rule } from '../shared/types.ts';
-import { STAGE_LABEL } from '../shared/types.ts';
+import type { Brand, Job, ThreadItem, VideoDetail, VideoSummary } from '../shared/types.ts';
 
 const HELP = `cs — Content Studio from the terminal
 
-  cs status                          server, Claude login, tools, running jobs
-  cs board [page]                    cards by stage (page: name or id)
-  cs card <card>                     script, notes, files, versions, renders, open comments, jobs
-  cs new <page> "<title>" [--recipe r] [--notes "…"]
-  cs set <card> <field> <value|@file>   field: title recipe stage script notes caption
-  cs add <card> <file…> [--role take|voice|proof|product|broll|logo|reference]
-  cs write <card> ["what I want"]    Claude drafts the script      (--wait to wait)
-  cs hooks <card>                    other first lines               (--wait)
-  cs make <card> [--recipe r]        make the video                  (--wait)
-  cs fix <card>                      fix my open comments            (--wait)
-  cs test-render <card> [--seconds 10] [--input <id>] [--cpu]
-  cs comments                        every open comment
-  cs jobs [card] · cs job <id> · cs cancel <job>
-  cs rules [page]                    the rulebook, strongest first
-  cs pages · cs pair                 pages; a code to pair the phone
+  cs status                           server, Claude, tools, what's running
+  cs brands · cs brand "<name>" [--color #hex]
+  cs videos [brand]                   by status, newest first
+  cs video <video>                    folder, files, versions, notes, the last of the thread
+  cs new <brand> "<what I want>" [--kind talking-head|voiceover|carousel|ugc|explainer|graded] [--no-go]
+  cs add <video> <file…> [--role take|voice|proof|product|broll|logo|reference] [--make]
+  cs say <video> "<message>"          Claude starts on it           (--wait to follow it)
+  cs go <video> · cs fix <video> · cs stop <video>
+  cs note <video> <v> <m:ss.s|s3> "<note>"
+  cs thread <video> [--all]           the conversation (--all: with tool calls)
+  cs approve <video> <n> · cs posted <video>
+  cs test-render <video> [--seconds 10] [--input <file id>] [--cpu]
+  cs jobs [video] · cs cancel <job> · cs pair
 
-<card> is the start of its id or of its title.`;
+<video> is the start of its id, folder name or title.`;
 
 function server(): string {
   if (process.env.CS_SERVER) return process.env.CS_SERVER.replace(/\/$/, '');
@@ -59,204 +56,170 @@ const args = process.argv.slice(2);
 const flag = (name: string) => {
   const i = args.indexOf(`--${name}`);
   if (i < 0) return undefined;
-  const v = args[i + 1];
-  args.splice(i, v && !v.startsWith('--') ? 2 : 1);
-  return v && !v.startsWith('--') ? v : 'true';
+  const next = args[i + 1];
+  const value = next === undefined || next.startsWith('--') ? 'true' : next;
+  args.splice(i, value === 'true' && next !== 'true' ? 1 : 2);
+  return value;
 };
 const short = (id: string) => id.slice(0, 8);
-const secs = (s: number | null | undefined) => (s == null ? '' : s >= 60 ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}` : `${s.toFixed(1)}s`);
-const when = (t: number) => new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const fmt = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 
-async function pageId(q: string): Promise<string> {
-  const pages = await api<Page[]>('/api/pages');
-  const hit = pages.find((p) => p.id.startsWith(q) || p.name.toLowerCase() === q.toLowerCase()) ?? pages.find((p) => p.name.toLowerCase().includes(q.toLowerCase()));
-  if (!hit) throw new Error(`No page "${q}" (${pages.map((p) => p.name).join(', ')})`);
-  return hit.id;
+async function brandId(q: string): Promise<string> {
+  const brands = await api<Brand[]>('/api/brands');
+  const b = brands.find((x) => x.id.startsWith(q) || x.slug.startsWith(q.toLowerCase()) || x.name.toLowerCase().startsWith(q.toLowerCase()));
+  if (!b) throw new Error(`No brand "${q}". Brands: ${brands.map((x) => x.name).join(', ') || 'none (cs brand "<name>")'}`);
+  return b.id;
 }
 
-async function cardId(q: string | undefined): Promise<string> {
-  if (!q) throw new Error('Which card?');
-  const cards = [...(await api<CardSummary[]>('/api/board')), ...(await api<CardSummary[]>('/api/board?trash=1'))];
-  const hits = cards.filter((c) => c.id.startsWith(q)).concat(cards.filter((c) => c.title.toLowerCase().startsWith(q.toLowerCase())));
-  const unique = [...new Map(hits.map((c) => [c.id, c])).values()];
-  if (unique.length === 1) return unique[0]!.id;
-  if (!unique.length) throw new Error(`No card "${q}"`);
-  throw new Error(`"${q}" matches ${unique.length} cards: ${unique.map((c) => `${short(c.id)} ${c.title}`).join(' · ')}`);
+async function videoId(q: string | undefined): Promise<string> {
+  if (!q) throw new Error('Which video?');
+  const all = await api<VideoSummary[]>('/api/videos');
+  const l = q.toLowerCase();
+  const hits = all.filter((v) => v.id.startsWith(q) || v.slug.startsWith(l) || v.title.toLowerCase().startsWith(l));
+  if (hits.length !== 1) throw new Error(hits.length ? `"${q}" matches ${hits.length}: ${hits.map((v) => v.title).join(', ')}` : `No video "${q}"`);
+  return hits[0]!.id;
 }
 
-function jobLine(j: Job) {
-  return `${short(j.id)} ${j.kind} ${j.status}${j.step ? ` · ${j.step}` : ''}${j.status === 'running' ? ` ${Math.round(j.progress * 100)}%` : ''}${j.error ? ` · ${j.error}` : ''}`;
+const line = (v: VideoSummary) => `${short(v.id)} ${v.status.padEnd(6)} ${v.title}${v.reason ? ` — ${v.reason}` : ''}`;
+
+function itemLine(i: ThreadItem): string {
+  const who = { you: 'you', claude: 'claude', step: '  ·', tool: '  $', question: 'asks', version: 'saved', lesson: 'lesson', sys: '--', error: 'ERROR' }[i.kind];
+  const opts = i.kind === 'question' ? ` [${((i.data.options as string[]) ?? []).join(' | ')}]` : '';
+  return `${who} ${i.text.replace(/\s+/g, ' ').slice(0, 300)}${opts}`;
 }
 
-async function waitFor(job: Job): Promise<Job> {
-  let last = '';
+/** Follow a run until it ends, printing the thread as it grows. */
+async function follow(id: string, job: Job, all: boolean) {
+  const seen = new Set((await api<VideoDetail>(`/api/videos/${id}`)).thread.map((i) => i.id));
   for (;;) {
-    const j = await api<Job>(`/api/jobs/${job.id}`);
-    const line = jobLine(j);
-    if (line !== last) console.log(line);
-    last = line;
-    if (['done', 'failed', 'cancelled'].includes(j.status)) {
-      for (const l of j.log.slice(-5)) console.log(`  ${l.text}`);
-      return j;
+    const d = await api<VideoDetail>(`/api/videos/${id}`);
+    for (const i of d.thread) if (!seen.has(i.id)) {
+      seen.add(i.id);
+      if (all || i.kind !== 'tool') console.log(itemLine(i));
     }
+    const j = await api<Job>(`/api/jobs/${job.id}`);
+    if (!['queued', 'waiting', 'running'].includes(j.status)) return console.log(`-- ${j.status}${j.error ? `: ${j.error}` : ''}`);
     await new Promise((r) => setTimeout(r, 2000));
   }
 }
 
-const MIME: Record<string, string> = { '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm', '.mkv': 'video/x-matroska', '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/markdown' };
-
 async function main() {
-  // Every flag comes out first, so none ends up among the positional arguments (file names, the instruction).
   const wait = flag('wait') === 'true';
-  const opt = { recipe: flag('recipe'), notes: flag('notes'), role: flag('role'), seconds: flag('seconds'), input: flag('input'), cpu: flag('cpu') === 'true' };
+  const all = flag('all') === 'true';
+  const opt = { kind: flag('kind'), role: flag('role'), color: flag('color'), seconds: flag('seconds'), input: flag('input'), cpu: flag('cpu') === 'true', noGo: flag('no-go') === 'true', make: flag('make') === 'true' };
   const [cmd, ...rest] = args;
   switch (cmd) {
     case undefined:
     case 'help':
     case '--help':
-      console.log(HELP);
-      return;
+      return console.log(HELP);
     case 'status': {
-      const s = await api<{ version: string; host: string; gpu: string | null; tools: { name: string; ok: boolean }[]; claude: { loggedIn: boolean; detail: string }; usage: { fiveHour?: { utilization: number } } | null }>('/api/system');
-      console.log(`${server()} · v${s.version} on ${s.host}${s.gpu ? ` · ${s.gpu}` : ''}`);
-      console.log(`Claude: ${s.claude.detail}${s.usage?.fiveHour ? ` · 5-hour usage ${Math.round(s.usage.fiveHour.utilization * 100)} %` : ''}`);
-      console.log(`Tools: ${s.tools.map((t) => `${t.name} ${t.ok ? 'ok' : 'MISSING'}`).join(' · ')}`);
-      for (const j of await api<Job[]>('/api/jobs?active=1')) console.log(jobLine(j));
+      const s = await api<{ version: string; host: string; gpu: string | null; studioDir: string; tools: { name: string; ok: boolean }[]; claude: { loggedIn: boolean; detail: string }; usage: { fiveHour?: { utilization: number } } | null }>('/api/system');
+      console.log(`${s.host} · v${s.version} · ${s.gpu ?? 'no GPU'} · studio ${s.studioDir}`);
+      console.log(`Claude: ${s.claude.detail}${s.usage?.fiveHour ? ` · 5-hour ${Math.round(s.usage.fiveHour.utilization * 100)} %` : ''}`);
+      console.log(s.tools.map((t) => `${t.name} ${t.ok ? 'ok' : 'MISSING'}`).join(' · '));
+      for (const j of await api<Job[]>('/api/jobs?active=1')) console.log(`${short(j.id)} ${j.kind} ${j.status} ${j.step ?? ''} ${Math.round(j.progress * 100)} %`);
       return;
     }
-    case 'pages':
-      for (const p of await api<Page[]>('/api/pages')) console.log(`${short(p.id)} ${p.name}${p.settings.niche ? ` · ${p.settings.niche}` : ''}`);
+    case 'brands':
+      for (const b of await api<Brand[]>('/api/brands')) console.log(`${short(b.id)} ${b.name} · ~/studio/${b.slug}`);
       return;
-    case 'board': {
-      const pages = await api<Page[]>('/api/pages');
-      const q = rest[0] ? `?pageId=${await pageId(rest[0])}` : '';
-      const cards = await api<CardSummary[]>(`/api/board${q}`);
-      for (const stage of Object.keys(STAGE_LABEL) as (keyof typeof STAGE_LABEL)[]) {
-        const group = cards.filter((c) => c.stage === stage);
-        if (!group.length) continue;
-        console.log(`${STAGE_LABEL[stage]}:`);
-        for (const c of group) {
-          const page = rest[0] ? '' : `${pages.find((p) => p.id === c.pageId)?.name ?? ''} · `;
-          const bits = [c.recipe !== 'auto' && c.recipe, c.inputs && `${c.inputs} files`, c.versions && `v${c.versions}`, c.openComments && `${c.openComments} comments`, c.job && `${c.job.kind} ${c.job.status}`].filter(Boolean);
-          console.log(`  ${short(c.id)} ${page}${c.title}${bits.length ? ` (${bits.join(', ')})` : ''}`);
-        }
-      }
+    case 'brand': {
+      const b = await api<Brand>('/api/brands', { body: { name: rest.join(' '), ...(opt.color ? { color: opt.color } : {}) } });
+      return console.log(`${short(b.id)} ${b.name} · ~/studio/${b.slug}`);
+    }
+    case 'videos': {
+      const q = rest[0] ? `?brandId=${await brandId(rest[0])}` : '';
+      const vs = await api<VideoSummary[]>(`/api/videos${q}`);
+      for (const s of ['turn', 'making', 'ready', 'posted'] as const) for (const v of vs.filter((x) => x.status === s)) console.log(line(v));
       return;
     }
-    case 'card': {
-      const d = await api<CardDetail>(`/api/cards/${await cardId(rest[0])}`);
-      const c = d.card;
-      console.log(`${c.title} · ${STAGE_LABEL[c.stage]} · ${c.recipe} · ${short(c.id)}`);
-      if (c.script.trim()) console.log(`\n## ${c.labels.script}\n${c.script.trim()}`);
-      if (c.notes.trim()) console.log(`\n## ${c.labels.notes}\n${c.notes.trim()}`);
-      if (d.inputs.length) console.log(`\n## Files\n${d.inputs.map((i) => `  ${short(i.id)} ${i.role ?? i.kind} ${i.name}${i.meta?.duration ? ` ${secs(i.meta.duration)}` : ''}${i.meta?.width ? ` ${i.meta.width}×${i.meta.height}` : ''}`).join('\n')}`);
-      if (d.versions.length) console.log(`\n## Versions\n${d.versions.map((v) => `  v${v.n} ${v.author} ${v.recipe} · ${v.note} · ${when(v.createdAt)}`).join('\n')}`);
-      if (d.renders.length) console.log(`\n## Renders\n${d.renders.slice(0, 5).map((r) => `  ${short(r.id)} v${r.n} ${r.status}${r.duration ? ` ${secs(r.duration)}` : ''}${r.error ? ` · ${r.error}` : ''}`).join('\n')}`);
-      const open = d.comments.filter((m) => m.status === 'open');
-      if (open.length) console.log(`\n## Open comments\n${open.map((m) => `  ${short(m.id)} ${m.at != null ? `@${secs(m.at)}${m.end != null ? `–${secs(m.end)}` : ''} ` : m.slide != null ? `slide ${m.slide + 1} ` : ''}${m.text}`).join('\n')}`);
-      if (d.hooks?.length) console.log(`\n## Hooks\n${d.hooks.map((h) => `  - ${h.line} (${h.why})`).join('\n')}`);
-      if (d.jobs.length) console.log(`\n## Jobs\n${d.jobs.slice(0, 4).map((j) => `  ${jobLine(j)}`).join('\n')}`);
+    case 'video': {
+      const d = await api<VideoDetail>(`/api/videos/${await videoId(rest[0])}`);
+      console.log(`${d.video.title} · ${d.video.status} · ${d.video.reason}\n${d.video.folder}`);
+      for (const i of d.inputs) console.log(`  file ${short(i.id)} ${i.name} (${i.role ?? '-'}${i.meta?.duration ? `, ${i.meta.duration.toFixed(1)} s` : ''})`);
+      for (const v of d.versions) console.log(`  v${v.n} ${v.kind}${v.duration ? ` ${v.duration.toFixed(1)} s` : ''}${v.slides ? ` ${v.slides} slides` : ''}${v.note ? ` · ${v.note}` : ''}`);
+      for (const n of d.notes.filter((x) => x.status !== 'fixed')) console.log(`  note v${n.versionN} ${n.slide ? `slide ${n.slide}` : fmt(n.at ?? 0)} ${n.status}: ${n.text}`);
+      for (const i of d.thread.filter((x) => x.kind !== 'tool').slice(-8)) console.log(`  ${itemLine(i)}`);
       return;
     }
     case 'new': {
-      const [page, title] = rest;
-      if (!page || !title) throw new Error('cs new <page> "<title>"');
-      const { recipe, notes } = opt;
-      const c = await api<CardSummary>('/api/cards', { body: { pageId: await pageId(page), title, ...(recipe ? { recipe } : {}), ...(notes ? { notes } : {}) } });
-      console.log(`${short(c.id)} ${c.title}`);
-      return;
-    }
-    case 'set': {
-      const [q, field, value] = rest;
-      if (!q || !field || value === undefined) throw new Error('cs set <card> <field> <value|@file>');
-      const v = value.startsWith('@') ? readFileSync(value.slice(1), 'utf8') : value;
-      await api(`/api/cards/${await cardId(q)}`, { method: 'PATCH', body: { [field]: v } });
-      console.log('saved');
-      return;
+      const [b, ...words] = rest;
+      const text = words.join(' ');
+      const v = await api<VideoSummary>('/api/videos', { body: { brandId: await brandId(b ?? ''), text, kind: opt.kind ?? 'auto', go: !opt.noGo } });
+      return console.log(line(v));
     }
     case 'add': {
       const [q, ...files] = rest;
-      const { role } = opt;
-      const id = await cardId(q);
+      const id = await videoId(q);
       for (const f of files) {
-        const name = basename(f);
-        const mime = MIME[extname(f).toLowerCase()] ?? 'application/octet-stream';
         const size = statSync(f).size;
-        const params = new URLSearchParams({ name, mime, ...(role ? { role } : {}) });
-        const input = await api<{ id: string; kind: string; role: string }>(`/api/cards/${id}/inputs?${params}`, { method: 'PUT', raw: createReadStream(f), headers: { 'content-type': mime, 'content-length': String(size) } });
-        console.log(`${short(input.id)} ${input.role ?? input.kind} ${name}`);
+        const ext = extname(f).toLowerCase();
+        const mime = { '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[ext] ?? 'application/octet-stream';
+        const params = new URLSearchParams({ name: basename(f), mime, ...(opt.role ? { role: opt.role } : {}) });
+        const input = await api<{ id: string; name: string; role: string }>(`/api/videos/${id}/inputs?${params}`, { method: 'PUT', raw: createReadStream(f), headers: { 'content-type': mime, 'content-length': String(size) } });
+        console.log(`${short(input.id)} ${input.name} (${input.role})`);
       }
+      if (opt.make) console.log(`started ${short((await api<Job>(`/api/videos/${id}/go`, { body: {} })).id)}`);
       return;
     }
-    case 'write':
-    case 'hooks':
-    case 'make':
+    case 'say':
+    case 'go':
     case 'fix': {
-      const { recipe } = opt;
-      const id = await cardId(rest[0]);
-      const body = cmd === 'write' ? { instruction: rest.slice(1).join(' ') } : cmd === 'make' && recipe ? { recipe } : {};
-      const job = await api<Job>(`/api/cards/${id}/${cmd}`, { body });
-      if (wait || cmd === 'hooks') {
-        const done = await waitFor(job);
-        if (cmd === 'hooks' && done.status === 'done') {
-          const d = await api<CardDetail>(`/api/cards/${id}`);
-          for (const h of d.hooks ?? []) console.log(`- ${h.line} (${h.why})`);
-        }
-      } else console.log(jobLine(job));
+      const id = await videoId(rest[0]);
+      const job = cmd === 'say' ? await api<Job>(`/api/videos/${id}/messages`, { body: { text: rest.slice(1).join(' ') } }) : await api<Job>(`/api/videos/${id}/${cmd}`, { body: {} });
+      if (wait) return follow(id, job, all);
+      return console.log(`${short(job.id)} ${job.status}`);
+    }
+    case 'stop':
+      await api(`/api/videos/${await videoId(rest[0])}/stop`, { body: {} });
+      return console.log('stopped');
+    case 'note': {
+      const [q, vn, where, ...words] = rest;
+      const slide = where?.startsWith('s') ? Number(where.slice(1)) : null;
+      const at = slide ? null : where?.includes(':') ? Number(where.split(':')[0]) * 60 + Number(where.split(':')[1]) : Number(where);
+      const n = await api<{ id: string }>(`/api/videos/${await videoId(q)}/notes`, { body: { versionN: Number(String(vn).replace(/^v/, '')), at, slide, text: words.join(' ') } });
+      return console.log(`note ${short(n.id)} (cs fix sends the open notes)`);
+    }
+    case 'thread': {
+      const d = await api<VideoDetail>(`/api/videos/${await videoId(rest[0])}`);
+      for (const i of d.thread) if (all || i.kind !== 'tool') console.log(itemLine(i));
       return;
     }
+    case 'approve':
+      return console.log(line(await api<VideoSummary>(`/api/videos/${await videoId(rest[0])}/approve`, { body: { n: Number(String(rest[1]).replace(/^v/, '')) } })));
+    case 'posted':
+      return console.log(line(await api<VideoSummary>(`/api/videos/${await videoId(rest[0])}/posted`, { body: { posted: true } })));
     case 'test-render': {
-      const id = await cardId(rest[0]);
-      const seconds = Number(opt.seconds ?? 10);
-      const { cpu } = opt;
-      // A file's id may be given by its start, as `cs card` prints it.
-      let inputId = opt.input;
-      if (inputId) {
-        const hit = (await api<CardDetail>(`/api/cards/${id}`)).inputs.filter((i) => i.id.startsWith(inputId!));
-        if (hit.length !== 1) throw new Error(hit.length ? `More than one file starts with ${inputId}` : `No file ${inputId} on this card`);
-        inputId = hit[0]!.id;
+      const id = await videoId(rest[0]);
+      let inputId: string | undefined;
+      if (opt.input) {
+        const hits = (await api<VideoDetail>(`/api/videos/${id}`)).inputs.filter((i) => i.id.startsWith(opt.input!) || i.name.startsWith(opt.input!));
+        if (hits.length !== 1) throw new Error(`--input ${opt.input} matches ${hits.length} files`);
+        inputId = hits[0]!.id;
       }
-      await waitFor(await api<Job>(`/api/cards/${id}/test-render`, { body: { seconds, ...(inputId ? { inputId } : {}), gpu: !cpu } }));
-      return;
+      const job = await api<Job>(`/api/videos/${id}/test-render`, { body: { seconds: Number(opt.seconds ?? 10), inputId, gpu: !opt.cpu } });
+      return follow(id, job, true);
     }
-    case 'comments': {
-      const cards = (await api<CardSummary[]>('/api/board')).filter((c) => c.openComments > 0);
-      for (const c of cards) {
-        const d = await api<CardDetail>(`/api/cards/${c.id}`);
-        console.log(`${short(c.id)} ${c.title}:`);
-        for (const m of d.comments.filter((x) => x.status === 'open')) console.log(`  ${short(m.id)} ${m.at != null ? `@${secs(m.at)} ` : m.slide != null ? `slide ${m.slide + 1} ` : ''}${m.text}`);
-      }
-      if (!cards.length) console.log('No open comments');
-      return;
-    }
-    case 'jobs':
-      for (const j of await api<Job[]>(`/api/jobs${rest[0] ? `?cardId=${await cardId(rest[0])}` : ''}`)) console.log(jobLine(j));
-      return;
-    case 'job': {
-      const j = await api<Job>(`/api/jobs/${rest[0]}`);
-      console.log(jobLine(j));
-      for (const l of j.log) console.log(`  ${when(l.at)} ${l.text}`);
+    case 'jobs': {
+      const q = rest[0] ? `?videoId=${await videoId(rest[0])}` : '?active=1';
+      for (const j of await api<Job[]>(`/api/jobs${q}`)) console.log(`${short(j.id)} ${j.kind} ${j.status} ${j.step ?? ''}${j.error ? ` — ${j.error}` : ''}`);
       return;
     }
     case 'cancel':
-      console.log(jobLine(await api<Job>(`/api/jobs/${rest[0]}/cancel`, { body: {} })));
-      return;
-    case 'rules': {
-      const q = rest[0] ? `?pageId=${await pageId(rest[0])}` : '';
-      for (const r of await api<Rule[]>(`/api/rules${q}`)) if (r.status === 'on') console.log(`${short(r.id)} [${r.source}${r.topic ? `/${r.topic}` : ''}] ${r.title}${r.taught > 1 ? ` (×${r.taught})` : ''}`);
-      return;
-    }
+      await api(`/api/jobs/${rest[0]}/cancel`, { body: {} });
+      return console.log('cancelled');
     case 'pair': {
-      const p = await api<{ code: string; expiresAt: number }>('/api/pair/code', { body: {} });
-      console.log(`Code ${p.code} for ${server()} (until ${when(p.expiresAt)})`);
-      return;
+      const c = await api<{ code: string }>('/api/pair/code', { body: {} });
+      return console.log(`Code: ${c.code} (Settings → Phone in the app, valid 10 minutes)`);
     }
     default:
-      throw new Error(`Unknown command "${cmd}". cs help`);
+      console.log(HELP);
+      process.exitCode = 1;
   }
 }
 
 main().catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err));
-  process.exit(1);
+  process.exitCode = 1;
 });

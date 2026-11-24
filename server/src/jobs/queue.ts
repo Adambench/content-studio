@@ -5,9 +5,9 @@ import type { Job, JobKind, JobLine, JobStatus } from '../../../shared/types.ts'
 import { all, get, parseJson, run } from '../db/db.ts';
 import { emit, newId, notFound, now } from '../lib/util.ts';
 
-type JobRow = { id: string; kind: JobKind; card_id: string | null; status: JobStatus; input: string; state: string; step: string | null; progress: number; log: string; error: string | null; run_after: number; created_at: number; started_at: number | null; finished_at: number | null };
+type JobRow = { id: string; kind: JobKind; video_id: string | null; status: JobStatus; input: string; state: string; step: string | null; progress: number; log: string; error: string | null; run_after: number; created_at: number; started_at: number | null; finished_at: number | null };
 
-const toJob = (r: JobRow): Job => ({ id: r.id, kind: r.kind, cardId: r.card_id, status: r.status, step: r.step, progress: r.progress, log: parseJson<JobLine[]>(r.log, []), error: r.error, createdAt: r.created_at, startedAt: r.started_at, finishedAt: r.finished_at });
+const toJob = (r: JobRow): Job => ({ id: r.id, kind: r.kind, videoId: r.video_id, status: r.status, step: r.step, progress: r.progress, log: parseJson<JobLine[]>(r.log, []), error: r.error, createdAt: r.created_at, startedAt: r.started_at, finishedAt: r.finished_at });
 
 /** A job asking to be tried again later (Claude's usage window, a busy machine), not a failure. */
 export class JobWait extends Error {
@@ -23,17 +23,17 @@ export const onEnqueue = (fn: () => void) => {
   wake = fn;
 };
 
-export type EnqueueOptions = { cardId?: string | null; input?: Record<string, unknown>; /** Don't queue a second one while one is waiting or running for this card. */ single?: boolean };
+export type EnqueueOptions = { videoId?: string | null; input?: Record<string, unknown>; /** Don't queue a second one while one is waiting or running for this video. */ single?: boolean };
 
 export function enqueue(kind: JobKind, opts: EnqueueOptions = {}): Job {
-  if (opts.single && opts.cardId) {
-    const cur = get<JobRow>("SELECT * FROM jobs WHERE kind = ? AND card_id = ? AND status IN ('queued', 'waiting', 'running') ORDER BY created_at DESC LIMIT 1", kind, opts.cardId);
+  if (opts.single && opts.videoId) {
+    const cur = get<JobRow>("SELECT * FROM jobs WHERE kind = ? AND video_id = ? AND status IN ('queued', 'waiting', 'running') ORDER BY created_at DESC LIMIT 1", kind, opts.videoId);
     if (cur) return toJob(cur);
   }
   const id = newId();
-  run('INSERT INTO jobs (id, kind, card_id, status, input, created_at) VALUES (?, ?, ?, ?, ?, ?)', id, kind, opts.cardId ?? null, 'queued', JSON.stringify(opts.input ?? {}), now());
-  emit('job', id, opts.cardId ?? undefined);
-  if (opts.cardId) emit('card', opts.cardId, opts.cardId);
+  run('INSERT INTO jobs (id, kind, video_id, status, input, created_at) VALUES (?, ?, ?, ?, ?, ?)', id, kind, opts.videoId ?? null, 'queued', JSON.stringify(opts.input ?? {}), now());
+  emit('job', id, opts.videoId ?? undefined);
+  if (opts.videoId) emit('video', opts.videoId, opts.videoId);
   queueMicrotask(() => wake());
   return getJob(id);
 }
@@ -52,12 +52,12 @@ export function jobState(id: string): Record<string, unknown> {
   return parseJson<Record<string, unknown>>(get<{ state: string }>('SELECT state FROM jobs WHERE id = ?', id)?.state, {});
 }
 
-export function listJobs(opts: { cardId?: string; active?: boolean; limit?: number } = {}): Job[] {
+export function listJobs(opts: { videoId?: string; active?: boolean; limit?: number } = {}): Job[] {
   const where: string[] = [];
   const params: (string | number)[] = [];
-  if (opts.cardId) {
-    where.push('card_id = ?');
-    params.push(opts.cardId);
+  if (opts.videoId) {
+    where.push('video_id = ?');
+    params.push(opts.videoId);
   }
   if (opts.active) where.push("status IN ('queued', 'waiting', 'running')");
   params.push(opts.limit ?? 50);
@@ -68,7 +68,10 @@ export function listJobs(opts: { cardId?: string; active?: boolean; limit?: numb
 export function claimNext(kinds: readonly JobKind[]): Job | null {
   if (!kinds.length) return null;
   const r = get<JobRow>(
-    `SELECT * FROM jobs WHERE status IN ('queued', 'waiting') AND run_after <= ? AND kind IN (${kinds.map(() => '?').join(',')}) ORDER BY run_after, created_at LIMIT 1`,
+    // One Claude run per video at a time (they share its session): a second message waits for the first run.
+    `SELECT * FROM jobs WHERE status IN ('queued', 'waiting') AND run_after <= ? AND kind IN (${kinds.map(() => '?').join(',')})
+       AND (kind != 'agent' OR video_id IS NULL OR NOT EXISTS (SELECT 1 FROM jobs r WHERE r.video_id = jobs.video_id AND r.kind = 'agent' AND r.status = 'running'))
+     ORDER BY run_after, created_at LIMIT 1`,
     now(),
     ...kinds,
   );
@@ -78,9 +81,9 @@ export function claimNext(kinds: readonly JobKind[]): Job | null {
   return getJob(r.id);
 }
 
-function touch(r: { id: string; card_id: string | null }) {
-  emit('job', r.id, r.card_id ?? undefined);
-  if (r.card_id) emit('card', r.card_id, r.card_id);
+function touch(r: { id: string; video_id: string | null }) {
+  emit('job', r.id, r.video_id ?? undefined);
+  if (r.video_id) emit('video', r.video_id, r.video_id);
 }
 
 export function setProgress(id: string, progress: number, step?: string) {

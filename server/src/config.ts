@@ -16,13 +16,11 @@ export const config = {
   repoRoot,
   dataDir,
   dbFile: join(dataDir, 'studio.sqlite'),
-  /** What I give a card: <mediaDir>/<cardId>/<inputId>.<ext>. */
-  mediaDir: join(dataDir, 'media'),
-  /** Each step's output, by card and by what went in, so a re-run skips what's done. */
-  workDir: join(dataDir, 'work'),
-  /** One HyperFrames project (or slide set) per version. */
-  projectsDir: join(dataDir, 'projects'),
-  rendersDir: join(dataDir, 'renders'),
+  /**
+   * The studio: one folder per brand, one per video inside it (files/, work/, renders/, project.md). Claude Code works
+   * in a video's folder and loads ~/studio/CLAUDE.md and the brand's CLAUDE.md by itself.
+   */
+  studioDir: resolve(process.env.CS_STUDIO_DIR || join(home, 'studio')),
   uploadsDir: join(dataDir, 'uploads'),
   /** Programs and models the engine installs for itself: Python envs, Chrome's headless shell, weights. */
   toolsDir: join(dataDir, 'tools'),
@@ -33,7 +31,7 @@ export const config = {
   keysFile: process.env.CS_KEYS_FILE || join(home, '.config/content-studio/keys.env'),
 };
 
-for (const dir of [config.dataDir, config.mediaDir, config.workDir, config.projectsDir, config.rendersDir, config.uploadsDir, config.toolsDir, config.claudeDir]) {
+for (const dir of [config.dataDir, config.studioDir, config.uploadsDir, config.toolsDir, config.claudeDir]) {
   mkdirSync(dir, { recursive: true });
 }
 

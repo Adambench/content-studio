@@ -1,93 +1,61 @@
 // Types both sides use. Plain data only: the server and the CLI run these files with Node's type stripping, so no
 // enums, namespaces or other syntax that needs compiling.
 
-export const STAGES = ['idea', 'script', 'needs_me', 'making', 'review', 'ready', 'posted', 'trash'] as const;
-export type Stage = (typeof STAGES)[number];
-
-export const STAGE_LABEL: Record<Stage, string> = {
-  idea: 'Ideas',
-  script: 'Script',
-  needs_me: 'Needs me',
-  making: 'Making',
-  review: 'Review',
-  ready: 'Ready',
-  posted: 'Posted',
-  trash: 'Trash',
-};
-
-/** The board's columns, left to right. Trash is reached from a card, not shown as a column. */
-export const BOARD_STAGES: Stage[] = ['idea', 'script', 'needs_me', 'making', 'review', 'ready', 'posted'];
-
-export type Level = 'off' | 'light' | 'full';
-export type CaptionStyle = 'two-words' | 'line' | 'word' | 'off';
-
-export type BrandColor = { name: string; hex: string };
-
-/** A page's defaults. Every card can do otherwise: these are where Claude starts, not limits. */
-export type PageSettings = {
-  niche: string;
-  voice: string;
-  style: string;
-  colors: BrandColor[];
-  fonts: { display: string; body: string; arabic: string };
-  logoInputId: string | null;
-  captions: CaptionStyle;
-  look: string;
-  sfx: Level;
-  ambience: Level;
-  autoMake: boolean;
-};
-
-export const DEFAULT_PAGE_SETTINGS: PageSettings = {
-  niche: '',
-  voice: '',
-  style: '',
-  colors: [],
-  fonts: { display: '', body: '', arabic: '' },
-  logoInputId: null,
-  captions: 'two-words',
-  look: 'natural',
-  sfx: 'off',
-  ambience: 'off',
-  autoMake: false,
-};
-
-export type Page = {
+export type Brand = {
   id: string;
+  slug: string;
   name: string;
   color: string;
   position: number;
-  settings: PageSettings;
   createdAt: number;
   updatedAt: number;
 };
 
-export type DocLabels = { script: string; notes: string };
-export const DEFAULT_LABELS: DocLabels = { script: 'Script', notes: 'Notes' };
+/** What a video is meant to be. A hint for Claude, never a limit: "auto" lets it choose. */
+export const KINDS = ['auto', 'talking-head', 'voiceover', 'carousel', 'ugc', 'explainer', 'graded'] as const;
+export type Kind = (typeof KINDS)[number];
+export const KIND_LABEL: Record<Kind, string> = {
+  auto: 'Auto',
+  'talking-head': 'Talking head',
+  voiceover: 'Voiceover',
+  carousel: 'Carousel',
+  ugc: 'UGC',
+  explainer: 'Explainer',
+  graded: 'Graded shots',
+};
 
-/** What the board shows about a card without opening it. */
-export type CardSummary = {
+/** Never set by hand: Making while Claude works or files upload, Ready once approved, Posted once I say so. */
+export type VideoStatus = 'turn' | 'making' | 'ready' | 'posted';
+
+export type VersionKind = 'video' | 'carousel';
+
+export type VideoSummary = {
   id: string;
-  pageId: string;
+  brandId: string;
+  slug: string;
   title: string;
-  stage: Stage;
-  position: number;
-  recipe: string;
-  inputs: number;
-  versions: number;
-  openComments: number;
-  latestRender: { id: string; status: RenderStatus; duration: number | null; poster: string | null } | null;
-  job: { id: string; kind: JobKind; status: JobStatus; step: string | null; progress: number } | null;
-  stageAt: number;
+  kind: Kind;
+  status: VideoStatus;
+  /** One line under the title: what's waiting for me, or what Claude is doing. */
+  reason: string;
+  /** Something new since I last opened it (a version, a question, an answer). */
+  unseen: boolean;
+  latest: { n: number; kind: VersionKind; duration: number | null; slides: number } | null;
+  openNotes: number;
+  job: { id: string; status: JobStatus; step: string | null; progress: number } | null;
+  uploading: number;
+  approvedN: number | null;
+  postedAt: number | null;
+  createdAt: number;
   updatedAt: number;
 };
 
-export type Card = CardSummary & {
-  script: string;
-  notes: string;
-  labels: DocLabels;
+export type Video = VideoSummary & {
   caption: string;
-  createdAt: number;
+  makeAtInputs: number | null;
+  sessionId: string | null;
+  /** Its folder on ai-server, for the terminal. */
+  folder: string;
 };
 
 export type InputKind = 'video' | 'audio' | 'image' | 'doc' | 'other';
@@ -107,7 +75,7 @@ export type MediaMeta = {
 
 export type Input = {
   id: string;
-  cardId: string;
+  videoId: string;
   kind: InputKind;
   role: InputRole;
   name: string;
@@ -118,75 +86,53 @@ export type Input = {
   createdAt: number;
 };
 
-export type Author = 'claude' | 'you';
-export type VersionKind = 'video' | 'carousel';
-
 export type Version = {
   id: string;
-  cardId: string;
+  videoId: string;
   n: number;
-  author: Author;
   kind: VersionKind;
-  recipe: string;
   note: string;
+  duration: number | null;
+  width: number | null;
+  height: number | null;
   slides: number;
   createdAt: number;
 };
 
-export type RenderStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+export type NoteStatus = 'open' | 'sent' | 'fixed';
 
-export type Render = {
+export type Note = {
   id: string;
-  cardId: string;
-  versionId: string;
-  n: number;
-  status: RenderStatus;
-  duration: number | null;
-  width: number | null;
-  height: number | null;
-  error: string | null;
-  createdAt: number;
-  finishedAt: number | null;
-};
-
-export type CommentStatus = 'open' | 'fixed' | 'closed';
-
-export type Comment = {
-  id: string;
-  cardId: string;
-  renderId: string | null;
-  versionId: string | null;
+  videoId: string;
+  versionN: number;
   at: number | null;
-  end: number | null;
   slide: number | null;
   text: string;
-  status: CommentStatus;
+  status: NoteStatus;
+  fixedIn: number | null;
   reply: string | null;
-  ruleId: string | null;
   createdAt: number;
   resolvedAt: number | null;
 };
 
-export type RuleSource = 'halal' | 'base' | 'lesson' | 'market' | 'style';
-export type RuleStatus = 'on' | 'off' | 'suggested';
+/**
+ * you: my message · claude: its words · step: what it says it's doing (progress) · tool: a command or file it used
+ * (shown on request) · question: options to pick · version: a version saved · lesson: a rule learned from a note ·
+ * sys: a fact (approved, posted) · error: a run that stopped.
+ */
+export type ThreadKind = 'you' | 'claude' | 'step' | 'tool' | 'question' | 'version' | 'lesson' | 'sys' | 'error';
 
-export type Rule = {
+export type ThreadItem = {
   id: string;
-  pageId: string | null;
-  format: string | null;
-  source: RuleSource;
-  topic: string;
-  title: string;
-  body: string;
-  check: string | null;
-  status: RuleStatus;
-  locked: boolean;
-  taught: number;
+  videoId: string;
+  jobId: string | null;
+  kind: ThreadKind;
+  text: string;
+  data: Record<string, unknown>;
   createdAt: number;
-  updatedAt: number;
 };
 
-export const JOB_KINDS = ['make', 'fix', 'write', 'hooks', 'look', 'test-render'] as const;
+export const JOB_KINDS = ['agent', 'look', 'test-render'] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 export type JobStatus = 'queued' | 'waiting' | 'running' | 'done' | 'failed' | 'cancelled';
 
@@ -195,7 +141,7 @@ export type JobLine = { at: number; text: string };
 export type Job = {
   id: string;
   kind: JobKind;
-  cardId: string | null;
+  videoId: string | null;
   status: JobStatus;
   step: string | null;
   progress: number;
@@ -206,8 +152,29 @@ export type Job = {
   finishedAt: number | null;
 };
 
-export type Entity = 'page' | 'card' | 'input' | 'version' | 'render' | 'comment' | 'rule' | 'job' | 'system';
-export type LiveEvent = { entity: Entity; id: string; cardId?: string };
+/** Everything a video's page shows, in one request. */
+export type VideoDetail = {
+  video: Video;
+  inputs: Input[];
+  versions: Version[];
+  notes: Note[];
+  thread: ThreadItem[];
+  job: Job | null;
+};
+
+export type Entity = 'brand' | 'video' | 'thread' | 'input' | 'version' | 'note' | 'job' | 'brain' | 'system';
+export type LiveEvent = { entity: Entity; id: string; videoId?: string };
+
+export type Lesson = { text: string; on: boolean; line: number };
+
+/** What Claude follows: plain files on ai-server, shown and edited in Brain. */
+export type Brain = {
+  halal: string[];
+  lessons: Lesson[];
+  brands: { brandId: string; name: string; color: string; file: string; text: string; lessons: Lesson[] }[];
+  market: string;
+  skills: { name: string; description: string }[];
+};
 
 export type SystemInfo = {
   version: string;
@@ -215,19 +182,6 @@ export type SystemInfo = {
   gpu: string | null;
   tools: { name: string; ok: boolean; detail: string }[];
   claude: { loggedIn: boolean; detail: string };
+  studioDir: string;
+  diskFree: number | null;
 };
-
-export type Hook = { line: string; why: string };
-
-/** Everything a card's page shows, in one request. */
-export type CardDetail = {
-  card: Card;
-  inputs: Input[];
-  versions: Version[];
-  renders: Render[];
-  comments: Comment[];
-  jobs: Job[];
-  hooks: Hook[] | null;
-};
-
-export type Draft = { id: string; author: string; script: string; notes: string; note: string; createdAt: number };

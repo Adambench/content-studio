@@ -1,8 +1,9 @@
-// What I give a card (takes, my voice, screenshots, products, footage), and the uploads that bring them.
+// What I give a video (takes, my voice, screenshots, products, footage), in its files/ folder, and the uploads
+// that bring them. A file keeps its own name there (made unique), so Claude and the terminal see real names.
 
 import { createWriteStream, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { rm, stat } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { basename, extname, join } from 'node:path';
 import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { z } from 'zod';
@@ -11,17 +12,16 @@ import { config } from '../config.ts';
 import { all, get, parseJson, run, tx } from '../db/db.ts';
 import { enqueue } from '../jobs/queue.ts';
 import { between, emit, HttpError, newId, notFound, now } from '../lib/util.ts';
-import { getCard } from './board.ts';
+import { getVideo, videoDir } from './videos.ts';
 
 type InputRow = {
   id: string;
-  card_id: string;
+  video_id: string;
   kind: InputKind;
   role: InputRole;
   name: string;
   mime: string;
   size: number;
-  file: string;
   sha: string | null;
   meta: string | null;
   position: number;
@@ -30,7 +30,7 @@ type InputRow = {
 
 const toInput = (r: InputRow): Input => ({
   id: r.id,
-  cardId: r.card_id,
+  videoId: r.video_id,
   kind: r.kind,
   role: r.role,
   name: r.name,
@@ -41,7 +41,7 @@ const toInput = (r: InputRow): Input => ({
   createdAt: r.created_at,
 });
 
-export const listInputs = (cardId: string) => all<InputRow>('SELECT * FROM inputs WHERE card_id = ? ORDER BY position', cardId).map(toInput);
+export const listInputs = (videoId: string) => all<InputRow>('SELECT * FROM inputs WHERE video_id = ? ORDER BY position', videoId).map(toInput);
 
 export function getInput(id: string): Input {
   const r = get<InputRow>('SELECT * FROM inputs WHERE id = ?', id);
@@ -49,11 +49,11 @@ export function getInput(id: string): Input {
   return toInput(r);
 }
 
-/** The file on disk. */
+/** The file on disk: <video folder>/files/<name>. */
 export function inputPath(id: string): string {
-  const r = get<{ file: string }>('SELECT file FROM inputs WHERE id = ?', id);
+  const r = get<{ video_id: string; name: string }>('SELECT video_id, name FROM inputs WHERE id = ?', id);
   if (!r) throw notFound('File');
-  return join(config.dataDir, r.file);
+  return join(videoDir(getVideo(r.video_id)), 'files', r.name);
 }
 
 export function kindOf(mime: string, name: string): InputKind {
@@ -68,83 +68,84 @@ export function kindOf(mime: string, name: string): InputKind {
   return 'other';
 }
 
-/** What a file most likely is for, from the card's recipe; Claude reads it as a hint, and I can change it. */
-export function defaultRole(recipe: string, kind: InputKind): InputRole {
+/** What a file most likely is for; Claude reads it as a hint and may say otherwise. */
+export function defaultRole(kind: InputKind): InputRole {
   if (kind === 'audio') return 'voice';
-  if (kind === 'video') return ['voiceover', 'graded', 'explainer'].includes(recipe) ? 'broll' : 'take';
-  if (kind === 'image') return ['carousel', 'ugc'].includes(recipe) ? 'product' : 'proof';
+  if (kind === 'video') return 'take';
+  if (kind === 'image') return 'proof';
   return 'reference';
 }
 
 const roleSchema = z.enum(['take', 'voice', 'proof', 'product', 'broll', 'logo', 'reference']).nullable();
 
 function cleanName(name: string) {
-  return name.replace(/[/\\\0]/g, '_').slice(0, 200) || 'file';
+  return basename(name).replace(/[\\/\0]/g, '_').replace(/^\.+/, '').slice(0, 160) || 'file';
 }
 
-/** Record a file that's already in place under the card's media folder, then look at it in the background. */
-function addInput(cardId: string, id: string, file: string, name: string, mime: string, role: InputRole): Input {
-  const card = getCard(cardId);
+/** A free name in the video's files/ folder: take.mp4, then take-2.mp4… */
+function freeName(videoId: string, name: string): string {
+  const dir = join(videoDir(getVideo(videoId)), 'files');
+  mkdirSync(dir, { recursive: true });
+  const clean = cleanName(name);
+  const ext = extname(clean);
+  const stem = clean.slice(0, clean.length - ext.length) || 'file';
+  let out = clean;
+  for (let i = 2; existsSync(join(dir, out)) || get('SELECT 1 FROM inputs WHERE video_id = ? AND name = ?', videoId, out); i++) out = `${stem}-${i}${ext}`;
+  return out;
+}
+
+/** Record a file that's already in place in the video's files/ folder, then look at it in the background. */
+function addInput(videoId: string, id: string, name: string, mime: string, role: InputRole): Input {
   const kind = kindOf(mime, name);
-  const size = statSync(join(config.dataDir, file)).size;
-  const last = get<{ p: number | null }>('SELECT MAX(position) AS p FROM inputs WHERE card_id = ?', cardId)?.p ?? null;
+  const size = statSync(join(videoDir(getVideo(videoId)), 'files', name)).size;
+  const last = get<{ p: number | null }>('SELECT MAX(position) AS p FROM inputs WHERE video_id = ?', videoId)?.p ?? null;
   run(
-    'INSERT INTO inputs (id, card_id, kind, role, name, mime, size, file, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO inputs (id, video_id, kind, role, name, mime, size, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     id,
-    cardId,
+    videoId,
     kind,
-    role ?? defaultRole(card.recipe, kind),
-    cleanName(name),
+    role ?? defaultRole(kind),
+    name,
     mime || 'application/octet-stream',
     size,
-    file,
     between(last, null),
     now(),
   );
-  run('UPDATE cards SET updated_at = ? WHERE id = ?', now(), cardId);
-  if (kind === 'video' || kind === 'audio' || kind === 'image') enqueue('look', { cardId, input: { inputId: id } });
-  emit('input', id, cardId);
-  emit('card', cardId, cardId);
+  run('UPDATE videos SET updated_at = ? WHERE id = ?', now(), videoId);
+  if (kind === 'video' || kind === 'audio' || kind === 'image') enqueue('look', { videoId, input: { inputId: id } });
+  emit('input', id, videoId);
+  emit('video', videoId, videoId);
+  for (const l of addedListeners) l(videoId);
   return getInput(id);
 }
 
-function mediaFile(cardId: string, id: string, name: string) {
-  const ext = extname(name).toLowerCase().replace(/[^.a-z0-9]/g, '').slice(0, 8);
-  mkdirSync(join(config.mediaDir, cardId), { recursive: true });
-  return join('media', cardId, `${id}${ext}`);
-}
+/** Who wants to know a file landed ("Add & make" starts Claude once they're all in). */
+const addedListeners = new Set<(videoId: string) => void>();
+export const onInputAdded = (fn: (videoId: string) => void) => addedListeners.add(fn);
 
 /** One request with the whole file as its body (the laptop's drop, the CLI). */
-export async function saveStream(cardId: string, body: Readable, name: string, mime: string, role: InputRole): Promise<Input> {
-  getCard(cardId);
+export async function saveStream(videoId: string, body: Readable, name: string, mime: string, role: InputRole): Promise<Input> {
+  getVideo(videoId);
   const id = newId();
-  const file = mediaFile(cardId, id, name);
-  const abs = join(config.dataDir, file);
+  const file = freeName(videoId, name);
+  const abs = join(videoDir(getVideo(videoId)), 'files', file);
   try {
     await pipeline(body, createWriteStream(abs));
   } catch (err) {
     await rm(abs, { force: true });
     throw err;
   }
-  return addInput(cardId, id, file, name, mime, role);
+  return addInput(videoId, id, file, mime, role);
 }
 
-/** A file the engine made or found (stock, a cut-out) kept as one of the card's inputs. */
-export function adoptFile(cardId: string, path: string, name: string, mime: string, role: InputRole): Input {
-  const id = newId();
-  const file = mediaFile(cardId, id, name);
-  renameSync(path, join(config.dataDir, file));
-  return addInput(cardId, id, file, name, mime, role);
-}
-
-export const inputPatch = z.object({ role: roleSchema.optional(), name: z.string().trim().min(1).max(200).optional(), position: z.number().optional() });
+export const inputPatch = z.object({ role: roleSchema.optional(), position: z.number().optional() });
 
 export function updateInput(id: string, input: unknown): Input {
   const patch = inputPatch.parse(input);
   const cur = getInput(id);
-  run('UPDATE inputs SET role = ?, name = ?, position = ? WHERE id = ?', patch.role === undefined ? cur.role : patch.role, patch.name ?? cur.name, patch.position ?? cur.position, id);
-  emit('input', id, cur.cardId);
-  emit('card', cur.cardId, cur.cardId);
+  run('UPDATE inputs SET role = ?, position = ? WHERE id = ?', patch.role === undefined ? cur.role : patch.role, patch.position ?? cur.position, id);
+  emit('input', id, cur.videoId);
+  emit('video', cur.videoId, cur.videoId);
   return getInput(id);
 }
 
@@ -153,23 +154,24 @@ export async function deleteInput(id: string) {
   const cur = getInput(id);
   run('DELETE FROM inputs WHERE id = ?', id);
   await rm(path, { force: true });
-  emit('input', id, cur.cardId);
-  emit('card', cur.cardId, cur.cardId);
+  emit('input', id, cur.videoId);
+  emit('video', cur.videoId, cur.videoId);
 }
 
 export function setInputMeta(id: string, meta: MediaMeta, sha: string | null) {
   const cur = getInput(id);
   run('UPDATE inputs SET meta = ?, sha = COALESCE(?, sha) WHERE id = ?', JSON.stringify(meta), sha, id);
-  emit('input', id, cur.cardId);
+  emit('input', id, cur.videoId);
 }
 
 // ---------------------------------------------------------------- resumable uploads (the phone)
 
-type UploadRow = { id: string; card_id: string; role: InputRole; name: string; mime: string; size: number; received: number; file: string; input_id: string | null; created_at: number; updated_at: number };
+type UploadRow = { id: string; video_id: string; role: InputRole; name: string; mime: string; size: number; received: number; file: string; input_id: string | null; created_at: number; updated_at: number };
 
 export const uploadStart = z.object({
+  videoId: z.string().optional(),
+  // The Android app's upload queue sends older names.
   cardId: z.string().optional(),
-  // The Android app before the new screens sends the old names.
   pieceId: z.string().optional(),
   role: roleSchema.optional(),
   assetType: z.string().optional().nullable(),
@@ -180,13 +182,14 @@ export const uploadStart = z.object({
 
 export function startUpload(input: unknown): { id: string; offset: number } {
   const u = uploadStart.parse(input);
-  const cardId = u.cardId ?? u.pieceId;
-  if (!cardId) throw new HttpError(400, 'Which card is it for?');
-  getCard(cardId);
+  const videoId = u.videoId ?? u.cardId ?? u.pieceId;
+  if (!videoId) throw new HttpError(400, 'Which video is it for?');
+  getVideo(videoId);
   const id = newId();
   const file = join(config.uploadsDir, `${id}.part`);
   writeFileSync(file, '');
-  run('INSERT INTO uploads (id, card_id, role, name, mime, size, received, file, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)', id, cardId, u.role ?? null, u.name, u.mime, u.size, file, now(), now());
+  run('INSERT INTO uploads (id, video_id, role, name, mime, size, received, file, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)', id, videoId, u.role ?? null, u.name, u.mime, u.size, file, now(), now());
+  emit('video', videoId, videoId);
   return { id, offset: 0 };
 }
 
@@ -213,12 +216,13 @@ export async function appendChunk(id: string, offset: number, body: Readable): P
     const received = (await stat(r.file)).size;
     if (received > r.size) throw new HttpError(400, 'More bytes than the upload said');
     run('UPDATE uploads SET received = ?, updated_at = ? WHERE id = ?', received, now(), id);
+    emit('video', r.video_id, r.video_id);
     if (received < r.size) return { offset: received, mediaId: null };
     const input = tx(() => {
       const inputId = newId();
-      const file = mediaFile(r.card_id, inputId, r.name);
-      renameSync(r.file, join(config.dataDir, file));
-      const made = addInput(r.card_id, inputId, file, r.name, r.mime, r.role);
+      const name = freeName(r.video_id, r.name);
+      renameSync(r.file, join(videoDir(getVideo(r.video_id)), 'files', name));
+      const made = addInput(r.video_id, inputId, name, r.mime, r.role);
       run('UPDATE uploads SET input_id = ? WHERE id = ?', made.id, id);
       return made;
     });
