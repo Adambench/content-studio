@@ -14,6 +14,16 @@ BIN="$HOME/.local/bin"
 mkdir -p "$BIN"
 export PATH="$BIN:$PATH"
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
+# Downloads go to a file first, resumed and retried: ai-server's line sometimes drops a long transfer.
+fetch() {
+  local url=$1 out=$2 i
+  for i in 1 2 3 4 5 6 7 8; do
+    curl -fL -sS --connect-timeout 20 -C - -o "$out" "$url" && return 0
+    echo "  download broke, resuming ($i)…"
+    sleep 3
+  done
+  return 1
+}
 
 say "Machine"
 echo "$(hostname) · $(. /etc/os-release && echo "$PRETTY_NAME") · $(nproc) threads · $(free -g | awk '/Mem:/ {print $2}') GB"
@@ -25,17 +35,22 @@ fi
 
 say "Node 24"
 if ! command -v node >/dev/null || [[ "$(node -p 'process.versions.node.split(".")[0]')" -lt 24 ]]; then
-  version=$(curl -fsSL https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt | grep -o 'node-v24[^ ]*-linux-x64.tar.xz' | head -1)
+  tmp=$(mktemp -d)
+  fetch https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt "$tmp/sums"
+  version=$(grep -m1 -o 'node-v24[^ ]*-linux-x64.tar.xz' "$tmp/sums")
+  fetch "https://nodejs.org/dist/latest-v24.x/$version" "$tmp/node.tar.xz"
   mkdir -p "$HOME/.local/node"
-  curl -fsSL "https://nodejs.org/dist/latest-v24.x/$version" | tar -xJ -C "$HOME/.local/node" --strip-components=1
+  tar -xJf "$tmp/node.tar.xz" -C "$HOME/.local/node" --strip-components=1
   ln -sf "$HOME/.local/node/bin/node" "$HOME/.local/node/bin/npm" "$HOME/.local/node/bin/npx" "$BIN/"
+  rm -r "$tmp"
 fi
 node -v
 
 say "FFmpeg (static, with NVENC and libplacebo)"
 if ! command -v ffmpeg >/dev/null || ! ffmpeg -hide_banner -encoders 2>/dev/null | grep -q h264_nvenc; then
   tmp=$(mktemp -d)
-  curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz | tar -xJ -C "$tmp" --strip-components=1
+  fetch https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz "$tmp/ffmpeg.tar.xz"
+  tar -xJf "$tmp/ffmpeg.tar.xz" -C "$tmp" --strip-components=1
   install -m 755 "$tmp/bin/ffmpeg" "$tmp/bin/ffprobe" "$BIN/"
   rm -r "$tmp"
 fi
@@ -44,12 +59,17 @@ ffmpeg -hide_banner -encoders 2>/dev/null | grep -E 'h264_nvenc|hevc_nvenc' | aw
 ffmpeg -hide_banner -filters 2>/dev/null | grep -qE ' libplacebo ' && echo "  filter libplacebo" || true
 
 say "uv (Python for the engine's tools)"
-command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh
+if ! command -v uv >/dev/null; then
+  tmp=$(mktemp -d)
+  fetch https://astral.sh/uv/install.sh "$tmp/uv.sh"
+  for i in 1 2 3; do env UV_NO_MODIFY_PATH=1 sh "$tmp/uv.sh" && break; sleep 3; done
+  rm -r "$tmp"
+fi
 uv --version
 
 say "The app"
 cd "$REPO"
-PUPPETEER_SKIP_DOWNLOAD=1 npm ci --no-audit --no-fund
+PUPPETEER_SKIP_DOWNLOAD=1 npm ci --no-audit --no-fund --fetch-retries=6 --fetch-retry-mintimeout=5000
 npm run build -w web
 
 say "Service"

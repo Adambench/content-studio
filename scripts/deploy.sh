@@ -17,7 +17,7 @@ ssh "$HOST" "bash -lc 'set -e
   git checkout -q $BRANCH 2>/dev/null || git checkout -q -b $BRANCH origin/$BRANCH
   git reset -q --hard origin/$BRANCH
   if [ ! -f ~/.config/systemd/user/content-studio.service ]; then bash scripts/setup-server.sh; exit 0; fi
-  PUPPETEER_SKIP_DOWNLOAD=1 npm ci --no-audit --no-fund --loglevel=error
+  PUPPETEER_SKIP_DOWNLOAD=1 npm ci --no-audit --no-fund --loglevel=error --fetch-retries=6 --fetch-retry-mintimeout=5000
   npm run build -w web >/dev/null
   systemctl --user restart content-studio
   sleep 2
