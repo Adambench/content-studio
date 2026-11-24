@@ -216,13 +216,27 @@ P1 works, then `next` becomes `main`.
 - Done when the phone sends a take to a card on ai-server and the laptop plays a test render made there
 
 **N1 — The app, rebuilt (2026-11-24, from *The app* above)**
-- [ ] Server: brands and videos (folders in `~/studio`), the thread, notes, versions; Claude Code per video
-  (Agent SDK session, guard rails, studio tools); messages / Fix / answers start it; Stop
-- [ ] Web: Inbox, Studio (player, timeline with notes, thread, script, files), Brain, Server, Ctrl K; phone layout
-- [ ] Terminal: per video (`claude --resume`) and a plain shell, through the app's sign-in
-- [ ] ai-server: skills linked into `~/.claude/skills`, `~/studio/CLAUDE.md` written by the app
-- [ ] Android: thin shell on the live app (share from the gallery → a video, "Add & make", background uploads,
-  save to the gallery, notifications); v1.0.0 after my go (it replaces the old app)
+- [x] Server: brands and videos (folders in `~/studio`), the thread, notes, versions; Claude Code per video
+  (Agent SDK session resumed each run, guard rails, studio tools: progress, ask, save_version, render on the GPU,
+  notes_fixed, lesson, set_title, set_caption); messages / Fix / answers / go / "Add & make" start it; Stop.
+  Tried on ai-server 2026-11-24: "make a 3 s TEST clip" → Claude read the HyperFrames skill, built the project,
+  rendered with NVENC, checked frames, renamed it, saved v1, in about 60 s
+- [x] Web: Inbox (one box, brand and kind, files; Your turn / Making / Ready to post / Posted), video page (player,
+  timeline with note pins, thread with Claude's work folded, one box for notes and messages with / and @, Fix,
+  versions and Compare, Approve → Post sheet), Brain (lessons on/off, halal, each brand's CLAUDE.md, skills),
+  Server, Ctrl K; phone layout (video full screen, Note / Thread / Version / Approve, thread as a sheet). Checked
+  in headless Chrome on ai-server at 1440 × 900 and 412 × 915, no console errors
+- [x] Terminal: per video (`claude --resume` of the app's session, or a shell) and a plain shell in `~/studio`, over
+  the app's sign-in (xterm.js, node-pty)
+- [x] ai-server: skills linked into `~/.claude/skills` on deploy (5 editing skills added from the laptop:
+  cut-mistakes, cut-silences, edit-video, hyperframes-video-beats, video-perception); `~/studio/CLAUDE.md` written
+  on start; HyperFrames gets a private cache (it refuses Mint's group-writable `~/.cache`) and its CLI at the
+  renderer's version
+- [ ] Android: thin shell on the live app built (`server.url`, offline page; share → a video, "Add & make",
+  background uploads, save to the gallery). Release v1.0.0 waits for my go (it replaces the old app). Notifications
+  (ready / Claude asks) still to do
+- Later, not in N1: speaking instead of typing (Whisper on ai-server, with P1), Claude's ideas for today in the
+  inbox (P2), notes on a stretch of time
 - Done when I can make a video from the inbox, leave notes, Fix, Approve and post, on the laptop and the phone
 
 **P1 — Daily episode, one press**

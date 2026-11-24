@@ -195,7 +195,7 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
           <Timeline version={version} notes={detail.notes} compact />
         </div>
         <Sheet open={rail} onOpenChange={setRail}>
-          <SheetContent side="bottom" className="flex h-[78%] flex-col gap-0 rounded-t-2xl p-0" aria-describedby={undefined}>
+          <SheetContent side="bottom" className="flex flex-col gap-0 rounded-t-2xl p-0 data-[side=bottom]:h-[78%]" aria-describedby={undefined}>
             <SheetTitle className="sr-only">Thread</SheetTitle>
             <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-muted" />
             {tabs}

@@ -7,10 +7,10 @@ import { defineConfig } from 'vite';
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
 const server = process.env.CS_DEV_SERVER || 'http://127.0.0.1:8787';
 
-// `--mode app` builds the UI for the Android app (dist-app, bundled in the APK): it talks to ai-server by its address.
-export default defineConfig(({ mode }) => ({
+// One build: ai-server serves it to the browser and to the Android shell alike.
+export default defineConfig(() => ({
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
-  build: { outDir: mode === 'app' ? 'dist-app' : 'dist', chunkSizeWarningLimit: 1500 },
+  build: { outDir: 'dist', chunkSizeWarningLimit: 1500 },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

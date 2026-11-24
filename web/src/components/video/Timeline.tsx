@@ -41,7 +41,7 @@ export function Timeline({ version, notes, compact }: { version: Version | null;
       aria-valuemax={Math.round(duration)}
       aria-valuenow={Math.round(t)}
       tabIndex={-1}
-      className={cn('relative w-full cursor-pointer touch-none rounded-lg select-none', compact ? 'h-7 bg-black/50 backdrop-blur' : 'h-10 border bg-card')}
+      className={cn('relative w-full cursor-pointer touch-none rounded-lg select-none', compact ? 'h-7 border border-white/15 bg-white/10 backdrop-blur' : 'h-10 border bg-card')}
       onPointerDown={(e) => {
         if ((e.target as HTMLElement).closest('[data-pin]')) return;
         p.pause();

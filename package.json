@@ -16,7 +16,7 @@
     "typecheck": "npm run typecheck -w server && npm run typecheck -w web && npm run typecheck -w cli && npm run typecheck -w mobile",
     "test": "npm test -w server",
     "deploy": "bash scripts/deploy.sh",
-    "android": "npm run build:app -w web && npm run sync -w mobile",
+    "android": "npm run sync -w mobile",
     "cs": "node cli/cs.ts"
   },
   "devDependencies": {

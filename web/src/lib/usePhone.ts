@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { isApp } from './api';
+import { isNative } from './native';
 
 const query = '(max-width: 767px)';
 const subscribe = (cb: () => void) => {
@@ -8,8 +8,8 @@ const subscribe = (cb: () => void) => {
   return () => m.removeEventListener('change', cb);
 };
 
-/** The phone layout: the Android app, or a narrow window. */
+/** The phone layout: the Android shell, or a narrow window. */
 export function usePhone(): boolean {
   const narrow = useSyncExternalStore(subscribe, () => window.matchMedia(query).matches);
-  return isApp || narrow;
+  return isNative || narrow;
 }

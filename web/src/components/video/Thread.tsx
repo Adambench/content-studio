@@ -37,12 +37,13 @@ function rows(detail: VideoDetail): Row[] {
 
 export function Thread({ detail }: { detail: VideoDetail }) {
   const list = rows(detail);
-  const end = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const count = detail.thread.length + detail.notes.length;
   const atEnd = useRef(true);
+  // Follow the newest item, scrolling only the thread itself (not the sheet or page around it).
   useLayoutEffect(() => {
-    if (atEnd.current) end.current?.scrollIntoView({ block: 'end' });
+    const el = box.current?.parentElement;
+    if (el && atEnd.current) el.scrollTop = el.scrollHeight;
   }, [count]);
   useEffect(() => {
     const el = box.current?.parentElement;
@@ -66,7 +67,6 @@ export function Thread({ detail }: { detail: VideoDetail }) {
           <Spinner className="size-3.5" /> {detail.job?.status === 'queued' ? 'Up next' : detail.job?.step || 'Claude is on it'}
         </div>
       )}
-      <div ref={end} />
     </div>
   );
 }

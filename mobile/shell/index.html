@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Content Studio</title>
+    <style>
+      html, body { height: 100%; margin: 0; background: #09090b; color: #e4e4e7; font: 15px/1.5 system-ui, sans-serif; }
+      main { height: 100%; display: grid; place-items: center; padding: 24px; box-sizing: border-box; text-align: center; }
+      p { color: #a1a1aa; max-width: 30ch; margin: 8px auto 20px; }
+      button { background: #e4e4e7; color: #09090b; border: 0; border-radius: 10px; padding: 10px 18px; font: inherit; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div>
+        <strong>ai-server can’t be reached</strong>
+        <p>Check that Tailscale is on, on this phone and on ai-server. Uploads already queued go on by themselves.</p>
+        <button onclick="location.href='https://ai-server.tail1e2ac8.ts.net:8443/'">Try again</button>
+      </div>
+    </main>
+  </body>
+</html>

@@ -51,10 +51,8 @@ jobs:
 
       - run: npm ci
 
-      - name: Build the web UI for the app
-        run: npm run build:app -w web
-
-      - name: Copy it into the Android project
+      # The app is a thin shell: the UI comes live from ai-server; only the offline page (mobile/shell) is bundled.
+      - name: Sync the Android project
         working-directory: mobile
         run: npx cap sync android
 

@@ -32,7 +32,10 @@ export const Studio = isNative ? registerPlugin<StudioPlugin>('Studio') : null;
 export async function connectNative() {
   if (!Studio) return;
   const p = await Studio.getPairing().catch(() => ({ server: null, token: null }));
-  if (p.token) setConnection({ server: '', token: p.token });
+  if (p.token && p.server === window.location.origin) setConnection({ server: '', token: p.token });
+  // The background queue needs to know where to send files. On the tailnet Tailscale says who the phone is, so a
+  // pairing code isn't needed: the token is only a placeholder then.
+  else await Studio.setPairing({ server: window.location.origin, token: p.token ?? 'tailnet' }).catch(() => undefined);
 }
 
 /** Files from the phone's gallery to a video, through the background queue. */

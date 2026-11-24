@@ -1,8 +1,6 @@
 // Talking to the server. In the browser it's the page's own origin (ai-server over Tailscale, or Vite's proxy in
 // dev); in the Android app's shell the page itself comes from ai-server too, so it's the same origin.
 
-export const isApp = import.meta.env.MODE === 'app';
-
 let server = '';
 let token: string | null = null;
 

@@ -1,35 +1,44 @@
 # CLAUDE.md
 
 Content Studio, the new app (branch `next` since 2026-11-23; it replaces `main` once a daily episode comes out of
-it): I press **Make** and a ready-to-post, production-grade video or carousel lands in Review. Claude makes every
-creative choice, mechanical tools do the rest, my comments teach lessons. PLAN.md has the decisions, parts, targets
-and phases; read only the section you need.
+it). Rebuilt 2026-11-24 (N1): an **inbox** and a **studio per video**. I say what I want (or drop takes); Claude Code
+works in the video's own folder on ai-server and saves versions; I leave notes pinned to moments, **Fix**, **Approve**,
+post. Every note teaches a lesson. PLAN.md has the decisions (*The app*), parts, targets and phases; read only the
+section you need.
 
 ## Where things run
 
 - **ai-server** (the GTX 1070 PC, Linux Mint, `bouyaka@ai-server`, on 24/7): the app (Node 24 on 127.0.0.1:8787,
-  systemd user service `content-studio`), its data (`~/.local/share/studio`), renders, and Claude (the Agent SDK's
-  own binary on my Pro login: a `claude setup-token` token in `~/.config/content-studio/keys.env`). On the tailnet by
-  Tailscale Serve: https://ai-server.tail1e2ac8.ts.net:8443. Port 443 there is Open WebUI's (Docker, with Funnel):
-  never touch it, never Funnel ours.
-- **Laptop**: Claude Code and the app in Chrome. `cs` talks to ai-server; `npm run deploy` ships code.
-- **Phone**: the Android app (`mobile/`), paired with a code from Settings → Phone.
+  systemd user service `content-studio`), the studio (`~/studio/<brand>/<video>/`: files/, work/, renders/,
+  project.md, script.md; `~/studio/CLAUDE.md` is written by the app, `lessons.md` and `<brand>/CLAUDE.md` are the
+  brain), the app's data (`~/.local/share/studio`: SQLite, uploads, tools, HyperFrames' private cache), and Claude (the
+  Agent SDK's own Claude Code binary on my Pro login: a `claude setup-token` token in
+  `~/.config/content-studio/keys.env`). Skills: the repo's `.claude/skills`, linked into `~/.claude/skills` on
+  deploy. On the tailnet by Tailscale Serve: https://ai-server.tail1e2ac8.ts.net:8443. Port 443 there is Open
+  WebUI's (Docker, with Funnel): never touch it, never Funnel ours.
+- **Laptop**: Claude Code (dev) and the app in Chrome. `cs` talks to ai-server; `npm run deploy` ships code.
+- **Phone**: the Android app, a thin shell that loads the live app from ai-server (`mobile/`): gallery share →
+  a video ("Add & make"), background uploads, saving to the gallery.
 
 ## Layout
 
 - `server/` — Fastify + `node:sqlite`, run straight from TypeScript by Node's type stripping (no build): erasable
   syntax only (no enums, namespaces or parameter properties), relative imports end in `.ts`, `import type` for types.
-  `db/` (SQL migrations, applied in name order), `services/` (board, inputs and resumable uploads, versions and
-  renders, comments, rules, devices), `jobs/` (queue, runner with lanes: one heavy job at a time, kinds),
-  `engine/` (`claude.ts`, `media.ts`, `render.ts` + `render-child.ts` = the HyperFrames producer in its own process,
-  `writing.ts` for Write and Hooks, `recipes/`, `compose/`), `http/` (`app.ts` auth, `routes.ts`).
-- `web/` — React 19 + Vite + Tailwind 4 + shadcn (`components/ui` is generated: compose, don't edit). Board, card
-  (`components/card/`: Doc, Files, Review, Versions), page settings, rules, settings. `usePhone()` for the phone
-  layout; `vite --mode app` builds the APK's UI.
+  `db/` (SQL migrations, applied in name order), `services/` (brands, videos = folders, thread, notes, inputs and
+  resumable uploads, versions, runs = what starts Claude, brain = the CLAUDE.md/lessons files, devices), `jobs/`
+  (queue, runner with lanes: Claude runs one per video, GPU turns in `engine/gpu.ts`), `engine/` (`agent.ts` =
+  Claude Code per video, `guard.ts` = its guard rails, `tools.ts` = the studio's MCP tools, `claude.ts` = login,
+  usage, one-off answers, `render.ts` + `render-child.ts` = HyperFrames, `media.ts`), `http/` (`app.ts` auth,
+  `routes.ts`, `terminal.ts` = the browser terminal over a WebSocket).
+- `web/` — React 19 + Vite + Tailwind 4 + shadcn (`components/ui` is generated: compose, don't edit). Inbox, video
+  page (`components/video/`: Stage, Timeline, Thread, Dock, Tabs, PostSheet, `player.ts` store), Brain, Server,
+  Terminal, Ctrl K palette, share sheet. `usePhone()` for the phone layout.
 - `cli/cs.ts` — the app from the terminal.
-- `shared/` — types for every side (`types.ts`, `recipes.ts`), plain data only.
-- `mobile/` — Capacitor 8 Android app: `StudioPlugin` (pairing, share inbox, background resumable uploads, downloads).
-- `scripts/` — `setup-server.sh` (ai-server), `deploy.sh`.
+- `shared/` — types for every side (`types.ts`), plain data only.
+- `mobile/` — Capacitor 8 Android shell (`server.url` = ai-server; `shell/` = the offline page): `StudioPlugin`
+  (share inbox, background resumable uploads, downloads).
+- `scripts/` — `setup-server.sh` (ai-server), `deploy.sh` (also links the skills, keeps skill edits Claude made on
+  ai-server in `~/studio/skill-changes/`).
 
 ## Rules that matter
 
@@ -41,6 +50,9 @@ and phases; read only the section you need.
   creative choices and reviews. Background work waits while 5-hour usage ≥ 80 % (`waitForUsage`); what I press and
   wait on never waits (`now: true`).
 - **Claude never approves or publishes**: Approve is my click; there is no publishing code.
+- **Claude Code per video**: full shell, no approval prompts (my yes, 2026-11-24) inside `engine/guard.ts`: never
+  sudo, Docker, Ollama, Open WebUI, systemd or the network; deletes only inside the video's folder (or /tmp, the
+  engine's tools, caches); no keys; never posts. Change the rails only with my say.
 - **Every comment I leave is a lesson**: fixing it also records the general rule (rules, source `lesson`); when the
   pipeline caused it, change that code too so no later video repeats it.
 - **Modular**: recipes are defaults, not limits; any page can use any recipe or mix them; a card's Notes steer it.
@@ -50,8 +62,8 @@ and phases; read only the section you need.
   a bearer token (media and live events: `?t=`); Funnel requests are refused (`http/app.ts`).
 - **HyperFrames**: footage goes into a project as a hard link (a symbolic link to outside the project renders black);
   GSAP is copied into each project, so a render never needs the network.
-- **UI**: dark only, few words, quiet colours, one alarm colour (`destructive`) only on what needs me. No
-  `alert`/`confirm`/`prompt`. Ask before adding a screen or a button.
+- **UI**: dark only, few words, quiet colours; blue (`you`) for what's waiting for me, `destructive` only for what
+  broke. No `alert`/`confirm`/`prompt`. Ask before adding a screen.
 - Stop processes by PID (`ss -ltnp | grep :8787`): `pkill -f` patterns match the shell running them and other repos'
   servers.
 
@@ -59,10 +71,10 @@ and phases; read only the section you need.
 
 - `npm run dev` (server on 8787 + Vite on 5173), `npm run typecheck`, `npm test`
 - `npm run deploy` — push and restart on ai-server (the first time it runs `scripts/setup-server.sh` there)
-- `npm run cs -- help`: `board`, `card`, `new`, `set`, `add`, `write`, `hooks`, `make`, `fix`, `test-render`,
-  `comments`, `jobs`, `rules`, `pair`. `CS_SERVER` points it elsewhere (e.g. a test server).
-- `npm run android` — the app's UI build + `cap sync`. APKs come from CI on a `v*` tag (bump the root
-  `package.json` version). Never generate a new signing key.
+- `npm run cs -- help`: `status`, `brands`, `videos`, `video`, `new`, `add`, `say`, `go`, `fix`, `stop`, `note`,
+  `thread`, `approve`, `posted`, `test-render`, `jobs`, `pair`. `CS_SERVER` points it elsewhere (e.g. a test server).
+- `npm run android` — `cap sync` of the shell. APKs come from CI on a `v*` tag (bump the root `package.json`
+  version). Never generate a new signing key.
 
 ## Working rules
 

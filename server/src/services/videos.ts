@@ -42,6 +42,13 @@ function row(id: string): VideoRow {
   return r;
 }
 
+/** Did Claude save version n after my last message (so that's what's waiting, not its words)? */
+function newerThanMyLast(videoId: string, n: number): boolean {
+  const mine = get<{ seq: number }>("SELECT MAX(rowid) AS seq FROM thread WHERE video_id = ? AND kind = 'you'", videoId)?.seq ?? 0;
+  const saved = get<{ seq: number }>("SELECT MAX(rowid) AS seq FROM thread WHERE video_id = ? AND kind = 'version' AND json_extract(data, '$.n') = ?", videoId, n)?.seq ?? 0;
+  return saved > mine;
+}
+
 function summarize(r: VideoRow): VideoSummary {
   const latest = get<{ id: string; n: number; kind: 'video' | 'carousel'; duration: number | null; slides: number }>('SELECT id, n, kind, duration, slides FROM versions WHERE video_id = ? ORDER BY n DESC LIMIT 1', r.id) ?? null;
   const openNotes = get<{ c: number }>("SELECT COUNT(*) AS c FROM notes WHERE video_id = ? AND status = 'open'", r.id)?.c ?? 0;
@@ -54,8 +61,8 @@ function summarize(r: VideoRow): VideoSummary {
   else if (status === 'ready') reason = `v${r.approved_n} approved`;
   else if (status === 'posted') reason = 'Posted';
   else if (said?.kind === 'question' && said.data.picked == null) reason = `Claude asks: ${said.text}`;
-  else if (said?.kind === 'version') reason = `${said.text} ready`;
   else if (said?.kind === 'error') reason = `Stopped: ${said.text}`;
+  else if (latest && newerThanMyLast(r.id, latest.n)) reason = `v${latest.n} ready`;
   else if (said?.kind === 'claude') reason = said.text.split('\n')[0]!.slice(0, 90);
   else if (latest) reason = `v${latest.n} ready`;
   else {

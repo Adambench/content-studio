@@ -5,7 +5,6 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
-    "build:app": "tsc -p tsconfig.json && vite build --mode app",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
