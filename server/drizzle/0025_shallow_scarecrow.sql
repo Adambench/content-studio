@@ -1,1 +1,0 @@
-ALTER TABLE `pieces` ADD `reviewed_media_id` text;

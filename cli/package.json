@@ -1,0 +1,13 @@
+{
+  "name": "@cs/cli",
+  "private": true,
+  "type": "module",
+  "bin": { "cs": "./cs.ts" },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}

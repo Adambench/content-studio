@@ -1,16 +1,17 @@
 {
   "compilerOptions": {
-    "target": "ES2023",
-    "lib": ["ES2023"],
-    "module": "preserve",
-    "moduleResolution": "bundler",
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": true,
-    "noUncheckedIndexedAccess": false,
-    "skipLibCheck": true,
     "noEmit": true,
-    "types": ["node"],
-    "isolatedModules": true,
-    "verbatimModuleSyntax": true
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "types": ["node"]
   },
-  "include": ["src", "scripts", "../shared", "drizzle.config.ts"]
+  "include": ["src", "../shared"]
 }

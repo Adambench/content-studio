@@ -1,1 +1,0 @@
-ALTER TABLE `renders` ADD `older` integer DEFAULT false NOT NULL;

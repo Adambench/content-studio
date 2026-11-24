@@ -1,138 +1,132 @@
-import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
-import { db, newId, now, schema } from '../db';
+// The job table: what the engine has to do, in order. The runner (runner.ts) takes jobs from here; anything can
+// queue one. Kept free of services so every module can import it.
 
-type Handler = (payload: any) => Promise<void>;
-type Registration = { handler: Handler; concurrency: number | (() => number); running: number };
+import type { Job, JobKind, JobLine, JobStatus } from '../../../shared/types.ts';
+import { all, get, parseJson, run } from '../db/db.ts';
+import { emit, newId, notFound, now } from '../lib/util.ts';
 
-const handlers = new Map<string, Registration>();
+type JobRow = { id: string; kind: JobKind; card_id: string | null; status: JobStatus; input: string; state: string; step: string | null; progress: number; log: string; error: string | null; run_after: number; created_at: number; started_at: number | null; finished_at: number | null };
 
-/**
- * A job failure that says whether trying again could help, and when. Plain errors retry with backoff. `wait` puts the
- * job back for `delayMs` without using up an attempt: it didn't fail, it can't start yet (e.g. Claude's usage is high).
- */
-export class JobError extends Error {
-  constructor(
-    message: string,
-    public opts: { retry?: boolean; delayMs?: number; wait?: boolean } = {},
-  ) {
+const toJob = (r: JobRow): Job => ({ id: r.id, kind: r.kind, cardId: r.card_id, status: r.status, step: r.step, progress: r.progress, log: parseJson<JobLine[]>(r.log, []), error: r.error, createdAt: r.created_at, startedAt: r.started_at, finishedAt: r.finished_at });
+
+/** A job asking to be tried again later (Claude's usage window, a busy machine), not a failure. */
+export class JobWait extends Error {
+  delayMs: number;
+  constructor(message: string, delayMs: number) {
     super(message);
+    this.delayMs = delayMs;
   }
 }
-let timer: NodeJS.Timeout | undefined;
 
-/** `concurrency` may be a function: how many may run now (renders: one per home PC that renders). */
-export function registerJob(type: string, handler: Handler, concurrency: number | (() => number) = 1) {
-  handlers.set(type, { handler, concurrency, running: 0 });
-}
+let wake: () => void = () => {};
+export const onEnqueue = (fn: () => void) => {
+  wake = fn;
+};
 
-/** Whether a job of this type (for this payload key, e.g. a post id, if given) is waiting or running. */
-export function hasPendingJob(type: string, key?: string, value?: string) {
-  return !!db
-    .select({ id: schema.jobs.id })
-    .from(schema.jobs)
-    .where(
-      and(
-        eq(schema.jobs.type, type),
-        inArray(schema.jobs.status, ['queued', 'running']),
-        key ? sql`json_extract(${schema.jobs.payload}, ${`$.${key}`}) = ${value}` : undefined,
-      ),
-    )
-    .get();
-}
+export type EnqueueOptions = { cardId?: string | null; input?: Record<string, unknown>; /** Don't queue a second one while one is waiting or running for this card. */ single?: boolean };
 
-export function enqueue(type: string, payload: Record<string, unknown>, opts: { delayMs?: number; maxAttempts?: number } = {}) {
+export function enqueue(kind: JobKind, opts: EnqueueOptions = {}): Job {
+  if (opts.single && opts.cardId) {
+    const cur = get<JobRow>("SELECT * FROM jobs WHERE kind = ? AND card_id = ? AND status IN ('queued', 'waiting', 'running') ORDER BY created_at DESC LIMIT 1", kind, opts.cardId);
+    if (cur) return toJob(cur);
+  }
   const id = newId();
-  db.insert(schema.jobs)
-    .values({ id, type, payload, runAt: now() + (opts.delayMs ?? 0), maxAttempts: opts.maxAttempts ?? 3 })
-    .run();
-  setImmediate(tick);
-  return id;
+  run('INSERT INTO jobs (id, kind, card_id, status, input, created_at) VALUES (?, ?, ?, ?, ?, ?)', id, kind, opts.cardId ?? null, 'queued', JSON.stringify(opts.input ?? {}), now());
+  emit('job', id, opts.cardId ?? undefined);
+  if (opts.cardId) emit('card', opts.cardId, opts.cardId);
+  queueMicrotask(() => wake());
+  return getJob(id);
 }
 
-/** Jobs of this type that haven't started: dropped, or (with `payload` merged into theirs) run at once. */
-export function cancelQueued(type: string) {
-  return db.delete(schema.jobs).where(and(eq(schema.jobs.type, type), eq(schema.jobs.status, 'queued'))).run().changes > 0;
+export function getJob(id: string): Job {
+  const r = get<JobRow>('SELECT * FROM jobs WHERE id = ?', id);
+  if (!r) throw notFound('Job');
+  return toJob(r);
 }
 
-export function runQueuedNow(type: string, payload: Record<string, unknown>) {
-  const queued = db.select().from(schema.jobs).where(and(eq(schema.jobs.type, type), eq(schema.jobs.status, 'queued'))).all();
-  for (const job of queued) db.update(schema.jobs).set({ payload: { ...(job.payload as object), ...payload }, runAt: now(), updatedAt: now() }).where(eq(schema.jobs.id, job.id)).run();
-  if (queued.length) setImmediate(tick);
-  return queued.length > 0;
+export function jobInput<T>(id: string): T {
+  return parseJson<T>(get<{ input: string }>('SELECT input FROM jobs WHERE id = ?', id)?.input, {} as T);
 }
 
-function claim(type: string) {
-  const job = db
-    .select()
-    .from(schema.jobs)
-    .where(and(eq(schema.jobs.type, type), eq(schema.jobs.status, 'queued'), lte(schema.jobs.runAt, now())))
-    .orderBy(asc(schema.jobs.runAt))
-    .limit(1)
-    .get();
-  if (!job) return undefined;
-  db.update(schema.jobs)
-    .set({ status: 'running', attempts: job.attempts + 1, updatedAt: now() })
-    .where(eq(schema.jobs.id, job.id))
-    .run();
-  return { ...job, attempts: job.attempts + 1 };
+export function jobState(id: string): Record<string, unknown> {
+  return parseJson<Record<string, unknown>>(get<{ state: string }>('SELECT state FROM jobs WHERE id = ?', id)?.state, {});
 }
 
-async function run(reg: Registration, job: NonNullable<ReturnType<typeof claim>>) {
-  reg.running++;
-  try {
-    await reg.handler(job.payload);
-    db.update(schema.jobs).set({ status: 'done', error: null, updatedAt: now() }).where(eq(schema.jobs.id, job.id)).run();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (err instanceof JobError && err.opts.wait) {
-      db.update(schema.jobs)
-        .set({ status: 'queued', attempts: job.attempts - 1, error: message.slice(0, 4000), runAt: now() + (err.opts.delayMs ?? 60_000), updatedAt: now() })
-        .where(eq(schema.jobs.id, job.id))
-        .run();
-      return;
-    }
-    const retry = job.attempts < job.maxAttempts && !(err instanceof JobError && err.opts.retry === false);
-    console.error(`[job] ${job.type} failed (attempt ${job.attempts}/${job.maxAttempts}): ${message}`);
-    db.update(schema.jobs)
-      .set({
-        status: retry ? 'queued' : 'error',
-        error: message.slice(0, 4000),
-        // Back off 30s, 2m, 8m… unless the job knows better (e.g. a rate limit's reset time).
-        runAt: now() + ((err instanceof JobError && err.opts.delayMs) || 30_000 * 4 ** (job.attempts - 1)),
-        updatedAt: now(),
-      })
-      .where(eq(schema.jobs.id, job.id))
-      .run();
-    if (!retry) failureHooks.get(job.type)?.(job.payload, message);
-  } finally {
-    reg.running--;
-    setImmediate(tick);
+export function listJobs(opts: { cardId?: string; active?: boolean; limit?: number } = {}): Job[] {
+  const where: string[] = [];
+  const params: (string | number)[] = [];
+  if (opts.cardId) {
+    where.push('card_id = ?');
+    params.push(opts.cardId);
   }
+  if (opts.active) where.push("status IN ('queued', 'waiting', 'running')");
+  params.push(opts.limit ?? 50);
+  return all<JobRow>(`SELECT * FROM jobs ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT ?`, ...params).map(toJob);
 }
 
-const failureHooks = new Map<string, (payload: any, message: string) => void>();
-/** Called once a job has used up its retries. */
-export function onJobFailed(type: string, hook: (payload: any, message: string) => void) {
-  failureHooks.set(type, hook);
+/** The next job of these kinds that may run now, marked running. */
+export function claimNext(kinds: readonly JobKind[]): Job | null {
+  if (!kinds.length) return null;
+  const r = get<JobRow>(
+    `SELECT * FROM jobs WHERE status IN ('queued', 'waiting') AND run_after <= ? AND kind IN (${kinds.map(() => '?').join(',')}) ORDER BY run_after, created_at LIMIT 1`,
+    now(),
+    ...kinds,
+  );
+  if (!r) return null;
+  run("UPDATE jobs SET status = 'running', started_at = COALESCE(started_at, ?), error = NULL WHERE id = ?", now(), r.id);
+  touch(r);
+  return getJob(r.id);
 }
 
-function tick() {
-  for (const [type, reg] of handlers) {
-    while (reg.running < (typeof reg.concurrency === 'function' ? reg.concurrency() : reg.concurrency)) {
-      const job = claim(type);
-      if (!job) break;
-      void run(reg, job);
-    }
-  }
+function touch(r: { id: string; card_id: string | null }) {
+  emit('job', r.id, r.card_id ?? undefined);
+  if (r.card_id) emit('card', r.card_id, r.card_id);
 }
 
-export function startWorker() {
-  // Jobs that were mid-flight when the process stopped get picked up again.
-  db.update(schema.jobs).set({ status: 'queued' }).where(eq(schema.jobs.status, 'running')).run();
-  timer = setInterval(tick, 2000);
-  tick();
+export function setProgress(id: string, progress: number, step?: string) {
+  const r = get<JobRow>('SELECT * FROM jobs WHERE id = ?', id);
+  if (!r) return;
+  run('UPDATE jobs SET progress = ?, step = COALESCE(?, step) WHERE id = ?', Math.max(0, Math.min(1, progress)), step ?? null, id);
+  touch(r);
 }
 
-export function stopWorker() {
-  if (timer) clearInterval(timer);
+export function addLog(id: string, text: string) {
+  const r = get<JobRow>('SELECT * FROM jobs WHERE id = ?', id);
+  if (!r) return;
+  const log = parseJson<JobLine[]>(r.log, []);
+  log.push({ at: now(), text: text.slice(0, 500) });
+  run('UPDATE jobs SET log = ? WHERE id = ?', JSON.stringify(log.slice(-200)), id);
+  touch(r);
+}
+
+export function saveState(id: string, state: Record<string, unknown>) {
+  run('UPDATE jobs SET state = ? WHERE id = ?', JSON.stringify(state), id);
+}
+
+export function finishJob(id: string, status: Exclude<JobStatus, 'queued' | 'running'>, opts: { error?: string; runAfter?: number } = {}) {
+  const r = get<JobRow>('SELECT * FROM jobs WHERE id = ?', id);
+  if (!r) return;
+  const final = status === 'done' || status === 'failed' || status === 'cancelled';
+  run(
+    'UPDATE jobs SET status = ?, error = ?, run_after = ?, finished_at = ?, progress = ? WHERE id = ?',
+    status,
+    opts.error ?? null,
+    opts.runAfter ?? r.run_after,
+    final ? now() : null,
+    status === 'done' ? 1 : r.progress,
+    id,
+  );
+  touch(r);
+}
+
+/** After a restart, what was running is queued again; its finished steps are kept, so it carries on. */
+export function requeueInterrupted() {
+  run("UPDATE jobs SET status = 'queued' WHERE status = 'running'");
+}
+
+export function markCancelled(id: string) {
+  const r = get<JobRow>('SELECT * FROM jobs WHERE id = ?', id);
+  if (!r) throw notFound('Job');
+  if (r.status === 'queued' || r.status === 'waiting') finishJob(id, 'cancelled');
+  return toJob(r);
 }
