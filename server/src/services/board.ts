@@ -79,10 +79,10 @@ export function updatePage(id: string, input: unknown): Page {
   return getPage(id);
 }
 
-/** A card's folders on disk (its files, render projects and renders) go with it. Only ever a card's own id. */
+/** A card's folders on disk (its files, thumbnails, render projects and renders) go with it. Only ever a card's own id. */
 function removeCardFiles(id: string) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) return;
-  for (const root of [config.mediaDir, config.projectsDir, config.rendersDir]) rmSync(join(root, id), { recursive: true, force: true });
+  for (const root of [config.mediaDir, config.workDir, config.projectsDir, config.rendersDir]) rmSync(join(root, id), { recursive: true, force: true });
 }
 
 export function deletePage(id: string) {
