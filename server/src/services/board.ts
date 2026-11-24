@@ -1,5 +1,7 @@
 // Pages and cards: the board.
 
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { z } from 'zod';
 import {
   DEFAULT_LABELS,
@@ -16,6 +18,7 @@ import {
   type Stage,
 } from '../../../shared/types.ts';
 import { RECIPES } from '../../../shared/recipes.ts';
+import { config } from '../config.ts';
 import { all, get, parseJson, run, tx } from '../db/db.ts';
 import { between, emit, HttpError, newId, notFound, now } from '../lib/util.ts';
 
@@ -76,9 +79,17 @@ export function updatePage(id: string, input: unknown): Page {
   return getPage(id);
 }
 
+/** A card's folders on disk (its files, render projects and renders) go with it. Only ever a card's own id. */
+function removeCardFiles(id: string) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) return;
+  for (const root of [config.mediaDir, config.projectsDir, config.rendersDir]) rmSync(join(root, id), { recursive: true, force: true });
+}
+
 export function deletePage(id: string) {
   getPage(id);
+  const cards = all<{ id: string }>('SELECT id FROM cards WHERE page_id = ?', id);
   run('DELETE FROM pages WHERE id = ?', id);
+  for (const c of cards) removeCardFiles(c.id);
   emit('page', id);
 }
 
@@ -288,6 +299,7 @@ export function trashCard(id: string) {
 export function deleteCard(id: string) {
   getCard(id);
   run('DELETE FROM cards WHERE id = ?', id);
+  removeCardFiles(id);
   emit('card', id, id);
 }
 

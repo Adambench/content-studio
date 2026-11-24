@@ -2,7 +2,7 @@
 // rules and who may get in. No server is started (Fastify's inject), no job runs.
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
@@ -74,6 +74,22 @@ test('a card goes from idea to a guarded approve', async () => {
   // A board drag: to Script, first in the column.
   const moved = await call<{ stage: string }>('PATCH', `/api/cards/${card.json.id}`, { stage: 'script', between: [null, null] });
   assert.equal(moved.json.stage, 'script');
+});
+
+test('deleting a card or its page takes its files with it', async () => {
+  const page = await call<{ id: string }>('POST', '/api/pages', { name: 'Scratch', color: '#a1a1aa' });
+  const ids: string[] = [];
+  for (const title of ['One', 'Two']) {
+    const card = await call<{ id: string }>('POST', '/api/cards', { pageId: page.json.id, title });
+    await call('PUT', `/api/cards/${card.json.id}/inputs?name=take.mp4&mime=video/mp4`, Buffer.alloc(100, 1), { 'content-type': 'video/mp4' });
+    assert.ok(existsSync(join(dir, 'media', card.json.id)));
+    ids.push(card.json.id);
+  }
+  assert.equal((await call('DELETE', `/api/cards/${ids[0]}?hard=1`)).status, 200);
+  assert.equal(existsSync(join(dir, 'media', ids[0]!)), false);
+  assert.ok(existsSync(join(dir, 'media', ids[1]!)));
+  await call('DELETE', `/api/pages/${page.json.id}`);
+  assert.equal(existsSync(join(dir, 'media', ids[1]!)), false);
 });
 
 test('halal rules are seeded and locked', async () => {
