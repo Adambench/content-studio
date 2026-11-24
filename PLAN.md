@@ -148,10 +148,14 @@ P1 works, then `next` becomes `main`.
 **P0 — Foundation**
 - [ ] ai-server reachable (power, Tailscale, SSH). One setup script: Node 24, FFmpeg (NVENC, libplacebo), Chrome
   headless shell, Python 3.12 + uv, PyTorch 2.14 cu126 (the last with Pascal), ONNX Runtime; a systemd service;
-  Tailscale HTTPS
+  Tailscale HTTPS. 2026-11-23: SSH by key, linger on, Tailscale operator set, served on
+  https://ai-server.tail1e2ac8.ts.net:8443 (443 is Open WebUI's, with Funnel: untouched). Setup stalls on the
+  network: ai-server's Wi-Fi (2.4 GHz channel 1, 54 %, power saving on) downloads at ~50 KB/s with 0.5–1 s pings,
+  even from the laptop on the LAN. Needs the Ethernet cable, or power saving off / the 5 GHz band
 - [ ] Claude on ai-server: my Pro login. The SDK wrapper is built (`engine/claude.ts`: Opus, structured answers,
   usage guard, every call counted); tried on the laptop's login: a Write = one call, ~9.6 k prompt tokens (cached
-  after), 1 k out, 13 s
+  after), 1 k out, 13 s. 2026-11-23: a 1-year `claude setup-token` token in ai-server's keys.env (the SDK's own
+  binary uses it; no Claude Code install there); first call there still to try
 - [x] New tree on `next`: `server` (API, jobs, engine), `web`, `cli`, `mobile`, `shared`; old code gone (2026-11-23).
   `tools` (Python) comes with P1
 - [x] Data: pages, cards, inputs, versions, renders, comments, rules (halal locked, playbook as fundamentals), jobs
