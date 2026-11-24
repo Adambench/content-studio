@@ -85,9 +85,9 @@ async function videoId(q: string | undefined): Promise<string> {
 const line = (v: VideoSummary) => `${short(v.id)} ${v.status.padEnd(6)} ${v.title}${v.reason ? ` — ${v.reason}` : ''}`;
 
 function itemLine(i: ThreadItem): string {
-  const who = { you: 'you', claude: 'claude', step: '  ·', tool: '  $', question: 'asks', version: 'saved', lesson: 'lesson', sys: '--', error: 'ERROR' }[i.kind];
+  const who = { you: 'you', claude: 'claude', step: '  ·', tool: '   ', question: 'asks', version: 'saved', lesson: 'lesson', sys: '--', error: 'ERROR' }[i.kind];
   const opts = i.kind === 'question' ? ` [${((i.data.options as string[]) ?? []).join(' | ')}]` : '';
-  return `${who} ${i.text.replace(/\s+/g, ' ').slice(0, 300)}${opts}`;
+  return `${who} ${i.text.replace(/\s+/g, ' ').slice(0, i.kind === 'claude' || i.kind === 'you' ? 2000 : 300)}${opts}`;
 }
 
 /** Follow a run until it ends, printing the thread as it grows. */
