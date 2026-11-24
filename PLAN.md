@@ -15,8 +15,9 @@ the app's job: it hands me the file and the caption.
 | Topic | Decision |
 |---|---|
 | Machines | **ai-server** = the GTX 1070 PC (i7-7800X, 32 GB, 8 GB Pascal), on 24/7: engine, database, files, renders, the app. Laptop = Claude Code + the app in Chrome (no Electron). Phone = the Android app (same id and key), works with the laptop shut. Tailscale only |
-| Formats | Daily episodes (mostly raw), UGC, Gentle Return faceless, ecom carousels, motion explainers, colour-graded shots. **No clipping** (no code, no data carried over) |
+| Formats | Daily episodes (mostly raw), UGC, Gentle Return faceless, ecom carousels, motion explainers, colour-graded shots (its own format, when I ask for things to pop). **No clipping** (no code, no data carried over) |
 | One press | Each format is a recipe from what I give to a checked render in Review, with no step in between unless it needs me (film, record) |
+| Modular | Nothing is fitted to one scenario (2026-11-23: "I am not locked in"). The engine is capabilities (look, cut, grade, voice, captions, stock, SFX, scenes, render, check) that any recipe or Claude can combine; recipes are defaults, not limits; any page can make any format and mix them in one video; a card's Notes say what I want and Claude picks the recipe and options; anything no recipe covers runs as *custom* (Claude with every capability) |
 | Claude | Agent SDK on my Pro login on ai-server, never an API key. Opus for every creative choice and review; a smaller model only for market read-outs. Background work waits while 5-hour usage ≥ 80 %; what I press and wait on never waits |
 | Scripts | Claude drafts them in my voice, on every page; I edit, film or record. Hooks as options beside the script |
 | Viral | Learned from the market: each page's niche watched daily, outliers (views far above the account's usual) broken down into patterns. Plus a base rulebook (fundamentals I don't have yet) and my lessons |
@@ -29,12 +30,14 @@ the app's job: it hands me the file and the caption.
 
 ## Formats
 
+Examples of what the recipes cover, not a list of what each page may do.
+
 | Format | Page | I give | The engine does | Out |
 |---|---|---|---|---|
 | Daily episode | Personal brand | takes filmed on the phone, screenshots as proof, a few notes about the day | drafts the script from my notes; picks the last clean take of each line; cuts in pauses; light, grade, voice clean-up; captions 2 words under the chin; tracker at the ends; proof on the words that point at it | 9:16 MP4 + caption |
-| UGC | open | open (see *Waiting on me*) | script + shot list, then the edit: hook, product shots, text in my words, CTA | 9:16 MP4 |
+| UGC | any | a product or offer, then my takes or product shots | script + shot list, then the edit: hook, product shots, text in my words, CTA | 9:16 MP4 |
 | Gentle Return | Gentle Return | my voice reading Claude's script | script with checked ayat and hadith; stock visuals with no people; ayah and hadith cards; ambience; captions | 9:16 MP4 |
-| Carousel | ecom brand | products (photos), or nothing | topic and copy from market patterns, layout in the brand kit, product cut-outs | 4:5 PNGs |
+| Carousel | any (first: Qalam & Siwaak) | products (photos), or nothing | topic and copy from market patterns, layout in the brand kit, product cut-outs | 4:5 PNGs |
 | Motion explainer | any | a topic (+ my voice, or text only) | script, scenes written as HyperFrames HTML, icons, Lottie, SFX on the motion, captions | 9:16 MP4 |
 | Graded shots | any | footage | shot matching, a look, a film finish (grain, halation), stabilising, slow motion | graded clips or a reel |
 
@@ -83,8 +86,9 @@ and the viral skills).
 
 **Market engine** (per page)
 - Niche, keywords and 20–50 seed accounts (Claude proposes from search; I can strike any), refreshed monthly.
-- Daily: each account's recent posts with views, likes, comments, date, length, caption. Instagram through a
-  separate account's session (my own stays safe), TikTok and YouTube Shorts through yt-dlp.
+- Daily: each account's recent posts with views, likes, comments, date, length, caption. Instagram through the
+  Blox Moments account's session (I don't mind risking it; my own stay safe), TikTok and YouTube Shorts through
+  yt-dlp.
 - Outliers: views ≥ 3× the account's median of its last 30 posts (and enough views to matter); the top ones each week.
 - Breakdown, mechanical: transcript, on-screen text of the first 3 s, cuts a second, shot lengths, face on screen,
   caption style, length, first frame, a sheet. Then a short read by Claude: hook type, promise, beats, why it works,
@@ -167,17 +171,14 @@ P1 works, then `next` becomes `main`.
 
 **P2 — Market engine** (collector, outliers, breakdowns, *What works now*, my own numbers) and **Write** on every page
 
-**P3 — UGC** (after the open questions) · **P4 — Gentle Return faceless** (checked sources, stock with no people,
-ayah and hadith cards, ambience) · **P5 — Ecom carousels** (brand kit, layouts, product cut-outs and upscaling, copy)
+**P3 — UGC** · **P4 — Gentle Return faceless** (checked sources, stock with no people,
+ayah and hadith cards, ambience) · **P5 — Ecom carousels** (brand kit, layouts, product cut-outs and upscaling, copy; Qalam & Siwaak first: its kit,
+logo and product photos come from its repo, `Hero-Sphinx/Qalam-and-Siwaak`)
 · **P6 — Motion explainers** (Claude's HyperFrames scenes, registry blocks, the SFX library) · **P7 — Graded shots**
 (looks, shot matching, film finish)
 
 ## Waiting on me
 
-- Turn ai-server on and check Tailscale and SSH: it shows offline on Tailscale since 2026-11-16 and doesn't answer SSH.
-- Log Claude in on ai-server (one command over SSH, given when it's reachable).
-- A separate Instagram account for the market collector, logged in once on ai-server.
+- The laptop's SSH key on ai-server (`ssh-copy-id bouyaka@100.64.195.82`), then Claude logged in there.
+- The Blox Moments Instagram login, once on ai-server, for the market collector (P2).
 - Free API keys: Pexels, Pixabay (Freesound optional).
-- UGC: for whom (the ecom brand, brand deals?), and is it me on camera or hands and product only?
-- The ecom brand: name, products, where the product photos come from, its look.
-- Graded shots: which footage, and for what (a format of its own, or the look of everything)?
