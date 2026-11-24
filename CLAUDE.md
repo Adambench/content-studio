@@ -49,8 +49,9 @@ PLAN.md has the decisions (*The app*), parts, targets and phases; read only the 
   nothing tied to another religion; Gentle Return never shows my face. Seeded as locked rules (`services/rules.ts`).
 - **No Anthropic API key, ever**: Claude runs through `@anthropic-ai/claude-agent-sdk` on the Pro login
   (`engine/claude.ts` drops `ANTHROPIC_API_KEY`). Every call names its task and is counted (`claude_calls`). Opus for
-  creative choices and reviews. Background work waits while 5-hour usage ≥ 80 % or the week's ≥ 95 % (`waitForUsage`); pages set up in bulk (`cs setup … --later`) run one at a time; what I press and
-  wait on never waits (`now: true`).
+  creative choices and reviews. Background work waits while 5-hour usage ≥ 80 % or the week's ≥ 90 % (`waitForUsage`); pages set up in
+  bulk (`cs setup … --later`) run one at a time, and Go (or any message) starts a held one now. What I press and wait
+  on never waits (`now: true`).
 - **Claude never approves or publishes**: Approve is my click; there is no publishing code.
 - **Claude Code per video**: full shell, no approval prompts (my yes, 2026-11-24) inside `engine/guard.ts`: never
   sudo, Docker, Ollama, Open WebUI, systemd or the network; deletes only inside the video's folder (or /tmp, the

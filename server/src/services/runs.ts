@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { PAGE_MODES, type Job, type PageMode } from '../../../shared/types.ts';
 import { all, get, run } from '../db/db.ts';
-import { enqueue, listJobs } from '../jobs/queue.ts';
+import { enqueue, listJobs, markCancelled } from '../jobs/queue.ts';
 import { cancelJob } from '../jobs/runner.ts';
 import { HttpError } from '../lib/util.ts';
 import { onInputAdded } from './inputs.ts';
@@ -25,10 +25,13 @@ function newFiles(videoId: string): string[] {
 export function go(videoId: string, prompt: string, opts: { background?: boolean } = {}): Job {
   const video = getVideo(videoId);
   const files = newFiles(videoId);
-  const first = !get("SELECT 1 FROM jobs WHERE video_id = ? AND kind = 'agent'", videoId);
-  const parts = [prompt.trim()];
+  // A run held for spare usage (a page set up later) goes now once I press for anything, with what it was going to say.
+  const held = opts.background ? null : get<{ id: string; input: string }>("SELECT id, input FROM jobs WHERE video_id = ? AND kind = 'agent' AND status IN ('queued', 'waiting') AND json_extract(input, '$.background') = 1 ORDER BY created_at LIMIT 1", videoId);
+  const first = !get("SELECT 1 FROM jobs WHERE video_id = ? AND kind = 'agent' AND id != ?", videoId, held?.id ?? '');
+  if (held) markCancelled(held.id);
+  const parts = [held ? String(JSON.parse(held.input).prompt ?? '') : '', prompt.trim()].filter(Boolean);
   // A page's first run always says what's known: the name (or none yet) and how far to build.
-  if (first && video.kind === 'page' && !prompt.startsWith(KICKOFF)) parts.unshift(kickoff(video.pageId, 'mix'));
+  if (first && video.kind === 'page' && !parts[0]!.startsWith(KICKOFF)) parts.unshift(kickoff(video.pageId, 'mix'));
   if (files.length) parts.push(`New in files/: ${files.join(', ')}.`);
   if (first && video.kind !== 'auto' && video.kind !== 'page') parts.push(`It's meant to be: ${video.kind}.`);
   return enqueue('agent', { videoId, input: { prompt: parts.filter(Boolean).join('\n\n'), ...(opts.background && { background: true }) } });

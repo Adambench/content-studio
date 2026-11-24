@@ -122,10 +122,16 @@ function Before({ detail, onGo }: { detail: VideoDetail; onGo: () => void }) {
       {job ? (
         <>
           <Spinner className="size-7" />
-          <div className="text-sm font-medium text-balance">{job.status === 'waiting' ? 'Waiting for Claude’s usage window' : job.step || 'Claude is on it'}</div>
-          <div className="h-1 w-2/3 overflow-hidden rounded bg-muted">
-            <div className="h-full bg-foreground transition-[width] duration-700" style={{ width: `${Math.round(job.progress * 100)}%` }} />
-          </div>
+          <div className="text-sm font-medium text-balance">{job.status === 'waiting' ? job.error || 'Waiting for Claude’s usage window' : job.step || 'Claude is on it'}</div>
+          {job.status === 'waiting' ? (
+            <Button variant="outline" onClick={onGo}>
+              Start now
+            </Button>
+          ) : (
+            <div className="h-1 w-2/3 overflow-hidden rounded bg-muted">
+              <div className="h-full bg-foreground transition-[width] duration-700" style={{ width: `${Math.round(job.progress * 100)}%` }} />
+            </div>
+          )}
           <p className="max-w-[28ch] text-xs text-muted-foreground">You can close this. It goes on, and shows up in the inbox when it’s your turn.</p>
         </>
       ) : files ? (

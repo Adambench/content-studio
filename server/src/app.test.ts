@@ -185,11 +185,11 @@ test('pages set up in bulk (later) wait for spare usage and go one at a time, ol
   const { runAgent } = await import('./engine/agent.ts');
   const { JobWait } = await import('./jobs/queue.ts');
   const { setSetting } = await import('./db/db.ts');
-  const jobs: { id: string; input: string }[] = [];
+  const jobs: { id: string; input: string; video_id: string }[] = [];
   for (const name of ['Later one', 'Later two']) {
     const page = (await call<{ id: string }>('POST', '/api/pages', { name })).json;
     const setup = (await call<V>('POST', `/api/pages/${page.id}/setup`, { about: `${name}: calm, practical tips.`, mode: 'mine', later: true })).json;
-    jobs.push(get<{ id: string; input: string }>("SELECT id, input FROM jobs WHERE video_id = ? AND kind = 'agent'", setup.id)!);
+    jobs.push(get<{ id: string; input: string; video_id: string }>("SELECT id, input, video_id FROM jobs WHERE video_id = ? AND kind = 'agent'", setup.id)!);
   }
   assert.ok(jobs.every((j) => JSON.parse(j.input).background === true));
   // Only the waiting is tried here (a run that goes would start Claude).
@@ -198,6 +198,12 @@ test('pages set up in bulk (later) wait for spare usage and go one at a time, ol
   setSetting('claudeUsage', { sevenDay: { utilization: 0.97, resetsAt: Date.now() + 3_600_000 }, updatedAt: Date.now() });
   assert.match(await wait(jobs[0]!.id), /weekly usage to come down \(97 %\)/);
   setSetting('claudeUsage', null);
+  // Go (what I press never waits) starts a held one now, with what it was going to say.
+  const now = (await call<{ id: string }>('POST', `/api/videos/${jobs[1]!.video_id}/go`)).json;
+  assert.equal(get<{ status: string }>('SELECT status FROM jobs WHERE id = ?', jobs[1]!.id)!.status, 'cancelled');
+  const input = JSON.parse(get<{ input: string }>('SELECT input FROM jobs WHERE id = ?', now.id)!.input);
+  assert.equal(input.background, undefined);
+  assert.match(input.prompt, /^Set this page up\.[\s\S]*from what I gave[\s\S]*Later two: calm, practical tips\.[\s\S]*Go: set it up/);
 });
 
 test('the brain is files: halal locked in the studio CLAUDE.md, lessons ticked or not', async () => {

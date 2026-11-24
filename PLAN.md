@@ -259,7 +259,7 @@ P1 works, then `next` becomes `main`.
   match), the source credited
 - [ ] Plan → build → render → checks → Claude's look → fix → Review; **Fix** from my comments → lessons
 - [ ] **Write**: the script from my day notes (typed, or a voice memo); **Hooks**
-- [ ] The 34 lessons in as rules, with checks where measurable
+- [ ] The 34 lessons in as rules (in `~/studio/lessons.md` since 2026-11-24, all ticked), with checks where measurable
 - Done when 3 real episodes go from Make to Review in ≤ 15 min each and the third needs ≤ 1 round of comments
 
 **P2 — Market engine** (collector, outliers, breakdowns, *What works now*, my own numbers) and **Write** on every page

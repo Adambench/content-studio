@@ -17,7 +17,7 @@ export type Task = 'agent' | 'write' | 'pick' | 'review' | 'lesson' | 'market' |
 const MODEL: Record<Task, string> = { agent: 'opus', write: 'opus', pick: 'opus', review: 'opus', lesson: 'opus', market: 'sonnet', test: 'haiku' };
 
 const BACKGROUND_LIMIT = 0.8;
-const WEEK_LIMIT = 0.95;
+const WEEK_LIMIT = 0.9;
 
 type Usage = { fiveHour?: { utilization: number; resetsAt: number }; sevenDay?: { utilization: number; resetsAt: number }; status?: string; updatedAt: number };
 
@@ -55,7 +55,7 @@ export function waitForUsage() {
   const limited = getSetting<number>('claudeLimitedUntil', 0);
   if (limited > now()) throw new JobWait('Claude refused for usage: trying again in an hour', limited - now());
   const usage = claudeUsage();
-  // The week's last few percent stay for what I press (its window resets once a week, so waiting can take a night).
+  // The week's last 10 % stay for what I press (its window resets once a week, so waiting can take a night).
   for (const [w, limit, what] of [[usage?.fiveHour, BACKGROUND_LIMIT, '5-hour'], [usage?.sevenDay, WEEK_LIMIT, 'weekly']] as const) {
     if (!w || w.utilization < limit || w.resetsAt <= now()) continue;
     const delay = w.resetsAt - now() + 60_000;

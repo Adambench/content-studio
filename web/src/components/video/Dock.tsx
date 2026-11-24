@@ -85,7 +85,7 @@ export function Dock({ detail, onAttach }: { detail: VideoDetail; onAttach: () =
     <div className="relative flex flex-col gap-2 border-t p-3">
       {job && (
         <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/60 px-3 py-1.5 text-xs text-muted-foreground">
-          <span className="truncate">{job.status === 'queued' ? 'Claude starts in a moment' : job.status === 'waiting' ? 'Waiting for Claude’s usage window' : job.step || 'Claude is working'}</span>
+          <span className="truncate">{job.status === 'queued' ? 'Claude starts in a moment' : job.status === 'waiting' ? job.error || 'Waiting for Claude’s usage window' : job.step || 'Claude is working'}</span>
           <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => act.stop.mutate()}>
             Stop
           </Button>
