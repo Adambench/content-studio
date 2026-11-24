@@ -116,6 +116,7 @@ function Carousel({ version, compareOf, fill }: { version: Version; compareOf: n
 function Before({ detail, onGo }: { detail: VideoDetail; onGo: () => void }) {
   const job = detail.job;
   const files = detail.inputs.length;
+  const page = detail.video.kind === 'page';
   return (
     <div className="mx-auto flex aspect-[9/16] h-full max-w-full flex-col items-center justify-center gap-4 rounded-xl border bg-card p-8 text-center">
       {job ? (
@@ -130,11 +131,11 @@ function Before({ detail, onGo }: { detail: VideoDetail; onGo: () => void }) {
       ) : files ? (
         <>
           <div className="text-sm">{files === 1 ? '1 file is in' : `${files} files are in`}</div>
-          <Button onClick={onGo}>Make it</Button>
+          <Button onClick={onGo}>{page ? 'Set it up' : 'Make it'}</Button>
           <p className="max-w-[28ch] text-xs text-muted-foreground">Or tell Claude what you want first.</p>
         </>
       ) : (
-        <p className="max-w-[26ch] text-sm text-muted-foreground">Drop takes, your voice or photos here, or tell Claude what to make.</p>
+        <p className="max-w-[26ch] text-sm text-muted-foreground">{page ? 'Tell Claude about the page, or drop your logo, kit, past posts or screenshots here.' : 'Drop takes, your voice or photos here, or tell Claude what to make.'}</p>
       )}
     </div>
   );

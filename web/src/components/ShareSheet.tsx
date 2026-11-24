@@ -9,15 +9,15 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { api } from '@/lib/api';
 import { sendShare, Studio, type Share } from '@/lib/native';
-import { useBrands, useVideos } from '@/lib/queries';
+import { usePages, useVideos } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 export function ShareSheet() {
   const [share, setShare] = useState<Share | null>(null);
   const [target, setTarget] = useState<string | null>(null);
-  const [brandId, setBrandId] = useState<string | null>(null);
+  const [pageId, setPageId] = useState<string | null>(null);
   const videos = useVideos();
-  const brands = useBrands();
+  const pages = usePages();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -29,15 +29,15 @@ export function ShareSheet() {
 
   if (!share) return null;
   const recent = (videos.data ?? []).filter((v) => v.status === 'turn' || v.status === 'making').slice(0, 8);
-  const brand = brandId ?? brands.data?.[0]?.id ?? null;
+  const page = pageId ?? pages.data?.[0]?.id ?? null;
   const n = share.files.length;
 
   const send = async (make: boolean) => {
     try {
-      let video: { id: string; brandId: string } | undefined = recent.find((v) => v.id === target);
+      let video: { id: string; pageId: string } | undefined = recent.find((v) => v.id === target);
       if (!video) {
-        if (!brand) return;
-        video = await api<Video>('/api/videos', { body: { brandId: brand, title: share.text?.slice(0, 60) || 'Shared from the phone', go: false } });
+        if (!page) return;
+        video = await api<Video>('/api/videos', { body: { pageId: page, title: share.text?.slice(0, 60) || 'Shared from the phone', go: false } });
       }
       await sendShare(share, video, make);
       toast(make ? 'Uploading · Claude starts when they’re in' : 'Uploading');
@@ -57,16 +57,16 @@ export function ShareSheet() {
         <div className="flex max-h-72 flex-col gap-1 overflow-y-auto">
           {recent.map((v) => (
             <button key={v.id} type="button" onClick={() => setTarget(v.id)} className={cn('flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm', target === v.id && 'border-you')}>
-              <span className="size-2 rounded-full" style={{ background: brands.data?.find((b) => b.id === v.brandId)?.color }} />
-              <span className="min-w-0 flex-1 truncate">{v.title}</span>
+              <span className="size-2 rounded-full" style={{ background: pages.data?.find((b) => b.id === v.pageId)?.color }} />
+              <span className="min-w-0 flex-1 truncate">{v.kind === 'page' ? `Set up ${pages.data?.find((b) => b.id === v.pageId)?.name ?? 'the page'}` : v.title}</span>
             </button>
           ))}
           <button type="button" onClick={() => setTarget(null)} className={cn('rounded-xl border px-3 py-2.5 text-left text-sm', target === null && 'border-you')}>
             A new video
             {target === null && (
               <span className="mt-2 flex flex-wrap gap-1.5">
-                {(brands.data ?? []).map((b) => (
-                  <span key={b.id} role="button" tabIndex={0} onClick={() => setBrandId(b.id)} className={cn('rounded-full border px-2 py-0.5 text-xs', brand === b.id ? 'border-foreground' : 'text-muted-foreground')}>
+                {(pages.data ?? []).map((b) => (
+                  <span key={b.id} role="button" tabIndex={0} onClick={() => setPageId(b.id)} className={cn('rounded-full border px-2 py-0.5 text-xs', page === b.id ? 'border-foreground' : 'text-muted-foreground')}>
                     {b.name}
                   </span>
                 ))}

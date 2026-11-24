@@ -1,4 +1,4 @@
-// What Claude follows: lessons (from my notes, on or off), the halal rules (locked), each brand's CLAUDE.md, what
+// What Claude follows: lessons (from my notes, on or off), the halal rules (locked), each page's CLAUDE.md, what
 // works now in the market, and the skills. All plain files on ai-server; Claude and I edit the same ones.
 
 import { Lock } from 'lucide-react';
@@ -7,13 +7,13 @@ import type { Brain, Lesson } from '@shared/types';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
-import { useBrain, useBrainActions, useUpdateBrand } from '@/lib/queries';
+import { useBrain, useBrainActions, useUpdatePage } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 const TABS = [
   ['lessons', 'Lessons'],
   ['halal', 'Halal'],
-  ['brands', 'Brands'],
+  ['pages', 'Pages'],
   ['market', 'What works now'],
   ['skills', 'Skills'],
 ] as const;
@@ -35,7 +35,7 @@ export function BrainPage() {
             </button>
           ))}
         </div>
-        {!brain.data ? <Spinner /> : tab === 'lessons' ? <Lessons brain={brain.data} /> : tab === 'halal' ? <Halal brain={brain.data} /> : tab === 'brands' ? <Brands brain={brain.data} /> : tab === 'market' ? <Market brain={brain.data} /> : <Skills brain={brain.data} />}
+        {!brain.data ? <Spinner /> : tab === 'lessons' ? <Lessons brain={brain.data} /> : tab === 'halal' ? <Halal brain={brain.data} /> : tab === 'pages' ? <Pages brain={brain.data} /> : tab === 'market' ? <Market brain={brain.data} /> : <Skills brain={brain.data} />}
       </div>
     </div>
   );
@@ -73,16 +73,16 @@ function Lessons({ brain }: { brain: Brain }) {
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold">Every brand</h2>
+        <h2 className="text-sm font-semibold">Every page</h2>
         <LessonList scope="all" lessons={brain.lessons} />
       </section>
-      {brain.brands.map((b) => (
-        <section key={b.brandId} className="flex flex-col gap-2">
+      {brain.pages.map((b) => (
+        <section key={b.pageId} className="flex flex-col gap-2">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
             <span className="size-2 rounded-full" style={{ background: b.color }} />
             {b.name}
           </h2>
-          <LessonList scope={b.brandId} lessons={b.lessons} />
+          <LessonList scope={b.pageId} lessons={b.lessons} />
         </section>
       ))}
     </div>
@@ -104,31 +104,31 @@ function Halal({ brain }: { brain: Brain }) {
   );
 }
 
-function Brands({ brain }: { brain: Brain }) {
+function Pages({ brain }: { brain: Brain }) {
   return (
     <div className="flex flex-col gap-6">
-      {brain.brands.map((b) => (
-        <BrandFile key={b.brandId} b={b} />
+      {brain.pages.map((b) => (
+        <PageFile key={b.pageId} b={b} />
       ))}
     </div>
   );
 }
 
-function BrandFile({ b }: { b: Brain['brands'][number] }) {
+function PageFile({ b }: { b: Brain['pages'][number] }) {
   const act = useBrainActions();
-  const rename = useUpdateBrand();
+  const rename = useUpdatePage();
   const [text, setText] = useState(b.text);
   useEffect(() => setText(b.text), [b.text]);
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <input type="color" value={b.color} onChange={(e) => rename.mutate({ id: b.brandId, color: e.currentTarget.value })} aria-label={`${b.name}'s colour`} className="size-6 cursor-pointer rounded border-0 bg-transparent p-0" />
-        <input defaultValue={b.name} onBlur={(e) => e.currentTarget.value.trim() && e.currentTarget.value !== b.name && rename.mutate({ id: b.brandId, name: e.currentTarget.value.trim() })} aria-label="Brand name" className="flex-1 bg-transparent text-sm font-semibold outline-none" />
+        <input type="color" value={b.color} onChange={(e) => rename.mutate({ id: b.pageId, color: e.currentTarget.value })} aria-label={`${b.name}'s colour`} className="size-6 cursor-pointer rounded border-0 bg-transparent p-0" />
+        <input defaultValue={b.name} onBlur={(e) => e.currentTarget.value.trim() && e.currentTarget.value !== b.name && rename.mutate({ id: b.pageId, name: e.currentTarget.value.trim() })} aria-label="Page name" className="flex-1 bg-transparent text-sm font-semibold outline-none" />
         <span className="hidden font-mono text-[11px] text-muted-foreground md:inline">{b.file}</span>
       </div>
       <textarea value={text} onChange={(e) => setText(e.currentTarget.value)} rows={12} aria-label={`${b.name}'s CLAUDE.md`} className="rounded-xl border bg-card p-3 font-mono text-xs leading-relaxed outline-none focus:border-foreground/25" />
       {text !== b.text && (
-        <Button size="sm" className="self-end" onClick={() => act.writeBrand.mutate({ brandId: b.brandId, text })}>
+        <Button size="sm" className="self-end" onClick={() => act.writePage.mutate({ pageId: b.pageId, text })}>
           Save
         </Button>
       )}

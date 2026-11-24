@@ -9,7 +9,7 @@ export type QueuedFile = { path: string; name: string; mime: string; size: numbe
 export type Share = { id: string; files: QueuedFile[]; text: string | null };
 export type UploadItem = { id: string; kind: string; name: string; size: number; sent: number; state: 'waiting' | 'uploading' | 'done' | 'failed'; error: string | null; pieceId?: string | null; createdAt: number };
 
-// The plugin still says workspace and piece (the first app's words) for brand and video; the server takes both.
+// The plugin still says workspace and piece (the first app's words) for page and video; the server takes both.
 type Target = { workspaceId: string; pieceId: string; source: 'upload' | 'share' };
 
 type StudioPlugin = {
@@ -39,18 +39,18 @@ export async function connectNative() {
 }
 
 /** Files from the phone's gallery to a video, through the background queue. */
-export async function pickToVideo(video: { id: string; brandId: string }): Promise<number> {
+export async function pickToVideo(video: { id: string; pageId: string }): Promise<number> {
   if (!Studio) return 0;
   const { files } = await Studio.pickFiles({ accept: ['video/*', 'image/*', 'audio/*'] });
-  if (files.length) await Studio.enqueueFiles({ workspaceId: video.brandId, pieceId: video.id, source: 'upload', files });
+  if (files.length) await Studio.enqueueFiles({ workspaceId: video.pageId, pieceId: video.id, source: 'upload', files });
   return files.length;
 }
 
 /** What I shared from the gallery, to a video. "Add & make": Claude starts once every file is in. */
-export async function sendShare(share: Share, video: { id: string; brandId: string }, make: boolean) {
+export async function sendShare(share: Share, video: { id: string; pageId: string }, make: boolean) {
   if (!Studio) return;
   if (make && share.files.length) await api(`/api/videos/${video.id}/make-when-uploaded`, { body: { count: share.files.length } });
-  if (share.files.length) await Studio.enqueueFiles({ workspaceId: video.brandId, pieceId: video.id, source: 'share', files: share.files });
+  if (share.files.length) await Studio.enqueueFiles({ workspaceId: video.pageId, pieceId: video.id, source: 'share', files: share.files });
   await Studio.discardShare({ id: share.id });
 }
 

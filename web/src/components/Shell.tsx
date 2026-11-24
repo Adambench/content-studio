@@ -1,15 +1,15 @@
-// The frame around every page: brands and places on the left (laptop) or tabs at the bottom (phone, hidden while a
+// The frame around every screen: pages and places on the left (laptop) or tabs at the bottom (phone, hidden while a
 // video fills the screen), Ctrl K to jump anywhere, and files shared from the phone's gallery.
 
 import { BookOpen, Inbox, Plus, Search, Server, SquareTerminal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
-import type { Brand } from '@shared/types';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
-import { useBrands, useCreateBrand, useSystem, useVideos } from '@/lib/queries';
+import { usePages, useSystem, useVideos } from '@/lib/queries';
 import { usePhone } from '@/lib/usePhone';
 import { cn } from '@/lib/utils';
+import { NewPageDialog, openNewPage } from './NewPage';
 import { Palette } from './Palette';
 import { ShareSheet } from './ShareSheet';
 
@@ -56,15 +56,16 @@ export function Shell() {
       {phone && !inVideo && <TabBar onNew={newVideo} />}
       <Palette open={palette} onOpenChange={setPalette} />
       <ShareSheet />
+      <NewPageDialog />
     </div>
   );
 }
 
 function Sidebar({ onPalette, onNew }: { onPalette: () => void; onNew: () => void }) {
-  const brands = useBrands();
+  const pages = usePages();
   const videos = useVideos();
   const system = useSystem();
-  const turn = (brandId?: string) => (videos.data ?? []).filter((v) => v.status === 'turn' && (!brandId || v.brandId === brandId)).length;
+  const turn = (pageId?: string) => (videos.data ?? []).filter((v) => v.status === 'turn' && (!pageId || v.pageId === pageId)).length;
   const five = system.data?.usage?.fiveHour?.utilization;
   return (
     <aside className="flex min-h-0 flex-col gap-0.5 overflow-y-auto border-r bg-sidebar p-2.5">
@@ -79,15 +80,17 @@ function Sidebar({ onPalette, onNew }: { onPalette: () => void; onNew: () => voi
         <Search /> Jump to… <Kbd className="ml-auto">Ctrl K</Kbd>
       </Button>
       <Place to="/" end icon={Inbox} label="Inbox" count={turn()} />
-      <div className="px-2.5 pt-4 pb-1 text-[11px] tracking-wider text-muted-foreground uppercase">Brands</div>
-      {(brands.data ?? []).map((b) => (
-        <NavLink key={b.id} to={`/b/${b.id}`} className={({ isActive }) => cn('flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground', isActive && 'bg-sidebar-accent text-foreground')}>
+      <div className="px-2.5 pt-4 pb-1 text-[11px] tracking-wider text-muted-foreground uppercase">Pages</div>
+      {(pages.data ?? []).map((b) => (
+        <NavLink key={b.id} to={`/p/${b.id}`} className={({ isActive }) => cn('flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground', isActive && 'bg-sidebar-accent text-foreground')}>
           <span className="size-2 rounded-full" style={{ background: b.color }} />
           <span className="min-w-0 flex-1 truncate">{b.name}</span>
           {turn(b.id) > 0 && <span className="font-mono text-xs text-you">{turn(b.id)}</span>}
         </NavLink>
       ))}
-      <AddBrand brands={brands.data ?? []} />
+      <button type="button" onClick={openNewPage} className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground">
+        <Plus className="size-3.5" /> New page
+      </button>
       <div className="mt-auto flex flex-col gap-0.5 border-t pt-2">
         <Place to="/brain" icon={BookOpen} label="Brain" />
         <Place to="/terminal" icon={SquareTerminal} label="Terminal" />
@@ -108,38 +111,6 @@ function Place({ to, icon: Icon, label, count, end }: { to: string; icon: typeof
       <Icon className="size-4" /> <span className="flex-1">{label}</span>
       {!!count && <span className="font-mono text-xs text-you">{count}</span>}
     </NavLink>
-  );
-}
-
-const COLORS = ['#e6b450', '#ef7a3c', '#7fb8a4', '#c49a6c', '#9b8cf0', '#6ea8ff', '#e879a6', '#a1a1aa'];
-
-function AddBrand({ brands }: { brands: Brand[] }) {
-  const [name, setName] = useState<string | null>(null);
-  const create = useCreateBrand();
-  if (name === null)
-    return (
-      <button type="button" onClick={() => setName('')} className="rounded-lg px-2.5 py-1.5 text-left text-sm text-muted-foreground/70 hover:text-foreground">
-        + Brand
-      </button>
-    );
-  const save = () => {
-    if (name.trim()) create.mutate({ name: name.trim(), color: COLORS[brands.length % COLORS.length]! });
-    setName(null);
-  };
-  return (
-    <input
-      autoFocus
-      value={name}
-      onChange={(e) => setName(e.currentTarget.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') save();
-        if (e.key === 'Escape') setName(null);
-      }}
-      onBlur={save}
-      placeholder="Brand name"
-      aria-label="New brand's name"
-      className="mx-1 rounded-lg border bg-background px-2 py-1 text-sm outline-none"
-    />
   );
 }
 

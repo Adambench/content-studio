@@ -97,14 +97,15 @@ function freeName(videoId: string, name: string): string {
 /** Record a file that's already in place in the video's files/ folder, then look at it in the background. */
 function addInput(videoId: string, id: string, name: string, mime: string, role: InputRole): Input {
   const kind = kindOf(mime, name);
-  const size = statSync(join(videoDir(getVideo(videoId)), 'files', name)).size;
+  const video = getVideo(videoId);
+  const size = statSync(join(videoDir(video), 'files', name)).size;
   const last = get<{ p: number | null }>('SELECT MAX(position) AS p FROM inputs WHERE video_id = ?', videoId)?.p ?? null;
   run(
     'INSERT INTO inputs (id, video_id, kind, role, name, mime, size, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     id,
     videoId,
     kind,
-    role ?? defaultRole(kind),
+    role ?? (video.kind === 'page' ? 'reference' : defaultRole(kind)),
     name,
     mime || 'application/octet-stream',
     size,

@@ -2,15 +2,16 @@
 // last shared file landing ("Add & make"). Each is one run in the video's session; a second waits for the first.
 
 import { z } from 'zod';
-import type { Job } from '../../../shared/types.ts';
+import { PAGE_MODES, type Job, type PageMode } from '../../../shared/types.ts';
 import { all, get, run } from '../db/db.ts';
 import { enqueue, listJobs } from '../jobs/queue.ts';
 import { cancelJob } from '../jobs/runner.ts';
 import { HttpError } from '../lib/util.ts';
 import { onInputAdded } from './inputs.ts';
 import { markSent, openNotes, reopenSent } from './notes.ts';
+import { getPage } from './pages.ts';
 import { addThread, getThreadItem, updateThreadData } from './thread.ts';
-import { getVideo } from './videos.ts';
+import { ensureSetup, getVideo } from './videos.ts';
 
 const fmt = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 
@@ -20,13 +21,16 @@ function newFiles(videoId: string): string[] {
   return all<{ name: string }>('SELECT name FROM inputs WHERE video_id = ? AND created_at > ? ORDER BY position', videoId, last?.created_at ?? 0).map((r) => r.name);
 }
 
-/** A run with `prompt`, plus what changed since the last one (new files, the kind I asked for). */
+/** A run with `prompt`, plus what changed since the last one (new files, the kind I asked for, a page's brief). */
 export function go(videoId: string, prompt: string): Job {
   const video = getVideo(videoId);
   const files = newFiles(videoId);
+  const first = !get("SELECT 1 FROM jobs WHERE video_id = ? AND kind = 'agent'", videoId);
   const parts = [prompt.trim()];
+  // A page's first run always says what's known: the name (or none yet) and how far to build.
+  if (first && video.kind === 'page' && !prompt.startsWith(KICKOFF)) parts.unshift(kickoff(video.pageId, 'mix'));
   if (files.length) parts.push(`New in files/: ${files.join(', ')}.`);
-  if (video.kind !== 'auto' && !get("SELECT 1 FROM jobs WHERE video_id = ? AND kind = 'agent'", videoId)) parts.push(`It's meant to be: ${video.kind}.`);
+  if (first && video.kind !== 'auto' && video.kind !== 'page') parts.push(`It's meant to be: ${video.kind}.`);
   return enqueue('agent', { videoId, input: { prompt: parts.filter(Boolean).join('\n\n') } });
 }
 
@@ -40,10 +44,10 @@ export function sendMessage(videoId: string, input: unknown): Job {
   return go(videoId, text);
 }
 
-/** "Go" with nothing to say: the files are in, make it. */
+/** "Go" with nothing to say: the files are in, make it (or, in a page's setup, set the page up from them). */
 export function goNow(videoId: string): Job {
   addThread(videoId, 'you', 'Go');
-  return go(videoId, 'Go: make it from what is in files/ (and the script, if there is one).');
+  return go(videoId, getVideo(videoId).kind === 'page' ? 'Go: set it up from what is in files/.' : 'Go: make it from what is in files/ (and the script, if there is one).');
 }
 
 /** Fix: every open note, at once, in one message. */
@@ -88,22 +92,49 @@ export function stop(videoId: string) {
   }
 }
 
-/** "Add & make" from the phone: start once `count` more files are in. */
-export function makeWhenUploaded(videoId: string, count: number) {
+/** "Add & make" (from the phone, or a new page with samples): start once `count` more files are in, with `prompt`. */
+export function makeWhenUploaded(videoId: string, count: number, prompt?: string) {
   getVideo(videoId);
   const have = get<{ c: number }>('SELECT COUNT(*) AS c FROM inputs WHERE video_id = ?', videoId)?.c ?? 0;
-  run('UPDATE videos SET make_at_inputs = ? WHERE id = ?', have + Math.max(1, count), videoId);
+  run('UPDATE videos SET make_at_inputs = ?, make_prompt = ? WHERE id = ?', have + Math.max(1, count), prompt ?? null, videoId);
   checkMakeAt(videoId);
 }
 
 function checkMakeAt(videoId: string) {
-  const v = get<{ make_at_inputs: number | null }>('SELECT make_at_inputs FROM videos WHERE id = ?', videoId);
+  const v = get<{ make_at_inputs: number | null; make_prompt: string | null }>('SELECT make_at_inputs, make_prompt FROM videos WHERE id = ?', videoId);
   if (!v?.make_at_inputs) return;
   const have = get<{ c: number }>('SELECT COUNT(*) AS c FROM inputs WHERE video_id = ?', videoId)?.c ?? 0;
   if (have < v.make_at_inputs) return;
-  run('UPDATE videos SET make_at_inputs = NULL WHERE id = ?', videoId);
-  addThread(videoId, 'sys', 'Everything I shared is in');
-  go(videoId, 'Everything I shared from my phone is in files/. Make it.');
+  run('UPDATE videos SET make_at_inputs = NULL, make_prompt = NULL WHERE id = ?', videoId);
+  addThread(videoId, 'sys', 'Everything I sent is in');
+  go(videoId, v.make_prompt ?? 'Everything I shared from my phone is in files/. Make it.');
+}
+
+const MODES: Record<PageMode, string> = {
+  mine: 'from what I gave: keep my name, look and voice as they are and build only what videos still need, in the same style. Don’t redesign anything',
+  mix: 'a mix: keep what I gave and build the rest around it',
+  fresh: 'scratch: build all of it; what I gave is inspiration, not something to keep',
+};
+
+const KICKOFF = 'Set this page up.';
+
+function kickoff(pageId: string, mode: PageMode): string {
+  const page = getPage(pageId);
+  const named = page.name !== 'New page';
+  return [KICKOFF, `Name: ${named ? `"${page.name}"` : 'none yet (suggest 3, then ask me)'}.`, `Start from ${MODES[mode]}.`].join('\n');
+}
+
+const setupInput = z.object({ about: z.string().trim().max(20_000).default(''), mode: z.enum(PAGE_MODES).default('mix'), files: z.number().int().min(0).max(500).default(0) });
+
+/** A new page's first go: what I said (in the thread at once), how far to build, and my samples once they're in. */
+export function startSetup(pageId: string, input: unknown) {
+  const s = setupInput.parse(input ?? {});
+  const setup = ensureSetup(pageId);
+  addThread(setup.id, 'you', s.about || 'Set this page up from what I sent.', { mode: s.mode });
+  const prompt = [kickoff(pageId, s.mode), s.about ? `What I said about it:\n${s.about}` : 'I said nothing about it: work from what I gave.'].join('\n');
+  if (s.files) makeWhenUploaded(setup.id, s.files, prompt);
+  else go(setup.id, prompt);
+  return getVideo(setup.id);
 }
 
 onInputAdded(checkMakeAt);

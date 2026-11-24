@@ -12,6 +12,7 @@ import { addLesson } from '../services/brain.ts';
 import { markFixed } from '../services/notes.ts';
 import { addThread } from '../services/thread.ts';
 import { saveVersion } from '../services/versions.ts';
+import { updatePage } from '../services/pages.ts';
 import { getVideo, updateVideo, videoDir } from '../services/videos.ts';
 import { withGpu } from './gpu.ts';
 import { renderProject } from './render.ts';
@@ -24,6 +25,16 @@ export type RunState = { asked: boolean; steps: number };
 
 export function studioTools(videoId: string, ctx: JobContext, state: RunState) {
   const dir = () => videoDir(getVideo(videoId));
+  // A page's setup names the page and picks its colour; a video never changes its page.
+  const pageTools =
+    getVideo(videoId).kind === 'page'
+      ? [
+          tool('set_page', "Set the page's name (once it's decided) and its colour in the app (hex, the palette's main colour).", { name: z.string().trim().min(1).max(60).optional(), color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional() }, async ({ name, color }) => {
+            updatePage(getVideo(videoId).pageId, { name, color });
+            return ok('Set.');
+          }),
+        ]
+      : [];
   return createSdkMcpServer({
     name: 'studio',
     version: '1',
@@ -58,9 +69,9 @@ export function studioTools(videoId: string, ctx: JobContext, state: RunState) {
         markFixed(videoId, ids, version, reply ?? null);
         return ok('Marked fixed.');
       }),
-      tool('lesson', 'Record a general rule learned from a note, for next time: scope "brand" (this brand only) or "all" (every brand). One sentence.', { text: z.string().min(3).max(400), scope: z.enum(['brand', 'all']) }, async ({ text, scope }) => {
+      tool('lesson', 'Record a general rule learned from a note, for next time: scope "page" (this page only) or "all" (every page). One sentence.', { text: z.string().min(3).max(400), scope: z.enum(['page', 'all']) }, async ({ text, scope }) => {
         const v = getVideo(videoId);
-        addLesson(scope === 'all' ? 'all' : v.brandId, text);
+        addLesson(scope === 'all' ? 'all' : v.pageId, text);
         addThread(videoId, 'lesson', text, { scope }, ctx.job.id);
         return ok('Recorded.');
       }),
@@ -95,6 +106,7 @@ export function studioTools(videoId: string, ctx: JobContext, state: RunState) {
           }
         },
       ),
+      ...pageTools,
     ],
   });
 }

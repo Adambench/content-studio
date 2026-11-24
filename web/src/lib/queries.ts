@@ -1,6 +1,6 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { Brain, Brand, Job, LiveEvent, Note, SystemInfo, Video, VideoDetail, VideoSummary } from '@shared/types';
+import type { Brain, Page, Job, LiveEvent, Note, SystemInfo, Video, VideoDetail, VideoSummary } from '@shared/types';
 import { api, eventsUrl } from './api';
 
 export const queryClient = new QueryClient({
@@ -11,7 +11,7 @@ export const queryClient = new QueryClient({
 });
 
 export const keys = {
-  brands: ['brands'] as const,
+  pages: ['pages'] as const,
   videos: ['videos'] as const,
   video: (id: string) => ['video', id] as const,
   script: (id: string) => ['script', id] as const,
@@ -22,7 +22,7 @@ export const keys = {
 
 export type Usage = { fiveHour?: { utilization: number; resetsAt: number }; sevenDay?: { utilization: number; resetsAt: number } } | null;
 
-export const useBrands = () => useQuery({ queryKey: keys.brands, queryFn: () => api<Brand[]>('/api/brands') });
+export const usePages = () => useQuery({ queryKey: keys.pages, queryFn: () => api<Page[]>('/api/pages') });
 export const useVideos = () => useQuery({ queryKey: keys.videos, queryFn: () => api<VideoSummary[]>('/api/videos') });
 export const useVideo = (id: string) => useQuery({ queryKey: keys.video(id), queryFn: () => api<VideoDetail>(`/api/videos/${id}`) });
 export const useScript = (id: string) => useQuery({ queryKey: keys.script(id), queryFn: () => api<{ text: string }>(`/api/videos/${id}/script`) });
@@ -38,22 +38,17 @@ function refresh(qc: QueryClient, videoId?: string) {
 export function useCreateVideo() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { brandId: string; text?: string; title?: string; kind?: string; go?: boolean }) => api<Video>('/api/videos', { body: v }),
+    mutationFn: (v: { pageId: string; text?: string; title?: string; kind?: string; go?: boolean }) => api<Video>('/api/videos', { body: v }),
     onSuccess: (v) => refresh(qc, v.id),
   });
 }
 
-export function useCreateBrand() {
-  const qc = useQueryClient();
-  return useMutation({ mutationFn: (v: { name: string; color: string }) => api<Brand>('/api/brands', { body: v }), onSuccess: () => void qc.invalidateQueries({ queryKey: keys.brands }) });
-}
-
-export function useUpdateBrand() {
+export function useUpdatePage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { id: string; name?: string; color?: string }) => api<Brand>(`/api/brands/${v.id}`, { method: 'PATCH', body: { name: v.name, color: v.color } }),
+    mutationFn: (v: { id: string; name?: string; color?: string }) => api<Page>(`/api/pages/${v.id}`, { method: 'PATCH', body: { name: v.name, color: v.color } }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: keys.brands });
+      void qc.invalidateQueries({ queryKey: keys.pages });
       void qc.invalidateQueries({ queryKey: keys.brain });
     },
   });
@@ -72,7 +67,7 @@ export function useVideoActions(id: string) {
     answer: useMutation({ mutationFn: (v: { itemId: string; option: number }) => post<Job>('answer', v), onSuccess: done }),
     approve: useMutation({ mutationFn: (n: number) => post<Video>('approve', { n }), onSuccess: done }),
     posted: useMutation({ mutationFn: (posted: boolean) => post<Video>('posted', { posted }), onSuccess: done }),
-    update: useMutation({ mutationFn: (patch: { title?: string; caption?: string; kind?: string; brandId?: string }) => api<Video>(`/api/videos/${id}`, { method: 'PATCH', body: patch }), onSuccess: done }),
+    update: useMutation({ mutationFn: (patch: { title?: string; caption?: string; kind?: string; pageId?: string }) => api<Video>(`/api/videos/${id}`, { method: 'PATCH', body: patch }), onSuccess: done }),
     remove: useMutation({ mutationFn: () => api(`/api/videos/${id}`, { method: 'DELETE' }), onSuccess: () => void qc.invalidateQueries({ queryKey: keys.videos }) }),
     seen: useMutation({ mutationFn: () => post('seen'), onSuccess: () => void qc.invalidateQueries({ queryKey: keys.videos }) }),
     addNote: useMutation({ mutationFn: (v: { versionN: number; at?: number | null; slide?: number | null; text: string }) => post<Note>('notes', v), onSuccess: done }),
@@ -88,7 +83,7 @@ export function useBrainActions() {
   return {
     toggle: useMutation({ mutationFn: (v: { scope: string; line: number; on: boolean }) => api<Brain>('/api/brain/lessons', { method: 'PATCH', body: v }), onSuccess: set }),
     add: useMutation({ mutationFn: (v: { scope: string; text: string }) => api<Brain>('/api/brain/lessons', { body: v }), onSuccess: set }),
-    writeBrand: useMutation({ mutationFn: (v: { brandId: string; text: string }) => api<Brain>(`/api/brain/brands/${v.brandId}`, { method: 'PUT', body: { text: v.text } }), onSuccess: set }),
+    writePage: useMutation({ mutationFn: (v: { pageId: string; text: string }) => api<Brain>(`/api/brain/pages/${v.pageId}`, { method: 'PUT', body: { text: v.text } }), onSuccess: set }),
   };
 }
 
@@ -105,9 +100,9 @@ export function connectLive() {
       let list = false;
       for (const ev of batch) {
         if (ev.videoId) videos.add(ev.videoId);
-        if (ev.entity !== 'brain' && ev.entity !== 'brand' && ev.entity !== 'system') list = true;
-        if (ev.entity === 'brand') void queryClient.invalidateQueries({ queryKey: keys.brands });
-        if (ev.entity === 'brain' || ev.entity === 'brand') void queryClient.invalidateQueries({ queryKey: keys.brain });
+        if (ev.entity !== 'brain' && ev.entity !== 'page' && ev.entity !== 'system') list = true;
+        if (ev.entity === 'page') void queryClient.invalidateQueries({ queryKey: keys.pages });
+        if (ev.entity === 'brain' || ev.entity === 'page') void queryClient.invalidateQueries({ queryKey: keys.brain });
         if (ev.entity === 'system') void queryClient.invalidateQueries({ queryKey: keys.system });
       }
       for (const id of videos) void queryClient.invalidateQueries({ queryKey: keys.video(id) });

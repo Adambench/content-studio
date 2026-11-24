@@ -3,30 +3,32 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { useBrain, useBrands, useVideos } from '@/lib/queries';
+import { useBrain, usePages, useVideos } from '@/lib/queries';
 import { cn } from '@/lib/utils';
+import { openNewPage } from './NewPage';
 
 type Item = { group: string; label: string; hint: string; run: () => void };
 
 export function Palette({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const navigate = useNavigate();
   const videos = useVideos();
-  const brands = useBrands();
+  const pages = usePages();
   const brain = useBrain();
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
 
   const items = useMemo(() => {
     const out: Item[] = [];
-    const brand = (id: string) => brands.data?.find((b) => b.id === id)?.name ?? '';
-    for (const v of videos.data ?? []) out.push({ group: 'Videos', label: v.title, hint: `${brand(v.brandId)} · ${v.reason}`, run: () => navigate(`/v/${v.id}`) });
+    const page = (id: string) => pages.data?.find((b) => b.id === id)?.name ?? '';
+    for (const v of videos.data ?? []) out.push({ group: 'Videos', label: v.kind === 'page' ? `Set up ${page(v.pageId)}` : v.title, hint: `${page(v.pageId)} · ${v.reason}`, run: () => navigate(`/v/${v.id}`) });
+    out.push({ group: 'Do', label: 'New page', hint: 'set one up with Claude', run: openNewPage });
     out.push({ group: 'Go to', label: 'Inbox', hint: '', run: () => navigate('/') });
-    for (const b of brands.data ?? []) out.push({ group: 'Go to', label: b.name, hint: 'brand', run: () => navigate(`/b/${b.id}`) });
+    for (const b of pages.data ?? []) out.push({ group: 'Go to', label: b.name, hint: 'page', run: () => navigate(`/p/${b.id}`) });
     for (const [label, to] of [['Brain', '/brain'], ['Terminal', '/terminal'], ['Server', '/server']] as const) out.push({ group: 'Go to', label, hint: '', run: () => navigate(to) });
     for (const s of brain.data?.skills ?? []) out.push({ group: 'Skills', label: `/${s.name}`, hint: s.description, run: () => window.dispatchEvent(new CustomEvent('cs:insert', { detail: `/${s.name} ` })) });
     const l = q.toLowerCase().trim();
     return out.filter((i) => !l || `${i.label} ${i.hint}`.toLowerCase().includes(l)).slice(0, 60);
-  }, [videos.data, brands.data, brain.data, q, navigate]);
+  }, [videos.data, pages.data, brain.data, q, navigate]);
 
   const run = (i: Item | undefined) => {
     if (!i) return;
@@ -62,7 +64,7 @@ export function Palette({ open, onOpenChange }: { open: boolean; onOpenChange: (
               run(items[sel]);
             }
           }}
-          placeholder="Jump to a video, a brand, a place, or a skill…"
+          placeholder="Jump to a video, a page, a place, or a skill…"
           aria-label="Search"
           className="w-full border-b bg-transparent px-4 py-3.5 text-[15px] outline-none"
         />

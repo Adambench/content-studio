@@ -1,46 +1,41 @@
 // Home: one box to start something, then my videos by what they need. Your turn first; status is never set by hand.
 
-import { ArrowUp, ChevronDown, Paperclip } from 'lucide-react';
+import { ArrowUp, ChevronDown, Paperclip, Plus, Settings2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { KIND_LABEL, KINDS, type Brand, type Kind, type VideoSummary } from '@shared/types';
+import { KIND_LABEL, KINDS, type Kind, type Page, type Video, type VideoSummary } from '@shared/types';
+import { NewPageForm, openNewPage } from '@/components/NewPage';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Spinner } from '@/components/ui/spinner';
-import { mediaUrl } from '@/lib/api';
+import { api, mediaUrl } from '@/lib/api';
 import { ago, secs } from '@/lib/format';
-import { api } from '@/lib/api';
-import { useBrands, useCreateVideo, useVideos } from '@/lib/queries';
+import { usePages, useCreateVideo, useVideos } from '@/lib/queries';
 import { uploadFiles } from '@/lib/uploads';
 import { cn } from '@/lib/utils';
 
-const LAST_BRAND = 'cs-last-brand';
+const LAST_PAGE = 'cs-last-page';
 
 export function InboxPage() {
-  const { brandId } = useParams();
-  const brands = useBrands();
+  const { pageId } = useParams();
+  const pages = usePages();
   const videos = useVideos();
-  const brand = brands.data?.find((b) => b.id === brandId);
-  const list = (videos.data ?? []).filter((v) => !brandId || v.brandId === brandId);
+  const page = pages.data?.find((b) => b.id === pageId);
+  const list = (videos.data ?? []).filter((v) => !pageId || v.pageId === pageId);
   const by = (s: VideoSummary['status']) => list.filter((v) => v.status === s);
   const posted = by('posted');
 
-  if (brands.data && !brands.data.length) return <FirstBrand />;
+  if (pages.data && !pages.data.length) return <FirstPage />;
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-6 md:px-8">
-        {brand && (
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <span className="size-2.5 rounded-full" style={{ background: brand.color }} />
-            {brand.name}
-          </div>
-        )}
-        <Composer brands={brands.data ?? []} fixedBrand={brand ?? null} />
+        {page && <PageHeader page={page} />}
+        <Composer pages={pages.data ?? []} fixedPage={page ?? null} />
         {videos.isPending && <Spinner className="mx-auto" />}
-        <Section title="Your turn" list={by('turn')} brands={brands.data ?? []} />
-        <Section title="Making" list={by('making')} brands={brands.data ?? []} />
-        <Section title="Ready to post" list={by('ready')} brands={brands.data ?? []} />
+        <Section title="Your turn" list={by('turn')} pages={pages.data ?? []} />
+        <Section title="Making" list={by('making')} pages={pages.data ?? []} />
+        <Section title="Ready to post" list={by('ready')} pages={pages.data ?? []} />
         {posted.length > 0 && (
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-semibold">
@@ -48,7 +43,7 @@ export function InboxPage() {
             </h2>
             <div className="flex flex-col divide-y overflow-hidden rounded-xl border">
               {posted.slice(0, 30).map((v) => (
-                <PostedRow key={v.id} v={v} brand={brands.data?.find((b) => b.id === v.brandId)} />
+                <PostedRow key={v.id} v={v} page={pages.data?.find((b) => b.id === v.pageId)} />
               ))}
             </div>
           </section>
@@ -59,7 +54,7 @@ export function InboxPage() {
   );
 }
 
-function Section({ title, list, brands }: { title: string; list: VideoSummary[]; brands: Brand[] }) {
+function Section({ title, list, pages }: { title: string; list: VideoSummary[]; pages: Page[] }) {
   if (!list.length) return null;
   return (
     <section className="flex flex-col gap-3">
@@ -68,19 +63,19 @@ function Section({ title, list, brands }: { title: string; list: VideoSummary[];
       </h2>
       <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] md:gap-x-4 md:gap-y-6 md:overflow-visible md:px-0">
         {list.map((v) => (
-          <Card key={v.id} v={v} brand={brands.find((b) => b.id === v.brandId)} />
+          <Card key={v.id} v={v} page={pages.find((b) => b.id === v.pageId)} />
         ))}
       </div>
     </section>
   );
 }
 
-function Card({ v, brand }: { v: VideoSummary; brand?: Brand }) {
+function Card({ v, page }: { v: VideoSummary; page?: Page }) {
   const navigate = useNavigate();
   return (
     <button type="button" onClick={() => navigate(`/v/${v.id}`)} className="group flex w-[42vw] shrink-0 snap-start flex-col gap-2 text-left md:w-auto">
-      <Thumb v={v} color={brand?.color} />
-      <div className="line-clamp-2 text-sm leading-snug font-medium">{v.title}</div>
+      <Thumb v={v} color={page?.color} />
+      <div className="line-clamp-2 text-sm leading-snug font-medium">{v.kind === 'page' ? `Set up ${page?.name ?? 'the page'}` : v.title}</div>
       {v.status === 'making' ? (
         <div className="flex flex-col gap-1">
           <div className="truncate text-xs text-muted-foreground">{v.reason}</div>
@@ -97,8 +92,8 @@ function Card({ v, brand }: { v: VideoSummary; brand?: Brand }) {
         </div>
       )}
       <div className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-        <span className="size-1.5 shrink-0 rounded-full" style={{ background: brand?.color }} />
-        {brand?.name} · {KIND_LABEL[v.kind]}
+        <span className="size-1.5 shrink-0 rounded-full" style={{ background: page?.color }} />
+        {page?.name} · {KIND_LABEL[v.kind]}
       </div>
     </button>
   );
@@ -124,19 +119,19 @@ function Thumb({ v, color }: { v: VideoSummary; color?: string }) {
   );
 }
 
-function PostedRow({ v, brand }: { v: VideoSummary; brand?: Brand }) {
+function PostedRow({ v, page }: { v: VideoSummary; page?: Page }) {
   const navigate = useNavigate();
   return (
     <button type="button" onClick={() => navigate(`/v/${v.id}`)} className="flex items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-accent">
-      <span className="size-1.5 shrink-0 rounded-full" style={{ background: brand?.color }} />
+      <span className="size-1.5 shrink-0 rounded-full" style={{ background: page?.color }} />
       <span className="min-w-0 flex-1 truncate">{v.title}</span>
       <span className="text-xs text-muted-foreground">{v.postedAt ? ago(v.postedAt) : ''}</span>
     </button>
   );
 }
 
-/** The box: what I want (and files), which brand, what kind. Enter is my go. */
-export function Composer({ brands, fixedBrand }: { brands: Brand[]; fixedBrand: Brand | null }) {
+/** The box: what I want (and files), which page, what kind. Enter is my go. */
+export function Composer({ pages, fixedPage }: { pages: Page[]; fixedPage: Page | null }) {
   const navigate = useNavigate();
   const create = useCreateVideo();
   const [text, setText] = useState('');
@@ -144,13 +139,13 @@ export function Composer({ brands, fixedBrand }: { brands: Brand[]; fixedBrand: 
   const [kind, setKind] = useState<Kind>('auto');
   const [picked, setPicked] = useState<string | null>(() => {
     try {
-      return localStorage.getItem(LAST_BRAND);
+      return localStorage.getItem(LAST_PAGE);
     } catch {
       return null;
     }
   });
   const fileInput = useRef<HTMLInputElement>(null);
-  const brand = fixedBrand ?? brands.find((b) => b.id === picked) ?? brands[0];
+  const page = fixedPage ?? pages.find((b) => b.id === picked) ?? pages[0];
 
   // A skill picked in Ctrl K lands here when no video is open.
   useEffect(() => {
@@ -164,11 +159,11 @@ export function Composer({ brands, fixedBrand }: { brands: Brand[]; fixedBrand: 
   }, []);
 
   const start = () => {
-    if (!brand || (!text.trim() && !files.length)) return;
+    if (!page || (!text.trim() && !files.length)) return;
     const said = text.trim();
     const withFiles = files;
     create.mutate(
-      { brandId: brand.id, text: said, title: said ? undefined : withFiles[0]?.name.replace(/\.[^.]+$/, ''), kind, go: !withFiles.length },
+      { pageId: page.id, text: said, title: said ? undefined : withFiles[0]?.name.replace(/\.[^.]+$/, ''), kind, go: !withFiles.length },
       {
         onSuccess: (v) => {
           // With files, the go waits until they're all in.
@@ -218,22 +213,22 @@ export function Composer({ brands, fixedBrand }: { brands: Brand[]; fixedBrand: 
         </div>
       )}
       <div className="flex items-center gap-1.5">
-        {!fixedBrand && (
+        {!fixedPage && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-7 rounded-full text-xs">
-                <span className="size-2 rounded-full" style={{ background: brand?.color }} />
-                {brand?.name ?? 'Brand'} <ChevronDown className="size-3" />
+                <span className="size-2 rounded-full" style={{ background: page?.color }} />
+                {page?.name ?? 'Page'} <ChevronDown className="size-3" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              {brands.map((b) => (
+              {pages.map((b) => (
                 <DropdownMenuItem
                   key={b.id}
                   onSelect={() => {
                     setPicked(b.id);
                     try {
-                      localStorage.setItem(LAST_BRAND, b.id);
+                      localStorage.setItem(LAST_PAGE, b.id);
                     } catch {
                       // Remembering is a convenience.
                     }
@@ -242,6 +237,10 @@ export function Composer({ brands, fixedBrand }: { brands: Brand[]; fixedBrand: 
                   <span className="size-2 rounded-full" style={{ background: b.color }} /> {b.name}
                 </DropdownMenuItem>
               ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={openNewPage}>
+                <Plus /> New page…
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -272,24 +271,29 @@ export function Composer({ brands, fixedBrand }: { brands: Brand[]; fixedBrand: 
   );
 }
 
-/** No brand yet: the first one, in one line. */
-function FirstBrand() {
-  const [name, setName] = useState('');
+/** A page's own view: its name, and its setup (where Claude and I decide who it is, how it talks and looks). */
+function PageHeader({ page }: { page: Page }) {
   const navigate = useNavigate();
-  const create = async () => {
-    if (!name.trim()) return;
-    await api('/api/brands', { body: { name: name.trim(), color: '#e6b450' } });
-    navigate(0);
-  };
+  const setup = async () => navigate(`/v/${page.setupId ?? (await api<Video>(`/api/pages/${page.id}/setup`, { body: {} })).id}`);
   return (
-    <div className="grid h-full place-items-center p-6">
-      <div className="flex w-full max-w-sm flex-col gap-3">
-        <div className="text-lg font-semibold">Your first brand</div>
-        <p className="text-sm text-muted-foreground">A page you post on. Each gets a folder on ai-server with its own style and lessons.</p>
-        <input value={name} onChange={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && void create()} placeholder="Personal brand" className="rounded-lg border bg-card px-3 py-2 text-sm outline-none" aria-label="Brand name" />
-        <Button onClick={() => void create()} disabled={!name.trim()}>
-          Make it
-        </Button>
+    <div className="flex items-center gap-2">
+      <span className="size-2.5 rounded-full" style={{ background: page.color }} />
+      <span className="text-lg font-semibold">{page.name}</span>
+      <Button size="sm" variant="outline" className="ml-auto" onClick={() => void setup().catch((err: Error) => toast.error(err.message))}>
+        <Settings2 /> Setup
+      </Button>
+    </div>
+  );
+}
+
+/** No page yet: the first one, set up with Claude. */
+function FirstPage() {
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-3 px-4 py-10">
+        <div className="text-lg font-semibold">Your first page</div>
+        <p className="text-sm text-muted-foreground">One Instagram account. Give what you have; Claude builds the rest with you.</p>
+        <NewPageForm />
       </div>
     </div>
   );

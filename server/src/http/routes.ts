@@ -13,15 +13,15 @@ import { enqueue, getJob, listJobs } from '../jobs/queue.ts';
 import { cancelJob } from '../jobs/runner.ts';
 import { findBinary } from '../lib/proc.ts';
 import { HttpError, notFound, subscribe } from '../lib/util.ts';
-import { addLesson, brain, toggleLesson, writeBrandFile } from '../services/brain.ts';
-import { createBrand, deleteBrand, listBrands, updateBrand } from '../services/brands.ts';
+import { addLesson, brain, toggleLesson, writePageFile } from '../services/brain.ts';
 import { forgetDevice, listDevices, newPairCode, pair } from '../services/devices.ts';
 import { appendChunk, deleteInput, getInput, inputPath, listInputs, saveStream, startUpload, updateInput, uploadState } from '../services/inputs.ts';
 import { addNote, deleteNote, listNotes, updateNote } from '../services/notes.ts';
-import { answer, fixNotes, goNow, makeWhenUploaded, sendMessage, stop } from '../services/runs.ts';
+import { createPage, deletePage, getPage, listPages, updatePage } from '../services/pages.ts';
+import { answer, fixNotes, goNow, makeWhenUploaded, sendMessage, startSetup, stop } from '../services/runs.ts';
 import { listThread } from '../services/thread.ts';
 import { getVersion, listVersions, versionFiles } from '../services/versions.ts';
-import { approveVideo, createVideo, deleteVideo, getVideo, listVideos, markSeen, readScript, setPosted, updateVideo, writeScript } from '../services/videos.ts';
+import { approveVideo, createVideo, deleteVideo, ensureSetup, getVideo, listVideos, markSeen, readScript, setPosted, updateVideo, writeScript } from '../services/videos.ts';
 
 type P = { Params: { id: string } };
 
@@ -59,17 +59,29 @@ export async function registerApi(app: FastifyInstance) {
     return { version: config.version, host: config.hostname, gpu: findBinary('nvidia-smi') ? 'NVIDIA' : null, tools, claude: claudeStatus(), studioDir: config.studioDir, diskFree, usage: claudeUsage() };
   });
 
-  // ------------------------------------------------------------ brands
-  app.get('/api/brands', async () => listBrands());
-  app.post('/api/brands', async (req) => createBrand(req.body));
-  app.patch<P>('/api/brands/:id', async (req) => updateBrand(req.params.id, req.body));
-  app.delete<P>('/api/brands/:id', async (req) => {
-    deleteBrand(req.params.id);
+  // ------------------------------------------------------------ pages
+  app.get('/api/pages', async () => listPages());
+  // New page: its setup studio comes with it; with something said (or samples on the way) Claude starts setting it up.
+  app.post('/api/pages', async (req) => {
+    const body = z.object({ about: z.string().optional(), files: z.number().int().min(0).optional(), go: z.boolean().optional() }).passthrough().parse(req.body ?? {});
+    const page = createPage(req.body);
+    if (body.go ?? !!(body.about?.trim() || body.files)) startSetup(page.id, req.body);
+    else ensureSetup(page.id);
+    return getPage(page.id);
+  });
+  // A page's setup studio (made if it isn't there yet); with something said, Claude starts on it.
+  app.post<P>('/api/pages/:id/setup', async (req) => {
+    const body = z.object({ about: z.string().optional(), files: z.number().int().min(0).optional() }).passthrough().parse(req.body ?? {});
+    return body.about?.trim() || body.files ? startSetup(req.params.id, req.body) : ensureSetup(req.params.id);
+  });
+  app.patch<P>('/api/pages/:id', async (req) => updatePage(req.params.id, req.body));
+  app.delete<P>('/api/pages/:id', async (req) => {
+    deletePage(req.params.id);
     return { ok: true };
   });
 
   // ------------------------------------------------------------ videos
-  app.get<{ Querystring: { brandId?: string } }>('/api/videos', async (req) => listVideos({ brandId: req.query.brandId }));
+  app.get<{ Querystring: { pageId?: string } }>('/api/videos', async (req) => listVideos({ pageId: req.query.pageId }));
   // New, from the inbox's box: with something said, Claude starts at once (that's my go).
   app.post('/api/videos', async (req) => {
     const body = z.object({ text: z.string().max(20_000).optional(), go: z.boolean().default(true) }).passthrough().parse(req.body ?? {});
@@ -159,8 +171,8 @@ export async function registerApi(app: FastifyInstance) {
     toggleLesson(b.scope, b.line, b.on);
     return brain();
   });
-  app.put<P>('/api/brain/brands/:id', async (req) => {
-    writeBrandFile(req.params.id, z.object({ text: z.string().max(100_000) }).parse(req.body).text);
+  app.put<P>('/api/brain/pages/:id', async (req) => {
+    writePageFile(req.params.id, z.object({ text: z.string().max(100_000) }).parse(req.body).text);
     return brain();
   });
 

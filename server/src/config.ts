@@ -17,8 +17,8 @@ export const config = {
   dataDir,
   dbFile: join(dataDir, 'studio.sqlite'),
   /**
-   * The studio: one folder per brand, one per video inside it (files/, work/, renders/, project.md). Claude Code works
-   * in a video's folder and loads ~/studio/CLAUDE.md and the brand's CLAUDE.md by itself.
+   * The studio: one folder per page, one per video inside it (files/, work/, renders/, project.md). Claude Code works
+   * in a video's folder and loads ~/studio/CLAUDE.md and the page's CLAUDE.md by itself.
    */
   studioDir: resolve(process.env.CS_STUDIO_DIR || join(home, 'studio')),
   uploadsDir: join(dataDir, 'uploads'),

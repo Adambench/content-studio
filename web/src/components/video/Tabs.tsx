@@ -1,12 +1,14 @@
-// The rail's other tabs: the script (script.md, Claude's and mine), the files (what I gave), the terminal.
+// The rail's other tabs: the script (script.md, Claude's and mine) or, in a page's setup, the page's brief (its
+// CLAUDE.md), the files (what I gave), the terminal.
 
+import { useQueryClient } from '@tanstack/react-query';
 import { FileAudio, FileImage, FileText, FileVideo, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Input, VideoDetail } from '@shared/types';
 import { Button } from '@/components/ui/button';
 import { mediaUrl } from '@/lib/api';
 import { bytes, secs } from '@/lib/format';
-import { useScript, useVideoActions } from '@/lib/queries';
+import { keys, useBrain, useBrainActions, useScript, useVideoActions } from '@/lib/queries';
 import { useUploads } from '@/lib/uploads';
 import { TerminalView } from '../TerminalView';
 
@@ -33,6 +35,34 @@ export function ScriptTab({ videoId }: { videoId: string }) {
   );
 }
 
+/** The page's CLAUDE.md: who it is, how it talks and looks, its lessons. Claude writes it while setting the page up. */
+export function BriefTab({ detail }: { detail: VideoDetail }) {
+  const qc = useQueryClient();
+  const brain = useBrain();
+  const act = useBrainActions();
+  const pageId = detail.video.pageId;
+  const [text, setText] = useState<string | null>(null);
+  const server = brain.data?.pages.find((b) => b.pageId === pageId)?.text ?? '';
+  // Claude edits the file itself: read it again as its work comes in.
+  const last = detail.thread.at(-1)?.id;
+  useEffect(() => void qc.invalidateQueries({ queryKey: keys.brain }), [qc, last]);
+  useEffect(() => setText(null), [server]);
+  const value = text ?? server;
+  const dirty = text !== null && text !== server;
+  return (
+    <div className="flex h-full flex-col gap-2">
+      <textarea
+        value={value}
+        onChange={(e) => setText(e.currentTarget.value)}
+        onBlur={() => dirty && act.writePage.mutate({ pageId, text: value })}
+        className="min-h-0 flex-1 resize-none rounded-xl border bg-card p-3 font-mono text-xs leading-relaxed outline-none focus:border-foreground/25"
+        aria-label="The page's brief"
+      />
+      <p className="text-xs text-muted-foreground">{dirty ? 'Saved when you click away.' : 'The page’s CLAUDE.md: every video’s Claude reads it. Its look is in kit/.'}</p>
+    </div>
+  );
+}
+
 const icon = (i: Input) => (i.kind === 'video' ? FileVideo : i.kind === 'audio' ? FileAudio : i.kind === 'image' ? FileImage : FileText);
 
 export function FilesTab({ detail, onAttach }: { detail: VideoDetail; onAttach: () => void }) {
@@ -42,7 +72,7 @@ export function FilesTab({ detail, onAttach }: { detail: VideoDetail; onAttach: 
   return (
     <div className="flex flex-col gap-1">
       <button type="button" onClick={onAttach} className="mb-2 rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground hover:border-foreground/30">
-        Drop takes, your voice or photos anywhere on this video, or click to pick them.
+        {detail.video.kind === 'page' ? 'Drop your logo, kit, fonts, past posts or screenshots anywhere here, or click to pick them.' : 'Drop takes, your voice or photos anywhere on this video, or click to pick them.'}
       </button>
       {uploads.map((u) => (
         <div key={u.id} className="flex items-center gap-3 py-1.5">

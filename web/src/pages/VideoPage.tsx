@@ -14,17 +14,17 @@ import { Dock } from '@/components/video/Dock';
 import { PostSheet } from '@/components/video/PostSheet';
 import { createPlayer, PlayerCtx, usePlayer, usePS } from '@/components/video/player';
 import { shownVersion, Stage } from '@/components/video/Stage';
-import { FilesTab, ScriptTab, TerminalTab } from '@/components/video/Tabs';
+import { BriefTab, FilesTab, ScriptTab, TerminalTab } from '@/components/video/Tabs';
 import { Thread } from '@/components/video/Thread';
 import { Timeline } from '@/components/video/Timeline';
 import { tc } from '@/lib/format';
 import { isNative, pickToVideo } from '@/lib/native';
-import { useBrands, useVideo, useVideoActions } from '@/lib/queries';
+import { usePages, useUpdatePage, useVideo, useVideoActions } from '@/lib/queries';
 import { uploadFiles } from '@/lib/uploads';
 import { usePhone } from '@/lib/usePhone';
 import { cn } from '@/lib/utils';
 
-type Tab = 'thread' | 'script' | 'files' | 'terminal';
+type Tab = 'thread' | 'script' | 'brief' | 'files' | 'terminal';
 
 export function VideoPage() {
   const { videoId = '' } = useParams();
@@ -61,8 +61,12 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
   const navigate = useNavigate();
   const p = usePlayer();
   const act = useVideoActions(v.id);
-  const brands = useBrands();
-  const brand = brands.data?.find((b) => b.id === v.brandId);
+  const pages = usePages();
+  const page = pages.data?.find((b) => b.id === v.pageId);
+  // A page's setup: the same studio, but what's made is the page (its brief and look), approved once, never posted.
+  const isPage = v.kind === 'page';
+  const updatePage = useUpdatePage();
+  const home = isPage ? `/p/${v.pageId}` : '/';
   const [tab, setTab] = useState<Tab>('thread');
   const [rail, setRail] = useState(false);
   const [post, setPost] = useState(false);
@@ -87,10 +91,10 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
     } else fileInput.current?.click();
   };
   const approve = () => {
-    if (!version) return;
+    if (!version || v.status === 'done') return;
     if (v.status === 'ready' || v.status === 'posted') return setPost(true);
     if (open) return toast('Fix or drop the open notes first');
-    act.approve.mutate(version.n, { onSuccess: () => setPost(true) });
+    act.approve.mutate(version.n, { onSuccess: () => (isPage ? toast(`${page?.name ?? 'The page'} is set up: new videos follow it`) : setPost(true)) });
   };
   const flip = () => {
     const i = detail.versions.findIndex((x) => x.n === ver);
@@ -142,7 +146,7 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
 
   const tabs = (
     <div className="flex gap-1 border-b px-2">
-      {(['thread', 'script', 'files', 'terminal'] as const).map((k) => (
+      {(isPage ? (['thread', 'brief', 'files', 'terminal'] as const) : (['thread', 'script', 'files', 'terminal'] as const)).map((k) => (
         <button key={k} type="button" onClick={() => setTab(k)} className={cn('-mb-px border-b-2 px-2.5 py-2 text-sm capitalize', tab === k ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
           {k === 'script' && version?.kind === 'carousel' ? 'Script' : k}
           {k === 'files' && detail.inputs.length > 0 && <span className="ml-1 text-xs text-muted-foreground">{detail.inputs.length}</span>}
@@ -151,9 +155,10 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
     </div>
   );
   const body = (
-    <div className={cn('min-h-0 flex-1 p-3', tab === 'terminal' || tab === 'script' ? 'flex flex-col' : 'overflow-y-auto')}>
+    <div className={cn('min-h-0 flex-1 p-3', tab === 'terminal' || tab === 'script' || tab === 'brief' ? 'flex flex-col' : 'overflow-y-auto')}>
       {tab === 'thread' && <Thread detail={detail} />}
       {tab === 'script' && <ScriptTab videoId={v.id} />}
+      {tab === 'brief' && <BriefTab detail={detail} />}
       {tab === 'files' && <FilesTab detail={detail} onAttach={() => void attach()} />}
       {tab === 'terminal' && <TerminalTab detail={detail} />}
     </div>
@@ -170,10 +175,10 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
           <Stage detail={detail} onGo={() => act.go.mutate()} fill />
         </div>
         <div className="pt-safe absolute inset-x-0 top-0 z-10 flex items-center gap-2 bg-gradient-to-b from-black/80 to-transparent px-2 pb-6">
-          <Button size="icon" variant="ghost" className="text-white" onClick={() => navigate('/')} aria-label="Back">
+          <Button size="icon" variant="ghost" className="text-white" onClick={() => navigate(home)} aria-label="Back">
             <ArrowLeft />
           </Button>
-          <div className="min-w-0 flex-1 truncate text-sm font-medium text-white">{v.title}</div>
+          <div className="min-w-0 flex-1 truncate text-sm font-medium text-white">{isPage ? `Set up ${page?.name ?? ''}` : v.title}</div>
           {compare && <span className="rounded bg-you px-1.5 font-mono text-xs text-black">compare</span>}
         </div>
         {version && (
@@ -181,7 +186,7 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
             <Side icon={PenLine} label="Note" onClick={focusNote} />
             <Side icon={MessageSquare} label="Thread" onClick={() => setRail(true)} badge={open || undefined} />
             {detail.versions.length > 1 && <Side icon={Layers} label={`v${ver}`} onClick={() => p.set({ ver: detail.versions[(detail.versions.findIndex((x) => x.n === ver) + 1) % detail.versions.length]!.n, compare: false })} />}
-            {v.status !== 'posted' && <Side icon={v.status === 'ready' ? Share2 : Check} label={v.status === 'ready' ? 'Post' : 'Approve'} onClick={approve} />}
+            {v.status !== 'posted' && v.status !== 'done' && <Side icon={v.status === 'ready' ? Share2 : Check} label={v.status === 'ready' ? 'Post' : 'Approve'} onClick={approve} />}
           </div>
         )}
         {!version && (
@@ -203,7 +208,7 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
             <div className="pb-safe">{dock}</div>
           </SheetContent>
         </Sheet>
-        <PostSheet detail={detail} open={post} onOpenChange={setPost} />
+        {!isPage && <PostSheet detail={detail} open={post} onOpenChange={setPost} />}
       </div>
     );
 
@@ -211,13 +216,19 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
     <div className="relative grid h-full grid-cols-[minmax(0,1fr)_minmax(340px,400px)] grid-rows-[auto_minmax(0,1fr)]" {...drop}>
       {hidden}
       <header className="col-span-2 flex min-w-0 items-center gap-2 border-b px-3 py-2">
-        <Button size="icon" variant="ghost" onClick={() => navigate('/')} aria-label="Back to the inbox">
+        <Button size="icon" variant="ghost" onClick={() => navigate(home)} aria-label={isPage ? 'Back to the page' : 'Back to the inbox'}>
           <ArrowLeft />
         </Button>
-        <span className="size-2 shrink-0 rounded-full" style={{ background: brand?.color }} />
-        <span className="shrink-0 text-sm text-muted-foreground">{brand?.name}</span>
-        <span className="text-muted-foreground">/</span>
-        <Title value={v.title} onSave={(title) => act.update.mutate({ title })} />
+        <span className="size-2 shrink-0 rounded-full" style={{ background: page?.color }} />
+        {isPage ? (
+          page && <Title key={page.name} value={page.name} onSave={(name) => updatePage.mutate({ id: page.id, name })} />
+        ) : (
+          <>
+            <span className="shrink-0 text-sm text-muted-foreground">{page?.name}</span>
+            <span className="text-muted-foreground">/</span>
+            <Title value={v.title} onSave={(title) => act.update.mutate({ title })} />
+          </>
+        )}
         <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{KIND_LABEL[v.kind]}</span>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {detail.versions.length > 0 && (
@@ -229,7 +240,7 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
               ))}
             </div>
           )}
-          {version && v.status !== 'posted' && (
+          {version && v.status !== 'posted' && v.status !== 'done' && (
             <Button size="sm" onClick={approve} disabled={act.approve.isPending}>
               {v.status === 'ready' ? <Share2 /> : <Check />} {approveLabel} {v.status !== 'ready' && <Kbd className="ml-0.5">A</Kbd>}
             </Button>
@@ -239,12 +250,17 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
               Posted
             </Button>
           )}
+          {v.status === 'done' && (
+            <span className="flex items-center gap-1 px-2 text-sm text-muted-foreground">
+              <Check className="size-4" /> Set up
+            </span>
+          )}
           {confirmDelete ? (
-            <Button size="sm" variant="destructive" onClick={() => act.remove.mutate(undefined, { onSuccess: () => navigate('/') })}>
-              Delete it and its folder
+            <Button size="sm" variant="destructive" onClick={() => act.remove.mutate(undefined, { onSuccess: () => navigate(home) })}>
+              {isPage ? 'Delete the setup and its folder' : 'Delete it and its folder'}
             </Button>
           ) : (
-            <Button size="icon" variant="ghost" aria-label="Delete this video" onClick={() => setConfirmDelete(true)} onBlur={() => setTimeout(() => setConfirmDelete(false), 200)}>
+            <Button size="icon" variant="ghost" aria-label={isPage ? 'Delete this setup' : 'Delete this video'} onClick={() => setConfirmDelete(true)} onBlur={() => setTimeout(() => setConfirmDelete(false), 200)}>
               <Trash2 className="size-4" />
             </Button>
           )}
@@ -262,8 +278,8 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
         {body}
         {dock}
       </aside>
-      {dragging && <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center rounded-lg border-2 border-dashed border-you bg-background/70 text-sm">Drop to add to this video</div>}
-      <PostSheet detail={detail} open={post} onOpenChange={setPost} />
+      {dragging && <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center rounded-lg border-2 border-dashed border-you bg-background/70 text-sm">{isPage ? 'Drop to add to the page’s setup' : 'Drop to add to this video'}</div>}
+      {!isPage && <PostSheet detail={detail} open={post} onOpenChange={setPost} />}
     </div>
   );
 }

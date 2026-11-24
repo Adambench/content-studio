@@ -33,7 +33,7 @@ the app's job: it hands me the file and the caption.
 The first UI (board, card page, buttons) was rejected: "make the decisions from complete scratch, optimise for
 convenience and power". The clickable mock it was decided on: https://claude.ai/artifact/178QSYvLnMukDc3mTPDead.
 
-- **Claude is Claude Code.** Each video is a folder on ai-server (`~/studio/<brand>/<video>/`) with its own
+- **Claude is Claude Code.** Each video is a folder on ai-server (`~/studio/<page>/<video>/`) with its own
   persistent Agent SDK session (Claude Code's own tools: shell, files, web, skills, subagents, MCP), working while
   the browser is closed. Full shell, no approval prompts (my yes, 2026-11-24), inside guard rails: never Open
   WebUI, Docker, Ollama, systemd or the network settings, no deletes outside `~/studio`, never posts.
@@ -44,15 +44,22 @@ convenience and power". The clickable mock it was decided on: https://claude.ai/
   see it. Studio tools (an in-process MCP server) tell the app what happens: progress, a question with options, a
   new version, notes fixed, a lesson.
 - **Plain files are the brain:** `~/studio/CLAUDE.md` (written by the app: halal, layout, how to work; locked),
-  `~/studio/lessons.md` and `<brand>/CLAUDE.md` (style + lessons; Claude and I edit them). Claude Code loads them
+  `~/studio/lessons.md` and `<page>/CLAUDE.md` (who the page is, style, lessons; Claude and I edit them). Claude Code loads them
   by itself for every video, in the app and in the terminal.
-- **Inbox** instead of a board: one box ("What are we making?": type, speak, drop takes, pick the brand), Claude's
+- **Inbox** instead of a board: one box ("What are we making?": type, speak, drop takes, pick the page), Claude's
   ideas for today, then videos by status (Your turn, Making, Ready to post, Posted). Status is never set by hand.
 - **Studio** per video: the video in the middle, the thread on the right (Thread, Script, Files, Terminal). Pause
   and type = a note pinned to that moment; notes collect, **Fix** sends them at once; every note also becomes a
   lesson. Versions at the top, V flips to the one before at the same moment. One input for notes, instructions,
   `/skills`, `@files`, voice. **Approve** opens the Post sheet (caption to copy, download / save / share to
   Instagram). Claude never approves or posts.
+- **Pages** (my word, 2026-11-24; "brand" before): one Instagram account each. **New page** is a workflow, not a
+  name box: I give what I have (what it is, who it's for, links, samples, a kit, past posts) and pick how far Claude
+  builds (*What I give* / *Mix* / *Scratch*). Claude sets it up in the page's own studio (`<page>/setup/`, the same
+  thread, notes on slides, Approve): identity (names checked in every reading, bio, avatar), voice, look (palette,
+  free fonts, logo and avatar drawn in code, caption style, carousel and cover templates in `<page>/kit/`), pillars
+  and formats, first ideas, the page's own rules, all written into `<page>/CLAUDE.md`; a board of slides to review.
+  Approved = Done (out of the inbox); later changes are a message in the same setup.
 - **Phone:** the same app in a thin Android shell (my pick, 2026-11-24): it loads the live web app from ai-server
   (UI updates need no APK) and keeps the native parts: share from the gallery (my pick for getting takes over),
   background uploads, saving to the gallery, notifications. Video full screen with Note / Thread / Version /
@@ -216,14 +223,14 @@ P1 works, then `next` becomes `main`.
 - Done when the phone sends a take to a card on ai-server and the laptop plays a test render made there
 
 **N1 — The app, rebuilt (2026-11-24, from *The app* above)**
-- [x] Server: brands and videos (folders in `~/studio`), the thread, notes, versions; Claude Code per video
+- [x] Server: pages (brands then) and videos (folders in `~/studio`), the thread, notes, versions; Claude Code per video
   (Agent SDK session resumed each run, guard rails, studio tools: progress, ask, save_version, render on the GPU,
   notes_fixed, lesson, set_title, set_caption); messages / Fix / answers / go / "Add & make" start it; Stop.
   Tried on ai-server 2026-11-24: "make a 3 s TEST clip" → Claude read the HyperFrames skill, built the project,
   rendered with NVENC, checked frames, renamed it, saved v1, in about 60 s
-- [x] Web: Inbox (one box, brand and kind, files; Your turn / Making / Ready to post / Posted), video page (player,
+- [x] Web: Inbox (one box, page and kind, files; Your turn / Making / Ready to post / Posted), video page (player,
   timeline with note pins, thread with Claude's work folded, one box for notes and messages with / and @, Fix,
-  versions and Compare, Approve → Post sheet), Brain (lessons on/off, halal, each brand's CLAUDE.md, skills),
+  versions and Compare, Approve → Post sheet), Brain (lessons on/off, halal, each page's CLAUDE.md, skills),
   Server, Ctrl K; phone layout (video full screen, Note / Thread / Version / Approve, thread as a sheet). Checked
   in headless Chrome on ai-server at 1440 × 900 and 412 × 915, no console errors
 - [x] Terminal: per video (`claude --resume` of the app's session, or a shell) and a plain shell in `~/studio`, over
@@ -232,6 +239,9 @@ P1 works, then `next` becomes `main`.
   cut-mistakes, cut-silences, edit-video, hyperframes-video-beats, video-perception); `~/studio/CLAUDE.md` written
   on start; HyperFrames gets a private cache (it refuses Mint's group-writable `~/.cache`) and its CLI at the
   renderer's version
+- [x] Pages (2026-11-24): brand renamed page everywhere; New page (what it is, samples, *What I give* / *Mix* /
+  *Scratch*) → the page's setup studio (`setup/`: Claude Code with the page brief, `set_page`, a board of slides,
+  notes, Approve = Done; `kit/` deletable by it); Setup on every page's view; `cs page`, `cs setup`
 - [ ] Android: thin shell on the live app built (`server.url`, offline page; share → a video, "Add & make",
   background uploads, save to the gallery). Release v1.0.0 waits for my go (it replaces the old app). Notifications
   (ready / Claude asks) still to do

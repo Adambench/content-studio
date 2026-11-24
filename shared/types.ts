@@ -1,19 +1,27 @@
 // Types both sides use. Plain data only: the server and the CLI run these files with Node's type stripping, so no
 // enums, namespaces or other syntax that needs compiling.
 
-export type Brand = {
+/** A page: one Instagram account. Its folder holds its brain (CLAUDE.md), its look (kit/), its setup and its videos. */
+export type Page = {
   id: string;
   slug: string;
   name: string;
   color: string;
   position: number;
+  /** The page's own studio, where Claude sets it up with me (a video row of kind 'page'); null until it's made. */
+  setupId: string | null;
   createdAt: number;
   updatedAt: number;
 };
 
+/** How a page is set up: from what I give, a mix (keep mine, build the rest), or from scratch. */
+export const PAGE_MODES = ['mine', 'mix', 'fresh'] as const;
+export type PageMode = (typeof PAGE_MODES)[number];
+
 /** What a video is meant to be. A hint for Claude, never a limit: "auto" lets it choose. */
 export const KINDS = ['auto', 'talking-head', 'voiceover', 'carousel', 'ugc', 'explainer', 'graded'] as const;
-export type Kind = (typeof KINDS)[number];
+/** 'page' is a page's setup, never picked for a video. */
+export type Kind = (typeof KINDS)[number] | 'page';
 export const KIND_LABEL: Record<Kind, string> = {
   auto: 'Auto',
   'talking-head': 'Talking head',
@@ -22,16 +30,20 @@ export const KIND_LABEL: Record<Kind, string> = {
   ugc: 'UGC',
   explainer: 'Explainer',
   graded: 'Graded shots',
+  page: 'Page setup',
 };
 
-/** Never set by hand: Making while Claude works or files upload, Ready once approved, Posted once I say so. */
-export type VideoStatus = 'turn' | 'making' | 'ready' | 'posted';
+/**
+ * Never set by hand: Making while Claude works or files upload, Ready once approved, Posted once I say so. A page's
+ * setup is Done once approved (it's never posted).
+ */
+export type VideoStatus = 'turn' | 'making' | 'ready' | 'posted' | 'done';
 
 export type VersionKind = 'video' | 'carousel';
 
 export type VideoSummary = {
   id: string;
-  brandId: string;
+  pageId: string;
   slug: string;
   title: string;
   kind: Kind;
@@ -162,7 +174,7 @@ export type VideoDetail = {
   job: Job | null;
 };
 
-export type Entity = 'brand' | 'video' | 'thread' | 'input' | 'version' | 'note' | 'job' | 'brain' | 'system';
+export type Entity = 'page' | 'video' | 'thread' | 'input' | 'version' | 'note' | 'job' | 'brain' | 'system';
 export type LiveEvent = { entity: Entity; id: string; videoId?: string };
 
 export type Lesson = { text: string; on: boolean; line: number };
@@ -171,7 +183,7 @@ export type Lesson = { text: string; on: boolean; line: number };
 export type Brain = {
   halal: string[];
   lessons: Lesson[];
-  brands: { brandId: string; name: string; color: string; file: string; text: string; lessons: Lesson[] }[];
+  pages: { pageId: string; name: string; color: string; file: string; text: string; lessons: Lesson[] }[];
   market: string;
   skills: { name: string; description: string }[];
 };

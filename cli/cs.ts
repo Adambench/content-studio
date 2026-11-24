@@ -7,15 +7,17 @@ import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir, hostname } from 'node:os';
 import { basename, extname, join } from 'node:path';
 import { Readable } from 'node:stream';
-import type { Brand, Job, ThreadItem, VideoDetail, VideoSummary } from '../shared/types.ts';
+import type { Job, Page, ThreadItem, Video, VideoDetail, VideoSummary } from '../shared/types.ts';
 
 const HELP = `cs — Content Studio from the terminal
 
   cs status                           server, Claude, tools, what's running
-  cs brands · cs brand "<name>" [--color #hex]
-  cs videos [brand]                   by status, newest first
+  cs pages · cs page "<name>" ["what it is"] [--mode mine|mix|fresh] [--color #hex]
+                                      a new page; with "what it is", Claude sets it up
+  cs setup <page>                     the page's setup (a video: say, add, note, approve work on it)
+  cs videos [page]                    by status, newest first
   cs video <video>                    folder, files, versions, notes, the last of the thread
-  cs new <brand> "<what I want>" [--kind talking-head|voiceover|carousel|ugc|explainer|graded] [--no-go]
+  cs new <page> "<what I want>" [--kind talking-head|voiceover|carousel|ugc|explainer|graded] [--no-go]
   cs add <video> <file…> [--role take|voice|proof|product|broll|logo|reference] [--make]
   cs say <video> "<message>"          Claude starts on it           (--wait to follow it)
   cs go <video> · cs fix <video> · cs stop <video>
@@ -64,10 +66,10 @@ const flag = (name: string) => {
 const short = (id: string) => id.slice(0, 8);
 const fmt = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 
-async function brandId(q: string): Promise<string> {
-  const brands = await api<Brand[]>('/api/brands');
-  const b = brands.find((x) => x.id.startsWith(q) || x.slug.startsWith(q.toLowerCase()) || x.name.toLowerCase().startsWith(q.toLowerCase()));
-  if (!b) throw new Error(`No brand "${q}". Brands: ${brands.map((x) => x.name).join(', ') || 'none (cs brand "<name>")'}`);
+async function pageId(q: string): Promise<string> {
+  const pages = await api<Page[]>('/api/pages');
+  const b = pages.find((x) => x.id.startsWith(q) || x.slug.startsWith(q.toLowerCase()) || x.name.toLowerCase().startsWith(q.toLowerCase()));
+  if (!b) throw new Error(`No page "${q}". Pages: ${pages.map((x) => x.name).join(', ') || 'none (cs page "<name>")'}`);
   return b.id;
 }
 
@@ -106,7 +108,7 @@ async function follow(id: string, job: Job, all: boolean) {
 async function main() {
   const wait = flag('wait') === 'true';
   const all = flag('all') === 'true';
-  const opt = { kind: flag('kind'), role: flag('role'), color: flag('color'), seconds: flag('seconds'), input: flag('input'), cpu: flag('cpu') === 'true', noGo: flag('no-go') === 'true', make: flag('make') === 'true' };
+  const opt = { kind: flag('kind'), role: flag('role'), color: flag('color'), seconds: flag('seconds'), input: flag('input'), cpu: flag('cpu') === 'true', mode: flag('mode'), noGo: flag('no-go') === 'true', make: flag('make') === 'true' };
   const [cmd, ...rest] = args;
   switch (cmd) {
     case undefined:
@@ -121,15 +123,20 @@ async function main() {
       for (const j of await api<Job[]>('/api/jobs?active=1')) console.log(`${short(j.id)} ${j.kind} ${j.status} ${j.step ?? ''} ${Math.round(j.progress * 100)} %`);
       return;
     }
-    case 'brands':
-      for (const b of await api<Brand[]>('/api/brands')) console.log(`${short(b.id)} ${b.name} · ~/studio/${b.slug}`);
+    case 'pages':
+      for (const b of await api<Page[]>('/api/pages')) console.log(`${short(b.id)} ${b.name} · ~/studio/${b.slug}`);
       return;
-    case 'brand': {
-      const b = await api<Brand>('/api/brands', { body: { name: rest.join(' '), ...(opt.color ? { color: opt.color } : {}) } });
-      return console.log(`${short(b.id)} ${b.name} · ~/studio/${b.slug}`);
+    case 'page': {
+      const [name, about] = rest;
+      const b = await api<Page>('/api/pages', { body: { name, about, mode: opt.mode ?? 'mix', go: !!about, ...(opt.color ? { color: opt.color } : {}) } });
+      return console.log(`${short(b.id)} ${b.name} · ~/studio/${b.slug} · setup ${short(b.setupId ?? '')}${about ? ' (Claude is setting it up)' : ''}`);
+    }
+    case 'setup': {
+      const v = await api<Video>(`/api/pages/${await pageId(rest[0] ?? '')}/setup`, { body: {} });
+      return console.log(`${short(v.id)} · ${v.folder} · ${v.reason}`);
     }
     case 'videos': {
-      const q = rest[0] ? `?brandId=${await brandId(rest[0])}` : '';
+      const q = rest[0] ? `?pageId=${await pageId(rest[0])}` : '';
       const vs = await api<VideoSummary[]>(`/api/videos${q}`);
       for (const s of ['turn', 'making', 'ready', 'posted'] as const) for (const v of vs.filter((x) => x.status === s)) console.log(line(v));
       return;
@@ -146,7 +153,7 @@ async function main() {
     case 'new': {
       const [b, ...words] = rest;
       const text = words.join(' ');
-      const v = await api<VideoSummary>('/api/videos', { body: { brandId: await brandId(b ?? ''), text, kind: opt.kind ?? 'auto', go: !opt.noGo } });
+      const v = await api<VideoSummary>('/api/videos', { body: { pageId: await pageId(b ?? ''), text, kind: opt.kind ?? 'auto', go: !opt.noGo } });
       return console.log(line(v));
     }
     case 'add': {

@@ -1,4 +1,4 @@
-// The API end to end on a throwaway data folder and studio: brands, videos and their folders, the thread, uploads
+// The API end to end on a throwaway data folder and studio: pages, videos and their folders, the thread, uploads
 // (both kinds), versions, notes and Fix, answers, Approve's guard, the brain files, Claude's guard rails, and who
 // may get in. No server is started (Fastify's inject) and no job runs (Claude isn't called).
 
@@ -19,6 +19,7 @@ const { buildApp } = await import('./http/app.ts');
 const { saveVersion } = await import('./services/versions.ts');
 const { addThread } = await import('./services/thread.ts');
 const { refusal } = await import('./engine/guard.ts');
+const { get } = await import('./db/db.ts');
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 let app: App;
@@ -45,14 +46,14 @@ type Detail = { video: V; inputs: { name: string; role: string }[]; versions: { 
 const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0;
 
 test('a video from the inbox: its folder, files, versions, notes, Fix and Approve', async () => {
-  const brand = await call<{ id: string; slug: string }>('POST', '/api/brands', { name: 'Personal brand', color: '#e6b450' });
-  assert.equal(brand.json.slug, 'personal-brand');
-  assert.ok(existsSync(join(dir, 'studio/personal-brand/CLAUDE.md')));
+  const page = await call<{ id: string; slug: string }>('POST', '/api/pages', { name: 'Personal page', color: '#e6b450' });
+  assert.equal(page.json.slug, 'personal-page');
+  assert.ok(existsSync(join(dir, 'studio/personal-page/CLAUDE.md')));
 
   // Without a go, nothing runs.
-  const made = await call<V>('POST', '/api/videos', { brandId: brand.json.id, text: 'Day 12. The first reply came in.', go: false });
+  const made = await call<V>('POST', '/api/videos', { pageId: page.json.id, text: 'Day 12. The first reply came in.', go: false });
   assert.equal(made.json.title, 'Day 12');
-  assert.equal(made.json.folder, join(dir, 'studio/personal-brand/day-12'));
+  assert.equal(made.json.folder, join(dir, 'studio/personal-page/day-12'));
   assert.ok(existsSync(join(made.json.folder, 'project.md')));
   const id = made.json.id;
 
@@ -122,13 +123,62 @@ test('a video from the inbox: its folder, files, versions, notes, Fix and Approv
 });
 
 test('"Add & make": Claude starts once every shared file is in', async () => {
-  const brand = await call<{ id: string }>('POST', '/api/brands', { name: 'Gentle Return' });
-  const v = await call<V>('POST', '/api/videos', { brandId: brand.json.id, title: 'Before you sleep' });
+  const page = await call<{ id: string }>('POST', '/api/pages', { name: 'Gentle Return' });
+  const v = await call<V>('POST', '/api/videos', { pageId: page.json.id, title: 'Before you sleep' });
   await call('POST', `/api/videos/${v.json.id}/make-when-uploaded`, { count: 2 });
   await call('PUT', `/api/videos/${v.json.id}/inputs?name=voice.m4a&mime=audio/mp4`, Buffer.alloc(10, 1), { 'content-type': 'audio/mp4' });
   assert.equal((await call<Detail>('GET', `/api/videos/${v.json.id}`)).json.job, null);
   await call('PUT', `/api/videos/${v.json.id}/inputs?name=sky.jpg&mime=image/jpeg`, Buffer.alloc(10, 1), { 'content-type': 'image/jpeg' });
   assert.equal((await call<Detail>('GET', `/api/videos/${v.json.id}`)).json.job?.kind, 'agent');
+});
+
+test('a new page: its setup studio, how far Claude builds, samples first, its kit, Done once approved', async () => {
+  type Pg = { id: string; slug: string; name: string; setupId: string | null };
+  const prompt = (videoId: string) => JSON.parse(get<{ input: string }>("SELECT input FROM jobs WHERE video_id = ? AND kind = 'agent' ORDER BY created_at DESC LIMIT 1", videoId)?.input ?? '{}').prompt as string | undefined;
+
+  // No name yet: the folder is named after what I said; Claude suggests names and builds from scratch.
+  const fresh = (await call<Pg>('POST', '/api/pages', { about: 'Islamic life hacks for busy Muslims. Calm, warm, practical.', mode: 'fresh' })).json;
+  assert.equal(fresh.name, 'New page');
+  assert.equal(fresh.slug, 'islamic-life-hacks-for');
+  const setup = (await call<Detail>('GET', `/api/videos/${fresh.setupId}`)).json;
+  assert.equal(setup.video.folder, join(dir, 'studio/islamic-life-hacks-for/setup'));
+  assert.ok(existsSync(join(dir, 'studio/islamic-life-hacks-for/kit')));
+  assert.match(readFileSync(join(dir, 'studio/islamic-life-hacks-for/CLAUDE.md'), 'utf8'), /## Lessons/);
+  assert.equal(setup.job?.kind, 'agent');
+  assert.equal(setup.thread[0]?.kind, 'you');
+  assert.match(prompt(fresh.setupId!) ?? '', /none yet \(suggest 3[\s\S]*scratch[\s\S]*Islamic life hacks/);
+
+  // The page keeps setup/ and kit/ for itself.
+  const named = await call<V>('POST', '/api/videos', { pageId: fresh.id, title: 'Setup', go: false });
+  assert.equal(named.json.folder, join(dir, 'studio/islamic-life-hacks-for/setup-2'));
+
+  // The setup may clear out the page's kit, nothing else outside its folder.
+  const kit = [join(dir, 'studio/islamic-life-hacks-for/kit')];
+  assert.equal(refusal('Bash', { command: 'rm ../kit/old-logo.svg && rm -rf work/board' }, setup.video.folder, kit), null);
+  assert.ok(refusal('Bash', { command: 'rm -rf ../setup-2' }, setup.video.folder, kit));
+
+  // With samples on the way, Claude waits for them, then gets my words and how far to build.
+  const mine = (await call<Pg>('POST', '/api/pages', { name: 'Qalam & Siwaak', about: 'Luxury miswak pen.', mode: 'mine', files: 1 })).json;
+  assert.equal(mine.slug, 'qalam-siwaak');
+  assert.equal((await call<Detail>('GET', `/api/videos/${mine.setupId}`)).json.job, null);
+  await call('PUT', `/api/videos/${mine.setupId}/inputs?name=logo.png&mime=image/png`, Buffer.alloc(10, 1), { 'content-type': 'image/png' });
+  const after = (await call<Detail>('GET', `/api/videos/${mine.setupId}`)).json;
+  assert.equal(after.job?.kind, 'agent');
+  assert.equal(after.inputs[0]?.role, 'reference');
+  assert.match(prompt(mine.setupId!) ?? '', /"Qalam & Siwaak"[\s\S]*from what I gave[\s\S]*logo\.png/);
+
+  // A setup is never posted; approved, it's Done (out of the inbox's lists).
+  assert.equal((await call('POST', `/api/videos/${mine.setupId}/posted`, {})).status, 409);
+  if (hasFfmpeg) {
+    const png = join(dir, 'board.png');
+    spawnSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=white:s=108x135', '-frames:v', '1', png]);
+    await saveVersion(mine.setupId!, { slides: [png], note: 'Board' });
+    assert.equal((await call<V>('POST', `/api/videos/${mine.setupId}/approve`, { n: 1 })).json.status, 'done');
+  }
+
+  // A page goes only without videos (its setup goes with it).
+  assert.equal((await call('DELETE', `/api/pages/${fresh.id}`)).status, 409);
+  assert.equal((await call('DELETE', `/api/pages/${mine.id}`)).status, 200);
 });
 
 test('the brain is files: halal locked in the studio CLAUDE.md, lessons ticked or not', async () => {
@@ -144,7 +194,7 @@ test('the brain is files: halal locked in the studio CLAUDE.md, lessons ticked o
 });
 
 test("Claude's guard rails: anything in the studio, nothing to the machine", () => {
-  const cwd = join(dir, 'studio/personal-brand/day-12');
+  const cwd = join(dir, 'studio/personal-page/day-12');
   assert.equal(refusal('Bash', { command: 'ffmpeg -i files/take1.mp4 work/a.wav && rm -rf work/tmp' }, cwd), null);
   assert.equal(refusal('Bash', { command: 'rm work/*.wav /tmp/x' }, cwd), null);
   assert.ok(refusal('Bash', { command: 'sudo apt install x' }, cwd));

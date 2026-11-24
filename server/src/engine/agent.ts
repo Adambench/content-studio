@@ -2,6 +2,7 @@
 // studio's, the guard rails, no approval prompts. One run per go (a message, Fix, an answer); what it says, does and
 // saves lands in the thread as it happens. My Pro login, never an API key; what I start never waits for usage.
 
+import { dirname, join } from 'node:path';
 import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { setSetting } from '../db/db.ts';
 import type { JobContext } from '../jobs/runner.ts';
@@ -20,6 +21,34 @@ const APPEND = `You are working inside the Content Studio app on ai-server, in o
 through the app: your text shows in the video's thread, so keep it to a sentence or two. Use the studio tools
 (mcp__studio__*) to show progress, ask, save versions, mark notes fixed and record lessons. The studio's CLAUDE.md
 files (loaded above) are your standing instructions; the halal rules there have no exceptions.`;
+
+/** A page's setup: the same studio, a different job (the page itself instead of a video). */
+const PAGE = `This run is a page's setup, not a video. A page is one Instagram account. You're in its setup folder
+(files/ = what I gave, work/ = yours); the page is the folder above: ../CLAUDE.md is its brain (every video's Claude
+reads it) and ../kit/ its look. Make the page ready for videos:
+1. Study what I gave (videos with the video-perception skill, images, documents, links you can reach) and the
+   niche: what its strongest accounts post and why it works (web search, yt-dlp for public videos).
+2. Build what's missing, as far as my start mode says:
+   - Identity: the name (when I gave none: 3 options, easy to say and spell, every reading checked in other
+     languages, Arabic included, nothing tied to another religion), 3 handles, the bio (150 characters at most),
+     the profile picture.
+   - Voice: who it's for, the promise, how it talks (words it uses and never uses), what its hooks sound like.
+   - Look: a palette (hex), two free fonts (files in ../kit/fonts), the logo and avatar drawn in code (SVG and
+     PNG; no generated pictures; a mascot needs a personality and must read as the niche), the Reels caption
+     style, a carousel slide and a cover template (HTML or HyperFrames in ../kit/; carousels: no eyebrow labels,
+     one sentence a slide, the avatar on each).
+   - Content: 3 to 5 pillars, the formats it uses (my face on camera, my voice over footage or stock, carousels…;
+     every voice is mine, never synthetic), what a great post looks like here, 10 first ideas.
+   - Rules: what this page adds to the halal rules.
+3. Write ../CLAUDE.md for the videos' Claude: short and concrete (kit paths, hex codes, fonts, do and don't). Keep
+   its "## Lessons" section, with every lesson in it, at the end. Set the page's name and main colour with
+   set_page once they're decided.
+4. Save a version: a board of 1080×1350 PNG slides (HTML screenshotted with the headless Chrome at
+   $PRODUCER_HEADLESS_SHELL_PATH, or HyperFrames): the profile (avatar, name, bio, 6 sample posts in a grid), the
+   palette and fonts, the logo, a Reel frame with captions, a carousel cover. Look at every slide before saving.
+Ask me (the ask tool) only for real choices, one at a time (the name, a direction); when they're visual, save the
+options as a version first. My notes come back on slides: fix them all in a new board, then notes_fixed and
+lessons. Never post, follow, sign in or make accounts.`;
 
 /** One line for a tool call in the thread (shown when I open the steps). */
 export function describe(name: string, input: Record<string, unknown>, cwd: string): string {
@@ -57,6 +86,7 @@ export function describe(name: string, input: Record<string, unknown>, cwd: stri
 export async function runAgent(ctx: JobContext) {
   const video = getVideo(ctx.videoId!);
   const cwd = video.folder;
+  const isPage = video.kind === 'page';
   let prompt = String(ctx.input.prompt ?? '').trim() || 'Go.';
   if (ctx.job.startedAt && ctx.job.startedAt < STARTED) prompt = `(The app restarted while you were on this. Carry on from where you stopped: check project.md and the folder.)\n\n${prompt}`;
   clearApproval(video.id);
@@ -95,12 +125,12 @@ export async function runAgent(ctx: JobContext) {
             env: { ...claudeEnv(), ...hyperframesEnv() },
             model: 'opus',
             settingSources: ['user', 'project'],
-            systemPrompt: { type: 'preset', preset: 'claude_code', append: APPEND },
+            systemPrompt: { type: 'preset', preset: 'claude_code', append: isPage ? `${APPEND}\n\n${PAGE}` : APPEND },
             permissionMode: 'bypassPermissions',
             allowDangerouslySkipPermissions: true,
             disallowedTools: ['AskUserQuestion'],
             mcpServers: { studio: studioTools(video.id, ctx, state) },
-            hooks: { PreToolUse: [{ hooks: [guardFor(cwd)] }] },
+            hooks: { PreToolUse: [{ hooks: [guardFor(cwd, isPage ? [join(dirname(cwd), 'kit')] : [])] }] },
             resume,
             abortController,
             stderr: (d) => {

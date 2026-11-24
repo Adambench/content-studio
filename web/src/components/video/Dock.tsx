@@ -127,7 +127,7 @@ export function Dock({ detail, onAttach }: { detail: VideoDetail; onAttach: () =
           rows={1}
           value={text}
           aria-label="Message to Claude"
-          placeholder={pinned ? 'Note on this moment…' : version ? 'Tell Claude what to change…' : 'Tell Claude what to make…'}
+          placeholder={pinned ? 'Note on this moment…' : version ? 'Tell Claude what to change…' : detail.video.kind === 'page' ? 'Tell Claude about the page…' : 'Tell Claude what to make…'}
           className="max-h-32 min-h-6 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           onChange={(e) => onChange(e.currentTarget)}
           onKeyDown={(e) => {

@@ -3,15 +3,17 @@
 Content Studio, the new app (branch `next` since 2026-11-23; it replaces `main` once a daily episode comes out of
 it). Rebuilt 2026-11-24 (N1): an **inbox** and a **studio per video**. I say what I want (or drop takes); Claude Code
 works in the video's own folder on ai-server and saves versions; I leave notes pinned to moments, **Fix**, **Approve**,
-post. Every note teaches a lesson. PLAN.md has the decisions (*The app*), parts, targets and phases; read only the
-section you need.
+post. Every note teaches a lesson. A **page** is one Instagram account (called a brand until 2026-11-24): I give what
+I have (info, samples, a kit, links) and Claude sets it up with me in the page's own studio (`setup/`, a video row of
+kind `page`): name, voice, look (`kit/`), formats, first ideas, written into the page's CLAUDE.md for every video.
+PLAN.md has the decisions (*The app*), parts, targets and phases; read only the section you need.
 
 ## Where things run
 
 - **ai-server** (the GTX 1070 PC, Linux Mint, `bouyaka@ai-server`, on 24/7): the app (Node 24 on 127.0.0.1:8787,
-  systemd user service `content-studio`), the studio (`~/studio/<brand>/<video>/`: files/, work/, renders/,
-  project.md, script.md; `~/studio/CLAUDE.md` is written by the app, `lessons.md` and `<brand>/CLAUDE.md` are the
-  brain), the app's data (`~/.local/share/studio`: SQLite, uploads, tools, HyperFrames' private cache), and Claude (the
+  systemd user service `content-studio`), the studio (`~/studio/<page>/<video>/`: files/, work/, renders/,
+  project.md, script.md; each page also has `kit/` and `setup/`; `~/studio/CLAUDE.md` is written by the app,
+  `lessons.md` and `<page>/CLAUDE.md` are the brain), the app's data (`~/.local/share/studio`: SQLite, uploads, tools, HyperFrames' private cache), and Claude (the
   Agent SDK's own Claude Code binary on my Pro login: a `claude setup-token` token in
   `~/.config/content-studio/keys.env`). Skills: the repo's `.claude/skills`, linked into `~/.claude/skills` on
   deploy. On the tailnet by Tailscale Serve: https://ai-server.tail1e2ac8.ts.net:8443. Port 443 there is Open
@@ -24,7 +26,7 @@ section you need.
 
 - `server/` — Fastify + `node:sqlite`, run straight from TypeScript by Node's type stripping (no build): erasable
   syntax only (no enums, namespaces or parameter properties), relative imports end in `.ts`, `import type` for types.
-  `db/` (SQL migrations, applied in name order), `services/` (brands, videos = folders, thread, notes, inputs and
+  `db/` (SQL migrations, applied in name order), `services/` (pages, videos = folders, thread, notes, inputs and
   resumable uploads, versions, runs = what starts Claude, brain = the CLAUDE.md/lessons files, devices), `jobs/`
   (queue, runner with lanes: Claude runs one per video, GPU turns in `engine/gpu.ts`), `engine/` (`agent.ts` =
   Claude Code per video, `guard.ts` = its guard rails, `tools.ts` = the studio's MCP tools, `claude.ts` = login,
@@ -71,7 +73,7 @@ section you need.
 
 - `npm run dev` (server on 8787 + Vite on 5173), `npm run typecheck`, `npm test`
 - `npm run deploy` — push and restart on ai-server (the first time it runs `scripts/setup-server.sh` there)
-- `npm run cs -- help`: `status`, `brands`, `videos`, `video`, `new`, `add`, `say`, `go`, `fix`, `stop`, `note`,
+- `npm run cs -- help`: `status`, `pages`, `page`, `setup`, `videos`, `video`, `new`, `add`, `say`, `go`, `fix`, `stop`, `note`,
   `thread`, `approve`, `posted`, `test-render`, `jobs`, `pair`. `CS_SERVER` points it elsewhere (e.g. a test server).
 - `npm run android` — `cap sync` of the shell. APKs come from CI on a `v*` tag (bump the root `package.json`
   version). Never generate a new signing key.

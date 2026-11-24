@@ -1,5 +1,5 @@
 // What Claude follows, as plain files Claude Code loads by itself: ~/studio/CLAUDE.md (written by the app on every
-// start: how to work, halal; locked), ~/studio/lessons.md (lessons for every brand) and each brand's CLAUDE.md
+// start: how to work, halal; locked), ~/studio/lessons.md (lessons for every page) and each page's CLAUDE.md
 // (style and lessons). Claude and I both edit the lessons and styles; a lesson is a "- [x] " line, unticked = ignored.
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import type { Brain, Lesson } from '../../../shared/types.ts';
 import { config } from '../config.ts';
 import { emit, HttpError } from '../lib/util.ts';
-import { brandDir, ensureBrandFiles, getBrand, listBrands } from './brands.ts';
+import { ensurePageFiles, getPage, listPages, pageDir } from './pages.ts';
 
 export const HALAL = [
   'No music or instruments in anything you make, ever, and music in any footage is removed. Sound effects, ambience and voice are fine; a vocal nasheed only when I ask for one.',
@@ -25,12 +25,14 @@ const marketFile = () => join(config.studioDir, 'market.md');
 function studioInstructions(): string {
   return `# Content Studio
 
-Written by the app on every start: edits here are lost. Lessons go in lessons.md or the brand's CLAUDE.md.
+Written by the app on every start: edits here are lost. Lessons go in lessons.md or the page's CLAUDE.md.
 
-You are the editor of my studio on this machine (ai-server: a GTX 1070, NVENC, Linux). Each folder here is a brand;
-each folder inside a brand is one video or carousel. You work in one video's folder; the app shows me your
-messages, the steps you report and every version you save. I make Instagram content: Reels (9:16) and carousels
-(4:5). Make it production-grade and made to hold attention; the skills (playbook first) say how.
+You are the editor of my studio on this machine (ai-server: a GTX 1070, NVENC, Linux). Each folder here is a page
+(one Instagram account): its CLAUDE.md says who it is, how it talks and looks; kit/ holds its look (logo, avatar,
+fonts, colours, templates: use them); setup/ is where it was set up with me. Every other folder inside a page is one
+video or carousel. You work in one video's folder; the app shows me your messages, the steps you report and every
+version you save. I make Instagram content: Reels (9:16) and carousels (4:5). Make it production-grade and made to
+hold attention; the skills (playbook first) say how.
 
 ## How to work
 
@@ -53,7 +55,7 @@ messages, the steps you report and every version you save. I make Instagram cont
 
 ${HALAL.map((h) => `- ${h}`).join('\n')}
 
-## Lessons for every brand
+## Lessons for every page
 
 @lessons.md
 `;
@@ -62,8 +64,8 @@ ${HALAL.map((h) => `- ${h}`).join('\n')}
 /** On every start: the studio's own CLAUDE.md as the app says, and lessons.md if it isn't there yet. */
 export function ensureStudioFiles() {
   writeFileSync(studioClaudeMd(), studioInstructions());
-  if (!existsSync(lessonsFile())) writeFileSync(lessonsFile(), '# Lessons for every brand\n\nTicked lessons are followed, unticked ones are kept but ignored.\n\n');
-  for (const b of listBrands()) ensureBrandFiles(b);
+  if (!existsSync(lessonsFile())) writeFileSync(lessonsFile(), '# Lessons for every page\n\nTicked lessons are followed, unticked ones are kept but ignored.\n\n');
+  for (const b of listPages()) ensurePageFiles(b);
 }
 
 const LESSON = /^- \[( |x|X)\] (.+)$/;
@@ -96,22 +98,22 @@ export function brain(): Brain {
   return {
     halal: HALAL,
     lessons: parseLessons(read(lessonsFile())),
-    brands: listBrands().map((b) => {
-      const file = join(brandDir(b), 'CLAUDE.md');
+    pages: listPages().map((b) => {
+      const file = join(pageDir(b), 'CLAUDE.md');
       const text = read(file);
-      return { brandId: b.id, name: b.name, color: b.color, file, text, lessons: parseLessons(text) };
+      return { pageId: b.id, name: b.name, color: b.color, file, text, lessons: parseLessons(text) };
     }),
     market: read(marketFile()),
     skills: skills(),
   };
 }
 
-/** The file a scope's lessons live in: 'all' → lessons.md, a brand id → that brand's CLAUDE.md. */
+/** The file a scope's lessons live in: 'all' → lessons.md, a page id → that page's CLAUDE.md. */
 function scopeFile(scope: string): string {
   if (scope === 'all') return lessonsFile();
-  const b = getBrand(scope);
-  ensureBrandFiles(b);
-  return join(brandDir(b), 'CLAUDE.md');
+  const b = getPage(scope);
+  ensurePageFiles(b);
+  return join(pageDir(b), 'CLAUDE.md');
 }
 
 export function toggleLesson(scope: string, line: number, on: boolean) {
@@ -124,7 +126,7 @@ export function toggleLesson(scope: string, line: number, on: boolean) {
   emit('brain', scope);
 }
 
-/** A new lesson (Claude's `lesson` tool, or mine), ticked. In a brand's CLAUDE.md it goes under "## Lessons". */
+/** A new lesson (Claude's `lesson` tool, or mine), ticked. In a page's CLAUDE.md it goes under "## Lessons". */
 export function addLesson(scope: string, text: string) {
   const file = scopeFile(scope);
   const clean = text.replace(/\s+/g, ' ').trim().slice(0, 400);
@@ -136,9 +138,9 @@ export function addLesson(scope: string, text: string) {
   emit('brain', scope);
 }
 
-/** A brand's CLAUDE.md as I typed it in Brain. */
-export function writeBrandFile(brandId: string, text: string) {
-  const file = scopeFile(brandId);
+/** A page's CLAUDE.md as I typed it in Brain. */
+export function writePageFile(pageId: string, text: string) {
+  const file = scopeFile(pageId);
   writeFileSync(file, text.endsWith('\n') ? text : `${text}\n`);
-  emit('brain', brandId);
+  emit('brain', pageId);
 }
