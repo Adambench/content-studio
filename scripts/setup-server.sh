@@ -47,9 +47,12 @@ fi
 node -v
 
 say "FFmpeg (static, with NVENC and libplacebo)"
-if ! command -v ffmpeg >/dev/null || ! ffmpeg -hide_banner -encoders 2>/dev/null | grep -q h264_nvenc; then
+# FFmpeg 8.1: BtbN builds 9.0 and master against NVENC API 13.1 (driver 610+), and the 1070's last driver branch is
+# 580 (API 13.0). The check encodes a frame, so a build whose NVENC can't open is replaced.
+nvenc_ok() { ffmpeg -hide_banner -v error -f lavfi -i color=black:s=256x256:d=0.1 -c:v h264_nvenc -f null - >/dev/null 2>&1; }
+if ! command -v ffmpeg >/dev/null || { command -v nvidia-smi >/dev/null && ! nvenc_ok; }; then
   tmp=$(mktemp -d)
-  fetch https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz "$tmp/ffmpeg.tar.xz"
+  fetch https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz "$tmp/ffmpeg.tar.xz"
   tar -xJf "$tmp/ffmpeg.tar.xz" -C "$tmp" --strip-components=1
   install -m 755 "$tmp/bin/ffmpeg" "$tmp/bin/ffprobe" "$BIN/"
   rm -r "$tmp"
