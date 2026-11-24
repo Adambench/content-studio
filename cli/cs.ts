@@ -208,8 +208,14 @@ async function main() {
     case 'test-render': {
       const id = await cardId(rest[0]);
       const seconds = Number(opt.seconds ?? 10);
-      const inputId = opt.input;
       const { cpu } = opt;
+      // A file's id may be given by its start, as `cs card` prints it.
+      let inputId = opt.input;
+      if (inputId) {
+        const hit = (await api<CardDetail>(`/api/cards/${id}`)).inputs.filter((i) => i.id.startsWith(inputId!));
+        if (hit.length !== 1) throw new Error(hit.length ? `More than one file starts with ${inputId}` : `No file ${inputId} on this card`);
+        inputId = hit[0]!.id;
+      }
       await waitFor(await api<Job>(`/api/cards/${id}/test-render`, { body: { seconds, ...(inputId ? { inputId } : {}), gpu: !cpu } }));
       return;
     }
