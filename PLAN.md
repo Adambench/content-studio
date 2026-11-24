@@ -149,12 +149,21 @@ P1 works, then `next` becomes `main`.
 - [ ] ai-server reachable (power, Tailscale, SSH). One setup script: Node 24, FFmpeg (NVENC, libplacebo), Chrome
   headless shell, Python 3.12 + uv, PyTorch 2.14 cu126 (the last with Pascal), ONNX Runtime; a systemd service;
   Tailscale HTTPS
-- [ ] Claude on ai-server: my Pro login, the SDK wrapper (Opus, structured answers, usage guard)
-- [ ] New tree on `next`: `server` (API, jobs, engine), `tools` (Python), `web`, `mobile`, `shared`; old code gone
-- [ ] Data: pages, cards, inputs, versions, renders, comments, rules, jobs; media and projects on disk
-- [ ] App: board, card, uploads and sharing, player with pinned comments, Approve → Ready, download; Android app
-  updated (same id and key, paired to ai-server); `cs` paired
-- [ ] Measured on the 1070: a 60 s render as one HyperFrames page vs A-roll + transparent overlays; NVENC vs x264
+- [ ] Claude on ai-server: my Pro login. The SDK wrapper is built (`engine/claude.ts`: Opus, structured answers,
+  usage guard, every call counted); tried on the laptop's login: a Write = one call, ~9.6 k prompt tokens (cached
+  after), 1 k out, 13 s
+- [x] New tree on `next`: `server` (API, jobs, engine), `web`, `cli`, `mobile`, `shared`; old code gone (2026-11-23).
+  `tools` (Python) comes with P1
+- [x] Data: pages, cards, inputs, versions, renders, comments, rules (halal locked, playbook as fundamentals), jobs
+  (lanes, resumable steps); media and projects on disk; API smoke tests (`npm test`)
+- [x] App: board (drag between stages; one list on the phone), card (script and notes saved as I type, earlier
+  drafts, Hooks to take, files, player with comments pinned to a moment or a stretch, versions), page settings,
+  rules, settings with pairing; Write and Hooks work; `cs` for the terminal. Looked at in headless Chrome at 1920 ×
+  1080 and 412 × 915. Tailscale identity is the sign-in; the phone pairs by QR for its upload queue
+- [ ] Android app: the new screens are in the app build (share sheet → a card, background uploads, downloads);
+  release v1.0.0 (same id and key) once ai-server answers
+- [ ] Measured on the 1070: a 60 s render as one HyperFrames page vs A-roll + transparent overlays; NVENC vs x264.
+  On the laptop (HyperFrames 0.9.86, 4 workers, x264): 4 s of titles and captions in 6.8 s; over footage 15.9 s
 - Done when the phone sends a take to a card on ai-server and the laptop plays a test render made there
 
 **P1 — Daily episode, one press**
