@@ -10,6 +10,7 @@ import pty from '@lydell/node-pty';
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config.ts';
 import { claudeEnv } from '../engine/claude.ts';
+import { hyperframesEnv } from '../engine/render.ts';
 import { findBinary } from '../lib/proc.ts';
 import { getVideo } from '../services/videos.ts';
 
@@ -55,7 +56,7 @@ export async function registerTerminal(app: FastifyInstance) {
       cols: size(q.cols, 100, 400),
       rows: size(q.rows, 30, 200),
       cwd,
-      env: { ...claudeEnv(), TERM: 'xterm-256color', COLORTERM: 'truecolor' },
+      env: { ...claudeEnv(), ...hyperframesEnv(), TERM: 'xterm-256color', COLORTERM: 'truecolor' },
     });
     term.onData((d) => socket.send(d));
     term.onExit(() => socket.close());

@@ -11,6 +11,7 @@ import { addThread } from '../services/thread.ts';
 import { clearApproval, getVideo, setSession } from '../services/videos.ts';
 import { claudeEnv, isUsageError, recordCall, recordRate, type CallUsage, type RateInfo } from './claude.ts';
 import { guardFor } from './guard.ts';
+import { hyperframesEnv } from './render.ts';
 import { studioTools, type RunState } from './tools.ts';
 
 const STARTED = now();
@@ -91,7 +92,7 @@ export async function runAgent(ctx: JobContext) {
           prompt,
           options: {
             cwd,
-            env: claudeEnv(),
+            env: { ...claudeEnv(), ...hyperframesEnv() },
             model: 'opus',
             settingSources: ['user', 'project'],
             systemPrompt: { type: 'preset', preset: 'claude_code', append: APPEND },

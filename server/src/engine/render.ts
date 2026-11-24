@@ -10,6 +10,19 @@ import { run, searchPath } from '../lib/proc.ts';
 import { sleep } from '../lib/util.ts';
 
 const CHROME_DIR = join(config.toolsDir, 'chrome');
+let knownChrome: string | null = null;
+
+/** What any HyperFrames run on this machine needs (the app's renders, Claude's \`hyperframes check\`, the terminal). */
+export function hyperframesEnv(): Record<string, string> {
+  return {
+    PATH: `${join(config.repoRoot, 'node_modules/.bin')}:${searchPath()}`,
+    HYPERFRAMES_CACHE_DIR: config.hyperframesCache,
+    ...(knownChrome ? { PRODUCER_HEADLESS_SHELL_PATH: knownChrome } : {}),
+    // No telemetry from a private machine.
+    HYPERFRAMES_TELEMETRY: '0',
+    DO_NOT_TRACK: '1',
+  };
+}
 
 async function chromeBuild(): Promise<string> {
   const { PUPPETEER_REVISIONS } = (await import('puppeteer-core/internal/revisions.js')) as { PUPPETEER_REVISIONS: Record<string, string> };
@@ -20,12 +33,12 @@ async function chromeBuild(): Promise<string> {
 export async function ensureChrome(onProgress?: (fraction: number) => void): Promise<string> {
   const buildId = await chromeBuild();
   const path = computeExecutablePath({ browser: Browser.CHROMEHEADLESSSHELL, buildId, cacheDir: CHROME_DIR });
-  if (existsSync(path)) return path;
+  if (existsSync(path)) return (knownChrome = path);
   // A dropped download is tried again (ai-server's line sometimes breaks long transfers).
   for (let attempt = 1; ; attempt++) {
     try {
       await install({ browser: Browser.CHROMEHEADLESSSHELL, buildId, cacheDir: CHROME_DIR, downloadProgressCallback: (done, total) => onProgress?.(total ? done / total : 0) });
-      return path;
+      return (knownChrome = path);
     } catch (err) {
       if (attempt >= 4) throw err;
       await sleep(3000 * attempt);
@@ -58,14 +71,11 @@ export async function renderProject(projectDir: string, out: string, opts: Rende
     {
       signal: opts.signal,
       env: {
-        PATH: searchPath(),
+        ...hyperframesEnv(),
         PRODUCER_HEADLESS_SHELL_PATH: chrome,
         PRODUCER_MAX_WORKERS: String(workers),
-        HYPERFRAMES_EXTRACT_CACHE_DIR: join(config.dataDir, 'cache', 'hyperframes'),
+        HYPERFRAMES_EXTRACT_CACHE_DIR: join(config.hyperframesCache, 'extract'),
         HYPERFRAMES_EXTRACT_CACHE_MAX_MB: '4096',
-        // No telemetry from a private machine.
-        HYPERFRAMES_TELEMETRY: '0',
-        DO_NOT_TRACK: '1',
       },
       onLine: (line) => {
         const m = line.match(/^@progress (\d(?:\.\d+)?) ?(.*)$/);

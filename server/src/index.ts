@@ -1,6 +1,7 @@
 import { config } from './config.ts';
 import { migrate } from './db/db.ts';
 import { buildApp } from './http/app.ts';
+import { ensureChrome } from './engine/render.ts';
 import { registerJobs } from './jobs/kinds.ts';
 import { startRunner, stopRunner } from './jobs/runner.ts';
 import { sweepUploads } from './services/inputs.ts';
@@ -13,6 +14,8 @@ registerJobs();
 const app = await buildApp();
 await app.listen({ host: config.host, port: config.port });
 startRunner();
+// Chrome's path for every HyperFrames run (installs it if it's missing).
+void ensureChrome().catch((err: unknown) => console.error('[chrome]', err));
 setInterval(() => void sweepUploads(), 6 * 3600_000).unref();
 console.log(`Content Studio ${config.version} on http://${config.host}:${config.port} (studio in ${config.studioDir}, data in ${config.dataDir})`);
 

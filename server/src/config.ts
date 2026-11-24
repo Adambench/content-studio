@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir, hostname } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +24,8 @@ export const config = {
   uploadsDir: join(dataDir, 'uploads'),
   /** Programs and models the engine installs for itself: Python envs, Chrome's headless shell, weights. */
   toolsDir: join(dataDir, 'tools'),
+  /** HyperFrames' own cache. It refuses one another account could write to (Mint's umask makes folders group-writable). */
+  hyperframesCache: join(dataDir, 'cache', 'hyperframes'),
   /** The Claude Agent SDK's working folder (no project settings, no CLAUDE.md). */
   claudeDir: join(dataDir, 'claude'),
   webDist: join(repoRoot, 'web/dist'),
@@ -31,9 +33,13 @@ export const config = {
   keysFile: process.env.CS_KEYS_FILE || join(home, '.config/content-studio/keys.env'),
 };
 
-for (const dir of [config.dataDir, config.studioDir, config.uploadsDir, config.toolsDir, config.claudeDir]) {
+for (const dir of [config.dataDir, config.studioDir, config.uploadsDir, config.toolsDir, config.claudeDir, config.hyperframesCache]) {
   mkdirSync(dir, { recursive: true });
 }
+// Only I may write on the way to HyperFrames' cache (it checks every folder up from it).
+chmodSync(config.dataDir, 0o755);
+chmodSync(join(config.dataDir, 'cache'), 0o755);
+chmodSync(config.hyperframesCache, 0o700);
 
 /**
  * Keys for outside services (Pexels, Pixabay, Freesound), from a KEY=value file kept only on this machine. Read on
