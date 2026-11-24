@@ -5,7 +5,7 @@
 #   bash scripts/setup-server.sh            # from the repo checkout on ai-server (~/content-studio)
 #
 # Installs into ~/.local: Node 24, FFmpeg (BtbN's static build: NVENC, libplacebo, zimg), uv. Builds the web UI,
-# installs a systemd user service on 127.0.0.1:8787 and puts it on the tailnet with Tailscale Serve (HTTPS).
+# installs a systemd user service on 127.0.0.1:8787 and puts it on the tailnet with Tailscale Serve (HTTPS, :8443).
 # The engine's Python tools and models come with the phase that needs them (P1).
 set -euo pipefail
 
@@ -80,16 +80,18 @@ fi
 sleep 2
 curl -fsS http://127.0.0.1:8787/api/health && echo
 
-say "Tailscale Serve (HTTPS on the tailnet only, never Funnel)"
-if tailscale serve --bg --https=443 http://127.0.0.1:8787 >/dev/null 2>&1; then
-  tailscale serve status 2>/dev/null | head -5
+# Port 8443, tailnet only: 443 belongs to Open WebUI (with Funnel), which this never touches.
+say "Tailscale Serve (HTTPS on port 8443, tailnet only, never Funnel)"
+if tailscale serve --bg --https=8443 http://127.0.0.1:8787 >/dev/null 2>&1; then
+  tailscale serve status 2>/dev/null | grep ':8443' || true
 else
   echo "Run once: sudo tailscale set --operator=$USER   then run this script again."
 fi
 
+# The Agent SDK brings its own Claude binary; the login is a long-lived token from `claude setup-token`.
 say "Claude"
-if [[ -f "$HOME/.claude/.credentials.json" ]]; then
+if grep -q '^CLAUDE_CODE_OAUTH_TOKEN=.' "$HOME/.config/content-studio/keys.env" 2>/dev/null || [[ -f "$HOME/.claude/.credentials.json" ]]; then
   echo "Logged in."
 else
-  echo "Not logged in: install Claude Code (curl -fsSL https://claude.ai/install.sh | bash), run claude, then /login."
+  echo "Not logged in: run \`claude setup-token\` (on the laptop is fine) and put CLAUDE_CODE_OAUTH_TOKEN=… in ~/.config/content-studio/keys.env (chmod 600)."
 fi

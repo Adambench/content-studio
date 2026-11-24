@@ -57,7 +57,7 @@ function PairPhone() {
 
 /** In the app: pair with the code the laptop shows. */
 function PairHere() {
-  const [server, setServer] = useState(serverUrl().startsWith('https://localhost') ? 'https://ai-server.tail1e2ac8.ts.net' : serverUrl());
+  const [server, setServer] = useState(serverUrl().startsWith('https://localhost') ? 'https://ai-server.tail1e2ac8.ts.net:8443' : serverUrl());
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const scan = async () => {

@@ -37,7 +37,7 @@ function server(): string {
     const s = (JSON.parse(readFileSync(file, 'utf8')) as { server?: string }).server;
     if (s) return s.replace(/\/$/, '');
   }
-  return hostname() === 'ai-server' ? 'http://127.0.0.1:8787' : 'https://ai-server.tail1e2ac8.ts.net';
+  return hostname() === 'ai-server' ? 'http://127.0.0.1:8787' : 'https://ai-server.tail1e2ac8.ts.net:8443';
 }
 
 async function api<T>(path: string, init: { method?: string; body?: unknown; raw?: Readable; headers?: Record<string, string> } = {}): Promise<T> {

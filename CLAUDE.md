@@ -7,9 +7,11 @@ and phases; read only the section you need.
 
 ## Where things run
 
-- **ai-server** (the GTX 1070 PC, `bouyaka@ai-server`, on 24/7): the app (Node 24 on 127.0.0.1:8787, systemd user
-  service `content-studio`), its data (`~/.local/share/studio`), renders, and Claude (Agent SDK on my Pro login
-  there). On the tailnet by Tailscale Serve: https://ai-server.tail1e2ac8.ts.net. Never Funnel.
+- **ai-server** (the GTX 1070 PC, Linux Mint, `bouyaka@ai-server`, on 24/7): the app (Node 24 on 127.0.0.1:8787,
+  systemd user service `content-studio`), its data (`~/.local/share/studio`), renders, and Claude (the Agent SDK's
+  own binary on my Pro login: a `claude setup-token` token in `~/.config/content-studio/keys.env`). On the tailnet by
+  Tailscale Serve: https://ai-server.tail1e2ac8.ts.net:8443. Port 443 there is Open WebUI's (Docker, with Funnel):
+  never touch it, never Funnel ours.
 - **Laptop**: Claude Code and the app in Chrome. `cs` talks to ai-server; `npm run deploy` ships code.
 - **Phone**: the Android app (`mobile/`), paired with a code from Settings → Phone.
 

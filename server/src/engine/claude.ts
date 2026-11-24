@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { query, type Options, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { config } from '../config.ts';
+import { config, keys } from '../config.ts';
 import { getSetting, run as sql, setSetting } from '../db/db.ts';
 import { JobWait } from '../jobs/queue.ts';
 import { newId, now } from '../lib/util.ts';
@@ -23,18 +23,20 @@ type Usage = { fiveHour?: { utilization: number; resetsAt: number }; sevenDay?: 
 function baseOptions(): Options {
   // An ANTHROPIC_API_KEY in the environment would take precedence over the login and bill that key: drop it.
   const { ANTHROPIC_API_KEY: _drop, ...env } = process.env;
+  // The login can be a long-lived token (`claude setup-token`) kept in the keys file instead of ~/.claude.
+  const token = keys().CLAUDE_CODE_OAUTH_TOKEN;
   return {
     cwd: config.claudeDir,
-    env: { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: `content-studio/${config.version}`, ENABLE_CLAUDEAI_MCP_SERVERS: 'false' },
+    env: { ...env, ...(token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}), CLAUDE_AGENT_SDK_CLIENT_APP: `content-studio/${config.version}`, ENABLE_CLAUDEAI_MCP_SERVERS: 'false' },
     // None of my personal Claude Code settings, hooks or CLAUDE.md files.
     settingSources: [],
   };
 }
 
 export function claudeStatus(): { loggedIn: boolean; detail: string } {
-  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) return { loggedIn: true, detail: 'Token from the environment' };
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN || keys().CLAUDE_CODE_OAUTH_TOKEN) return { loggedIn: true, detail: 'Logged in (token)' };
   const creds = join(homedir(), '.claude/.credentials.json');
-  if (!existsSync(creds)) return { loggedIn: false, detail: 'Not logged in: run `claude` on this machine and /login' };
+  if (!existsSync(creds)) return { loggedIn: false, detail: 'Not logged in: `claude setup-token`, then CLAUDE_CODE_OAUTH_TOKEN in keys.env' };
   try {
     const c = JSON.parse(readFileSync(creds, 'utf8')) as { claudeAiOauth?: { subscriptionType?: string } };
     const plan = c.claudeAiOauth?.subscriptionType;
