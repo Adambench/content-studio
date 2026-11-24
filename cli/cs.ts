@@ -106,8 +106,10 @@ async function waitFor(job: Job): Promise<Job> {
 const MIME: Record<string, string> = { '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm', '.mkv': 'video/x-matroska', '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/markdown' };
 
 async function main() {
-  const [cmd, ...rest] = args;
+  // Every flag comes out first, so none ends up among the positional arguments (file names, the instruction).
   const wait = flag('wait') === 'true';
+  const opt = { recipe: flag('recipe'), notes: flag('notes'), role: flag('role'), seconds: flag('seconds'), input: flag('input'), cpu: flag('cpu') === 'true' };
+  const [cmd, ...rest] = args;
   switch (cmd) {
     case undefined:
     case 'help':
@@ -159,8 +161,7 @@ async function main() {
     case 'new': {
       const [page, title] = rest;
       if (!page || !title) throw new Error('cs new <page> "<title>"');
-      const recipe = flag('recipe');
-      const notes = flag('notes');
+      const { recipe, notes } = opt;
       const c = await api<CardSummary>('/api/cards', { body: { pageId: await pageId(page), title, ...(recipe ? { recipe } : {}), ...(notes ? { notes } : {}) } });
       console.log(`${short(c.id)} ${c.title}`);
       return;
@@ -175,7 +176,7 @@ async function main() {
     }
     case 'add': {
       const [q, ...files] = rest;
-      const role = flag('role');
+      const { role } = opt;
       const id = await cardId(q);
       for (const f of files) {
         const name = basename(f);
@@ -191,7 +192,7 @@ async function main() {
     case 'hooks':
     case 'make':
     case 'fix': {
-      const recipe = flag('recipe');
+      const { recipe } = opt;
       const id = await cardId(rest[0]);
       const body = cmd === 'write' ? { instruction: rest.slice(1).join(' ') } : cmd === 'make' && recipe ? { recipe } : {};
       const job = await api<Job>(`/api/cards/${id}/${cmd}`, { body });
@@ -206,9 +207,9 @@ async function main() {
     }
     case 'test-render': {
       const id = await cardId(rest[0]);
-      const seconds = Number(flag('seconds') ?? 10);
-      const inputId = flag('input');
-      const cpu = flag('cpu') === 'true';
+      const seconds = Number(opt.seconds ?? 10);
+      const inputId = opt.input;
+      const { cpu } = opt;
       await waitFor(await api<Job>(`/api/cards/${id}/test-render`, { body: { seconds, ...(inputId ? { inputId } : {}), gpu: !cpu } }));
       return;
     }
