@@ -31,10 +31,10 @@ PLAN.md has the decisions (*The app*), parts, targets and phases; read only the 
   (queue, runner with lanes: Claude runs one per video, GPU turns in `engine/gpu.ts`), `engine/` (`agent.ts` =
   Claude Code per video, `guard.ts` = its guard rails, `tools.ts` = the studio's MCP tools, `claude.ts` = login,
   usage, one-off answers, `render.ts` + `render-child.ts` = HyperFrames, `media.ts`), `http/` (`app.ts` auth,
-  `routes.ts`, `terminal.ts` = the browser terminal over a WebSocket).
+  `routes.ts`, `terminal.ts` = Claude Code in the browser, a video's Terminal tab, over a WebSocket).
 - `web/` — React 19 + Vite + Tailwind 4 + shadcn (`components/ui` is generated: compose, don't edit). Inbox, video
   page (`components/video/`: Stage, Timeline, Thread, Dock, Tabs, PostSheet, `player.ts` store), Brain, Server,
-  Terminal, Ctrl K palette, share sheet. `usePhone()` for the phone layout.
+  Ctrl K palette, share sheet. `usePhone()` for the phone layout.
 - `cli/cs.ts` — the app from the terminal.
 - `shared/` — types for every side (`types.ts`), plain data only.
 - `mobile/` — Capacitor 8 Android shell (`server.url` = ai-server; `shell/` = the offline page): `StudioPlugin`
@@ -49,7 +49,7 @@ PLAN.md has the decisions (*The app*), parts, targets and phases; read only the 
   nothing tied to another religion; Gentle Return never shows my face. Seeded as locked rules (`services/rules.ts`).
 - **No Anthropic API key, ever**: Claude runs through `@anthropic-ai/claude-agent-sdk` on the Pro login
   (`engine/claude.ts` drops `ANTHROPIC_API_KEY`). Every call names its task and is counted (`claude_calls`). Opus for
-  creative choices and reviews. Background work waits while 5-hour usage ≥ 80 % (`waitForUsage`); what I press and
+  creative choices and reviews. Background work waits while 5-hour usage ≥ 80 % or the week's ≥ 95 % (`waitForUsage`); pages set up in bulk (`cs setup … --later`) run one at a time; what I press and
   wait on never waits (`now: true`).
 - **Claude never approves or publishes**: Approve is my click; there is no publishing code.
 - **Claude Code per video**: full shell, no approval prompts (my yes, 2026-11-24) inside `engine/guard.ts`: never

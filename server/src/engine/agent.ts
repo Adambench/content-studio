@@ -4,13 +4,14 @@
 
 import { dirname, join } from 'node:path';
 import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { setSetting } from '../db/db.ts';
+import { get, setSetting } from '../db/db.ts';
+import { JobWait } from '../jobs/queue.ts';
 import type { JobContext } from '../jobs/runner.ts';
 import { errorText, now } from '../lib/util.ts';
 import { reopenSent } from '../services/notes.ts';
 import { addThread } from '../services/thread.ts';
 import { clearApproval, getVideo, setSession } from '../services/videos.ts';
-import { claudeEnv, isUsageError, recordCall, recordRate, type CallUsage, type RateInfo } from './claude.ts';
+import { claudeEnv, isUsageError, recordCall, recordRate, waitForUsage, type CallUsage, type RateInfo } from './claude.ts';
 import { guardFor } from './guard.ts';
 import { hyperframesEnv } from './render.ts';
 import { studioTools, type RunState } from './tools.ts';
@@ -83,7 +84,22 @@ export function describe(name: string, input: Record<string, unknown>, cwd: stri
   }
 }
 
+/**
+ * Work I didn't press for (pages set up in bulk, `later`): it waits for spare usage, and goes only once every
+ * background run started before it has finished, so they run one at a time, oldest first.
+ */
+function waitAsBackground(jobId: string) {
+  waitForUsage();
+  const before = get(
+    `SELECT 1 FROM jobs o, jobs me WHERE me.id = ? AND o.id != me.id AND o.kind = 'agent' AND o.status IN ('queued', 'waiting', 'running')
+       AND json_extract(o.input, '$.background') = 1 AND (o.created_at, o.id) < (me.created_at, me.id)`,
+    jobId,
+  );
+  if (before) throw new JobWait('Waiting for the run before it', 60_000);
+}
+
 export async function runAgent(ctx: JobContext) {
+  if (ctx.input.background) waitAsBackground(ctx.job.id);
   const video = getVideo(ctx.videoId!);
   const cwd = video.folder;
   const isPage = video.kind === 'page';

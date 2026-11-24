@@ -181,6 +181,25 @@ test('a new page: its setup studio, how far Claude builds, samples first, its ki
   assert.equal((await call('DELETE', `/api/pages/${mine.id}`)).status, 200);
 });
 
+test('pages set up in bulk (later) wait for spare usage and go one at a time, oldest first', async () => {
+  const { runAgent } = await import('./engine/agent.ts');
+  const { JobWait } = await import('./jobs/queue.ts');
+  const { setSetting } = await import('./db/db.ts');
+  const jobs: { id: string; input: string }[] = [];
+  for (const name of ['Later one', 'Later two']) {
+    const page = (await call<{ id: string }>('POST', '/api/pages', { name })).json;
+    const setup = (await call<V>('POST', `/api/pages/${page.id}/setup`, { about: `${name}: calm, practical tips.`, mode: 'mine', later: true })).json;
+    jobs.push(get<{ id: string; input: string }>("SELECT id, input FROM jobs WHERE video_id = ? AND kind = 'agent'", setup.id)!);
+  }
+  assert.ok(jobs.every((j) => JSON.parse(j.input).background === true));
+  // Only the waiting is tried here (a run that goes would start Claude).
+  const wait = (id: string) => runAgent({ job: { id }, input: { background: true } } as never).then(() => 'ran', (e: unknown) => (e instanceof JobWait ? e.message : String(e)));
+  assert.match(await wait(jobs[1]!.id), /run before it/);
+  setSetting('claudeUsage', { sevenDay: { utilization: 0.97, resetsAt: Date.now() + 3_600_000 }, updatedAt: Date.now() });
+  assert.match(await wait(jobs[0]!.id), /weekly usage to come down \(97 %\)/);
+  setSetting('claudeUsage', null);
+});
+
 test('the brain is files: halal locked in the studio CLAUDE.md, lessons ticked or not', async () => {
   const md = readFileSync(join(dir, 'studio/CLAUDE.md'), 'utf8');
   assert.match(md, /No music or instruments/);

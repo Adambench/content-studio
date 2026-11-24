@@ -14,7 +14,10 @@ const HELP = `cs — Content Studio from the terminal
   cs status                           server, Claude, tools, what's running
   cs pages · cs page "<name>" ["what it is"] [--mode mine|mix|fresh] [--color #hex]
                                       a new page; with "what it is", Claude sets it up
-  cs setup <page>                     the page's setup (a video: say, add, note, approve work on it)
+  cs setup <page> ["what it is"] [--mode mine|mix|fresh] [--later]
+                                      the page's setup (a video: say, add, note, approve work on it); with "what it
+                                      is", Claude sets it up from what's in files/ (--later: once usage allows, one
+                                      page at a time)
   cs videos [page]                    by status, newest first
   cs video <video>                    folder, files, versions, notes, the last of the thread
   cs new <page> "<what I want>" [--kind talking-head|voiceover|carousel|ugc|explainer|graded] [--no-go]
@@ -132,7 +135,8 @@ async function main() {
       return console.log(`${short(b.id)} ${b.name} · ~/studio/${b.slug} · setup ${short(b.setupId ?? '')}${about ? ' (Claude is setting it up)' : ''}`);
     }
     case 'setup': {
-      const v = await api<Video>(`/api/pages/${await pageId(rest[0] ?? '')}/setup`, { body: {} });
+      const [page, about] = rest;
+      const v = await api<Video>(`/api/pages/${await pageId(page ?? '')}/setup`, { body: about ? { about, mode: opt.mode ?? 'mix', later: flag('later') === 'true' } : {} });
       return console.log(`${short(v.id)} · ${v.folder} · ${v.reason}`);
     }
     case 'videos': {

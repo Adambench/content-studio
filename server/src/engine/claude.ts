@@ -17,6 +17,7 @@ export type Task = 'agent' | 'write' | 'pick' | 'review' | 'lesson' | 'market' |
 const MODEL: Record<Task, string> = { agent: 'opus', write: 'opus', pick: 'opus', review: 'opus', lesson: 'opus', market: 'sonnet', test: 'haiku' };
 
 const BACKGROUND_LIMIT = 0.8;
+const WEEK_LIMIT = 0.95;
 
 type Usage = { fiveHour?: { utilization: number; resetsAt: number }; sevenDay?: { utilization: number; resetsAt: number }; status?: string; updatedAt: number };
 
@@ -53,11 +54,14 @@ export const claudeUsage = () => getSetting<Usage | null>('claudeUsage', null);
 export function waitForUsage() {
   const limited = getSetting<number>('claudeLimitedUntil', 0);
   if (limited > now()) throw new JobWait('Claude refused for usage: trying again in an hour', limited - now());
-  const five = claudeUsage()?.fiveHour;
-  if (!five || five.utilization < BACKGROUND_LIMIT || five.resetsAt <= now()) return;
-  const delay = five.resetsAt - now() + 60_000;
-  const at = new Date(now() + delay).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  throw new JobWait(`Waiting for Claude's 5-hour usage to come down (${Math.round(five.utilization * 100)} %), until about ${at}`, delay);
+  const usage = claudeUsage();
+  // The week's last few percent stay for what I press (its window resets once a week, so waiting can take a night).
+  for (const [w, limit, what] of [[usage?.fiveHour, BACKGROUND_LIMIT, '5-hour'], [usage?.sevenDay, WEEK_LIMIT, 'weekly']] as const) {
+    if (!w || w.utilization < limit || w.resetsAt <= now()) continue;
+    const delay = w.resetsAt - now() + 60_000;
+    const at = new Date(now() + delay).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    throw new JobWait(`Waiting for Claude's ${what} usage to come down (${Math.round(w.utilization * 100)} %), until about ${at}`, delay);
+  }
 }
 
 export type RateInfo = { status?: string; rateLimitType?: string; utilization?: number; resetsAt?: number; unifiedWindows?: Record<string, { utilization: number; resetsAt: number }> };

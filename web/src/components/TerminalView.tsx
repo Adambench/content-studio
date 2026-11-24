@@ -1,4 +1,4 @@
-// A terminal on ai-server in the page (xterm.js over the app's WebSocket): a shell, or Claude Code itself.
+// Claude Code on ai-server in the page (xterm.js over the app's WebSocket), in a video's folder.
 
 import '@xterm/xterm/css/xterm.css';
 import { FitAddon } from '@xterm/addon-fit';

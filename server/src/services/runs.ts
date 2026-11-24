@@ -22,7 +22,7 @@ function newFiles(videoId: string): string[] {
 }
 
 /** A run with `prompt`, plus what changed since the last one (new files, the kind I asked for, a page's brief). */
-export function go(videoId: string, prompt: string): Job {
+export function go(videoId: string, prompt: string, opts: { background?: boolean } = {}): Job {
   const video = getVideo(videoId);
   const files = newFiles(videoId);
   const first = !get("SELECT 1 FROM jobs WHERE video_id = ? AND kind = 'agent'", videoId);
@@ -31,7 +31,7 @@ export function go(videoId: string, prompt: string): Job {
   if (first && video.kind === 'page' && !prompt.startsWith(KICKOFF)) parts.unshift(kickoff(video.pageId, 'mix'));
   if (files.length) parts.push(`New in files/: ${files.join(', ')}.`);
   if (first && video.kind !== 'auto' && video.kind !== 'page') parts.push(`It's meant to be: ${video.kind}.`);
-  return enqueue('agent', { videoId, input: { prompt: parts.filter(Boolean).join('\n\n') } });
+  return enqueue('agent', { videoId, input: { prompt: parts.filter(Boolean).join('\n\n'), ...(opts.background && { background: true }) } });
 }
 
 const messageInput = z.object({ text: z.string().trim().min(1).max(20_000) });
@@ -124,7 +124,13 @@ function kickoff(pageId: string, mode: PageMode): string {
   return [KICKOFF, `Name: ${named ? `"${page.name}"` : 'none yet (suggest 3, then ask me)'}.`, `Start from ${MODES[mode]}.`].join('\n');
 }
 
-const setupInput = z.object({ about: z.string().trim().max(20_000).default(''), mode: z.enum(PAGE_MODES).default('mix'), files: z.number().int().min(0).max(500).default(0) });
+const setupInput = z.object({
+  about: z.string().trim().max(20_000).default(''),
+  mode: z.enum(PAGE_MODES).default('mix'),
+  files: z.number().int().min(0).max(500).default(0),
+  /** Not pressed for (pages set up in bulk): it waits for spare usage, one at a time. Files already in, not to come. */
+  later: z.boolean().default(false),
+});
 
 /** A new page's first go: what I said (in the thread at once), how far to build, and my samples once they're in. */
 export function startSetup(pageId: string, input: unknown) {
@@ -133,7 +139,7 @@ export function startSetup(pageId: string, input: unknown) {
   addThread(setup.id, 'you', s.about || 'Set this page up from what I sent.', { mode: s.mode });
   const prompt = [kickoff(pageId, s.mode), s.about ? `What I said about it:\n${s.about}` : 'I said nothing about it: work from what I gave.'].join('\n');
   if (s.files) makeWhenUploaded(setup.id, s.files, prompt);
-  else go(setup.id, prompt);
+  else go(setup.id, prompt, { background: s.later });
   return getVideo(setup.id);
 }
 

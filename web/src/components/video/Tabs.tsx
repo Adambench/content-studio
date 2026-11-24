@@ -111,32 +111,8 @@ export function FilesTab({ detail, onAttach }: { detail: VideoDetail; onAttach: 
   );
 }
 
+/** Claude Code's own screen on this video's session: the same Claude as the thread, without the app around it. */
 export function TerminalTab({ detail }: { detail: VideoDetail }) {
-  const [mode, setMode] = useState<'shell' | 'claude' | null>(null);
-  const busy = !!detail.job;
-  if (!mode)
-    return (
-      <div className="flex flex-col gap-3 text-sm">
-        <p className="text-muted-foreground">A real terminal on ai-server, in this video’s folder.</p>
-        <Button variant="outline" onClick={() => setMode('claude')} disabled={busy}>
-          Claude Code, this video’s session
-        </Button>
-        <Button variant="outline" onClick={() => setMode('shell')}>
-          A shell here
-        </Button>
-        {busy && <p className="text-xs text-muted-foreground">Claude is working on this video: its session opens here once it’s done (or Stop it).</p>}
-        <p className="font-mono text-[11px] break-all text-muted-foreground">{detail.video.folder}</p>
-      </div>
-    );
-  return (
-    <div className="flex h-full flex-col gap-2">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{mode === 'claude' ? 'claude --resume' : 'bash'} · {detail.video.slug}</span>
-        <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setMode(null)}>
-          Close
-        </Button>
-      </div>
-      <TerminalView key={mode} path={`/api/terminal?videoId=${detail.video.id}&mode=${mode}`} className="min-h-0 flex-1" />
-    </div>
-  );
+  if (detail.job) return <p className="text-sm text-muted-foreground">Claude is working on this video: its session opens here once it’s done (or Stop it).</p>;
+  return <TerminalView path={`/api/terminal?videoId=${detail.video.id}`} className="min-h-0 flex-1" />;
 }

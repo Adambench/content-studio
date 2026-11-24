@@ -37,7 +37,8 @@ convenience and power". The clickable mock it was decided on: https://claude.ai/
   persistent Agent SDK session (Claude Code's own tools: shell, files, web, skills, subagents, MCP), working while
   the browser is closed. Full shell, no approval prompts (my yes, 2026-11-24), inside guard rails: never Open
   WebUI, Docker, Ollama, systemd or the network settings, no deletes outside `~/studio`, never posts.
-- **Same session in a terminal:** each video's Terminal tab is `claude --resume` in its folder; plus a plain shell.
+- **Same session in a terminal:** each video's Terminal tab is `claude --resume` in its folder. Claude only: the plain
+  shells went 2026-11-24 ("I don't really need anything else than claude").
 - **Engine = skills + tools.** Recipes are skills (in the repo, linked into `~/.claude/skills` on ai-server); the
   measurable work is commands Claude calls (transcribe, cut, clean voice, strip music, reframe, captions, render on
   the GPU, checks). Claude checks each render itself (a picture at each cut, loudness, safe areas, halal) before I
@@ -233,8 +234,8 @@ P1 works, then `next` becomes `main`.
   versions and Compare, Approve → Post sheet), Brain (lessons on/off, halal, each page's CLAUDE.md, skills),
   Server, Ctrl K; phone layout (video full screen, Note / Thread / Version / Approve, thread as a sheet). Checked
   in headless Chrome on ai-server at 1440 × 900 and 412 × 915, no console errors
-- [x] Terminal: per video (`claude --resume` of the app's session, or a shell) and a plain shell in `~/studio`, over
-  the app's sign-in (xterm.js, node-pty)
+- [x] Terminal: per video, `claude --resume` of the app's session over the app's sign-in (xterm.js, node-pty); the
+  shells removed 2026-11-24
 - [x] ai-server: skills linked into `~/.claude/skills` on deploy (5 editing skills added from the laptop:
   cut-mistakes, cut-silences, edit-video, hyperframes-video-beats, video-perception); `~/studio/CLAUDE.md` written
   on start; HyperFrames gets a private cache (it refuses Mint's group-writable `~/.cache`) and its CLI at the

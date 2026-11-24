@@ -1,7 +1,7 @@
 // The frame around every screen: pages and places on the left (laptop) or tabs at the bottom (phone, hidden while a
 // video fills the screen), Ctrl K to jump anywhere, and files shared from the phone's gallery.
 
-import { BookOpen, Inbox, Plus, Search, Server, SquareTerminal } from 'lucide-react';
+import { BookOpen, Inbox, Plus, Search, Server } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -93,7 +93,6 @@ function Sidebar({ onPalette, onNew }: { onPalette: () => void; onNew: () => voi
       </button>
       <div className="mt-auto flex flex-col gap-0.5 border-t pt-2">
         <Place to="/brain" icon={BookOpen} label="Brain" />
-        <Place to="/terminal" icon={SquareTerminal} label="Terminal" />
         <Place to="/server" icon={Server} label="Server" />
         <div className="flex items-center gap-2 px-2.5 pt-2 text-xs text-muted-foreground">
           <span className={cn('size-1.5 rounded-full', system.data?.claude.loggedIn ? 'bg-emerald-500' : system.isError ? 'bg-destructive' : 'bg-muted-foreground')} />
@@ -128,7 +127,6 @@ function TabBar({ onNew }: { onNew: () => void }) {
       <button type="button" onClick={onNew} aria-label="New video" className="mb-1 grid size-12 place-items-center rounded-2xl bg-primary text-primary-foreground">
         <Plus className="size-6" />
       </button>
-      {tab('/terminal', SquareTerminal, 'Terminal')}
       {tab('/server', Server, 'Server')}
     </nav>
   );

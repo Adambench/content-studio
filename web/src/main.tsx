@@ -11,7 +11,6 @@ import { connectLive, queryClient } from '@/lib/queries';
 import { BrainPage } from '@/pages/BrainPage';
 import { InboxPage } from '@/pages/InboxPage';
 import { ServerPage } from '@/pages/ServerPage';
-import { TerminalPage } from '@/pages/TerminalPage';
 import { VideoPage } from '@/pages/VideoPage';
 
 const router = createBrowserRouter([
@@ -22,7 +21,6 @@ const router = createBrowserRouter([
       { path: '/p/:pageId', element: <InboxPage /> },
       { path: '/v/:videoId', element: <VideoPage /> },
       { path: '/brain', element: <BrainPage /> },
-      { path: '/terminal', element: <TerminalPage /> },
       { path: '/server', element: <ServerPage /> },
       { path: '*', element: <InboxPage /> },
     ],

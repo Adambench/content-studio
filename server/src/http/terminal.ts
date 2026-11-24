@@ -1,5 +1,5 @@
-// The terminal in the browser: a real shell on ai-server, or Claude Code itself in a video's folder
-// (`claude --resume`, the same session the app's thread uses). Behind the app's own sign-in, over a WebSocket.
+// Claude Code itself in the browser, in a video's folder (`claude --resume`: the same session the app's thread uses,
+// without the app's tools around it). Behind the app's own sign-in, over a WebSocket.
 // Messages from the page are keystrokes, except "\u0000" + JSON ({"cols","rows"}) for a resize.
 
 import { existsSync } from 'node:fs';
@@ -8,7 +8,6 @@ import { dirname, join } from 'node:path';
 import websocket from '@fastify/websocket';
 import pty from '@lydell/node-pty';
 import type { FastifyInstance } from 'fastify';
-import { config } from '../config.ts';
 import { claudeEnv } from '../engine/claude.ts';
 import { hyperframesEnv } from '../engine/render.ts';
 import { findBinary } from '../lib/proc.ts';
@@ -30,22 +29,18 @@ const size = (v: unknown, fallback: number, max: number) => Math.max(10, Math.mi
 
 export async function registerTerminal(app: FastifyInstance) {
   await app.register(websocket);
-  app.get<{ Querystring: { videoId?: string; mode?: string; cols?: string; rows?: string } }>('/api/terminal', { websocket: true }, (socket, req) => {
+  app.get<{ Querystring: { videoId?: string; cols?: string; rows?: string } }>('/api/terminal', { websocket: true }, (socket, req) => {
     const q = req.query;
-    let cwd = config.studioDir;
-    let file = process.env.SHELL || '/bin/bash';
-    let args: string[] = ['-l'];
+    let cwd: string;
+    let file: string;
+    let args: string[];
     try {
-      if (q.videoId) {
-        const v = getVideo(q.videoId);
-        cwd = v.folder;
-        if (q.mode === 'claude') {
-          const bin = claudeBinary();
-          if (!bin) throw new Error('Claude Code isn’t installed on this machine');
-          file = bin;
-          args = v.sessionId ? ['--resume', v.sessionId] : [];
-        }
-      }
+      const v = getVideo(q.videoId ?? '');
+      const bin = claudeBinary();
+      if (!bin) throw new Error('Claude Code isn’t installed on this machine');
+      cwd = v.folder;
+      file = bin;
+      args = v.sessionId ? ['--resume', v.sessionId] : [];
     } catch (err) {
       socket.send(`\r\n${err instanceof Error ? err.message : String(err)}\r\n`);
       socket.close();

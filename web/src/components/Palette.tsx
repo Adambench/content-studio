@@ -24,7 +24,7 @@ export function Palette({ open, onOpenChange }: { open: boolean; onOpenChange: (
     out.push({ group: 'Do', label: 'New page', hint: 'set one up with Claude', run: openNewPage });
     out.push({ group: 'Go to', label: 'Inbox', hint: '', run: () => navigate('/') });
     for (const b of pages.data ?? []) out.push({ group: 'Go to', label: b.name, hint: 'page', run: () => navigate(`/p/${b.id}`) });
-    for (const [label, to] of [['Brain', '/brain'], ['Terminal', '/terminal'], ['Server', '/server']] as const) out.push({ group: 'Go to', label, hint: '', run: () => navigate(to) });
+    for (const [label, to] of [['Brain', '/brain'], ['Server', '/server']] as const) out.push({ group: 'Go to', label, hint: '', run: () => navigate(to) });
     for (const s of brain.data?.skills ?? []) out.push({ group: 'Skills', label: `/${s.name}`, hint: s.description, run: () => window.dispatchEvent(new CustomEvent('cs:insert', { detail: `/${s.name} ` })) });
     const l = q.toLowerCase().trim();
     return out.filter((i) => !l || `${i.label} ${i.hint}`.toLowerCase().includes(l)).slice(0, 60);

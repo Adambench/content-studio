@@ -52,12 +52,13 @@ function newerThanMyLast(videoId: string, n: number): boolean {
 function summarize(r: VideoRow): VideoSummary {
   const latest = get<{ id: string; n: number; kind: 'video' | 'carousel'; duration: number | null; slides: number }>('SELECT id, n, kind, duration, slides FROM versions WHERE video_id = ? ORDER BY n DESC LIMIT 1', r.id) ?? null;
   const openNotes = get<{ c: number }>("SELECT COUNT(*) AS c FROM notes WHERE video_id = ? AND status = 'open'", r.id)?.c ?? 0;
-  const job = get<{ id: string; status: JobStatus; step: string | null; progress: number }>("SELECT id, status, step, progress FROM jobs WHERE video_id = ? AND kind = 'agent' AND status IN ('queued', 'waiting', 'running') ORDER BY created_at DESC LIMIT 1", r.id) ?? null;
+  const row = get<{ id: string; status: JobStatus; step: string | null; progress: number; error: string | null }>("SELECT id, status, step, progress, error FROM jobs WHERE video_id = ? AND kind = 'agent' AND status IN ('queued', 'waiting', 'running') ORDER BY created_at DESC LIMIT 1", r.id);
+  const job = row ? { id: row.id, status: row.status, step: row.step, progress: row.progress } : null;
   const uploading = get<{ c: number }>('SELECT COUNT(*) AS c FROM uploads WHERE video_id = ? AND input_id IS NULL AND updated_at > ?', r.id, now() - 15 * 60_000)?.c ?? 0;
   const status: VideoStatus = r.posted_at ? 'posted' : r.approved_n ? (r.kind === 'page' ? 'done' : 'ready') : job || uploading ? 'making' : 'turn';
   const said = lastSaid(r.id);
   let reason = '';
-  if (status === 'making') reason = job ? (job.status === 'waiting' ? 'Waiting for Claude’s usage window' : job.step || 'Claude is on it') : `Uploading ${uploading} file${uploading > 1 ? 's' : ''}`;
+  if (status === 'making') reason = job ? (job.status === 'waiting' ? row?.error || 'Waiting for Claude’s usage window' : job.step || 'Claude is on it') : `Uploading ${uploading} file${uploading > 1 ? 's' : ''}`;
   else if (status === 'ready') reason = `v${r.approved_n} approved`;
   else if (status === 'done') reason = `Set up (v${r.approved_n})`;
   else if (status === 'posted') reason = 'Posted';
