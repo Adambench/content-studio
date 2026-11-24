@@ -146,16 +146,19 @@ The order after P2 follows my list (UGC, Gentle Return, carousels, explainers, g
 P1 works, then `next` becomes `main`.
 
 **P0 — Foundation**
-- [ ] ai-server reachable (power, Tailscale, SSH). One setup script: Node 24, FFmpeg (NVENC, libplacebo), Chrome
+- [x] ai-server reachable (power, Tailscale, SSH). One setup script: Node 24, FFmpeg (NVENC, libplacebo), Chrome
   headless shell, Python 3.12 + uv, PyTorch 2.14 cu126 (the last with Pascal), ONNX Runtime; a systemd service;
   Tailscale HTTPS. 2026-11-23: SSH by key, linger on, Tailscale operator set, served on
   https://ai-server.tail1e2ac8.ts.net:8443 (443 is Open WebUI's, with Funnel: untouched). Setup stalls on the
   network: ai-server's Wi-Fi (2.4 GHz channel 1, 54 %, power saving on) downloads at ~50 KB/s with 0.5–1 s pings,
-  even from the laptop on the LAN. Needs the Ethernet cable, or power saving off / the 5 GHz band
-- [ ] Claude on ai-server: my Pro login. The SDK wrapper is built (`engine/claude.ts`: Opus, structured answers,
+  even from the laptop on the LAN. Needs the Ethernet cable, or power saving off / the 5 GHz band. Setup done
+  2026-11-24 anyway (packages took 1 h; Chrome and FFmpeg sent from the laptop). FFmpeg is BtbN **8.1**: 9.0 and
+  master need driver 610+, and 580 is the 1070's last driver. `npm run deploy` takes ~20 s (packages only when the
+  lockfile changes)
+- [x] Claude on ai-server: my Pro login. The SDK wrapper is built (`engine/claude.ts`: Opus, structured answers,
   usage guard, every call counted); tried on the laptop's login: a Write = one call, ~9.6 k prompt tokens (cached
   after), 1 k out, 13 s. 2026-11-23: a 1-year `claude setup-token` token in ai-server's keys.env (the SDK's own
-  binary uses it; no Claude Code install there); first call there still to try
+  binary uses it; no Claude Code install there). First call there answered (Haiku; 39 s over the slow Wi-Fi)
 - [x] New tree on `next`: `server` (API, jobs, engine), `web`, `cli`, `mobile`, `shared`; old code gone (2026-11-23).
   `tools` (Python) comes with P1
 - [x] Data: pages, cards, inputs, versions, renders, comments, rules (halal locked, playbook as fundamentals), jobs
@@ -166,8 +169,13 @@ P1 works, then `next` becomes `main`.
   1080 and 412 × 915. Tailscale identity is the sign-in; the phone pairs by QR for its upload queue
 - [ ] Android app: the new screens are in the app build (share sheet → a card, background uploads, downloads);
   release v1.0.0 (same id and key) once ai-server answers
-- [ ] Measured on the 1070: a 60 s render as one HyperFrames page vs A-roll + transparent overlays; NVENC vs x264.
-  On the laptop (HyperFrames 0.9.86, 4 workers, x264): 4 s of titles and captions in 6.8 s; over footage 15.9 s
+- [x] Measured on the 1070: a 60 s render as one HyperFrames page vs A-roll + transparent overlays; NVENC vs x264.
+  On the laptop (HyperFrames 0.9.86, 4 workers, x264): 4 s of titles and captions in 6.8 s; over footage 15.9 s.
+  On ai-server, 60 s of 1080 × 1920 footage + title + 2-word captions (2026-11-24): **one page 77.3 s with NVENC**
+  (23.3 fps), 81.6 s with x264. A-roll + transparent overlay: the ProRes 4444 overlay alone 110.3 s (alpha forces
+  screenshot capture, 16.3 fps) + FFmpeg compositing 18.1 s NVENC / 43.0 s x264. **Decision: one opaque
+  HyperFrames page per video**, footage inside; FFmpeg does the passes before it (cuts, audio, grade). Capture is
+  the bottleneck, not encoding
 - Done when the phone sends a take to a card on ai-server and the laptop plays a test render made there
 
 **P1 — Daily episode, one press**
