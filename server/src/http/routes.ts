@@ -21,7 +21,7 @@ import { addNote, deleteNote, listNotes, updateNote } from '../services/notes.ts
 import { answer, fixNotes, goNow, makeWhenUploaded, sendMessage, stop } from '../services/runs.ts';
 import { listThread } from '../services/thread.ts';
 import { getVersion, listVersions, versionFiles } from '../services/versions.ts';
-import { approveVideo, createVideo, deleteVideo, getVideo, listVideos, markSeen, setPosted, updateVideo } from '../services/videos.ts';
+import { approveVideo, createVideo, deleteVideo, getVideo, listVideos, markSeen, readScript, setPosted, updateVideo, writeScript } from '../services/videos.ts';
 
 type P = { Params: { id: string } };
 
@@ -82,6 +82,11 @@ export async function registerApi(app: FastifyInstance) {
   app.delete<P>('/api/videos/:id', async (req) => {
     stop(req.params.id);
     deleteVideo(req.params.id);
+    return { ok: true };
+  });
+  app.get<P>('/api/videos/:id/script', async (req) => ({ text: readScript(req.params.id) }));
+  app.put<P>('/api/videos/:id/script', async (req) => {
+    writeScript(req.params.id, z.object({ text: z.string().max(200_000) }).parse(req.body).text);
     return { ok: true };
   });
   app.post<P>('/api/videos/:id/seen', async (req) => {
@@ -221,6 +226,12 @@ export async function registerApi(app: FastifyInstance) {
   });
   // The Android app's downloads ask for /api/media/<id>/file: a version (its video), or one of a video's files.
   app.get<P>('/api/media/:id/file', async (req, reply) => {
+    // One slide of a carousel: "<version id>~<k>" (k from 0).
+    const [vid, k] = req.params.id.split('~');
+    if (k !== undefined && get('SELECT 1 FROM versions WHERE id = ?', vid)) {
+      const v = getVersion(vid!);
+      return sendFile(reply, versionFiles(v).slides[Number(k)] ?? null, { download: downloadName(v.videoId, v.n, ` ${Number(k) + 1}.png`) });
+    }
     if (get('SELECT 1 FROM versions WHERE id = ?', req.params.id)) {
       const v = getVersion(req.params.id);
       const f = versionFiles(v);

@@ -19,3 +19,10 @@ export function bytes(n: number): string {
   if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
   return `${(n / 1024 ** 3).toFixed(2)} GB`;
 }
+
+/** A moment in a video, to a tenth: 0:07.2. */
+export function tc(s: number | null | undefined): string {
+  if (s == null || !Number.isFinite(s)) return '';
+  const m = Math.floor(s / 60);
+  return `${m}:${(s - m * 60).toFixed(1).padStart(4, '0')}`;
+}

@@ -1,127 +1,164 @@
-import { BookOpenIcon, MenuIcon, PlusIcon, SettingsIcon } from 'lucide-react';
-import { useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router';
+// The frame around every page: brands and places on the left (laptop) or tabs at the bottom (phone, hidden while a
+// video fills the screen), Ctrl K to jump anywhere, and files shared from the phone's gallery.
+
+import { BookOpen, Inbox, Plus, Search, Server, SquareTerminal } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
+import type { Brand } from '@shared/types';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { PageDot } from '@/components/PageDot';
-import { ShareSheet } from '@/components/ShareSheet';
-import { api } from '@/lib/api';
-import { queryClient, keys, usePages } from '@/lib/queries';
+import { Kbd } from '@/components/ui/kbd';
+import { useBrands, useCreateBrand, useSystem, useVideos } from '@/lib/queries';
 import { usePhone } from '@/lib/usePhone';
-import type { Page } from '@shared/types';
+import { cn } from '@/lib/utils';
+import { Palette } from './Palette';
+import { ShareSheet } from './ShareSheet';
 
-const PALETTE = ['#f59e0b', '#10b981', '#a78bfa', '#38bdf8', '#f472b6', '#d6b141', '#fb7185', '#a1a1aa'];
-
-function tab({ isActive }: { isActive: boolean }) {
-  return `flex h-9 items-center gap-2 rounded-lg px-3 text-sm transition-colors ${isActive ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'}`;
-}
-
-function NewPage({ onDone }: { onDone?: () => void }) {
-  const [name, setName] = useState('');
+/** New video: the inbox's box, focused. */
+export function useNewVideo() {
   const navigate = useNavigate();
-  const pages = usePages().data ?? [];
-  const add = async () => {
-    if (!name.trim()) return;
-    const page = await api<Page>('/api/pages', { body: { name: name.trim(), color: PALETTE[pages.length % PALETTE.length] } });
-    await queryClient.invalidateQueries({ queryKey: keys.pages });
-    setName('');
-    onDone?.();
-    navigate(`/p/${page.id}`);
+  return () => {
+    navigate('/');
+    setTimeout(() => document.getElementById('composer')?.focus(), 60);
   };
-  return (
-    <Input autoFocus placeholder="Page name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} />
-  );
 }
 
 export function Shell() {
   const phone = usePhone();
-  const pages = usePages().data ?? [];
-  const { pageId } = useParams();
   const location = useLocation();
-  const [menu, setMenu] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const current = pages.find((p) => p.id === pageId);
+  const [palette, setPalette] = useState(false);
+  const newVideo = useNewVideo();
+  const inVideo = location.pathname.startsWith('/v/');
 
-  if (phone) {
-    return (
-      <div className="flex h-full flex-col">
-        <header className="pt-safe flex shrink-0 items-center gap-2 border-b px-3">
-          <Sheet open={menu} onOpenChange={setMenu}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Menu">
-                <MenuIcon />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-72 p-3">
-              <SheetTitle className="px-3 pt-2 pb-3 text-base">Content Studio</SheetTitle>
-              <nav className="flex flex-col gap-1" onClick={() => setMenu(false)}>
-                <NavLink to="/" end className={tab}>
-                  Home
-                </NavLink>
-                {pages.map((p) => (
-                  <NavLink key={p.id} to={`/p/${p.id}`} className={tab}>
-                    <PageDot color={p.color} />
-                    {p.name}
-                  </NavLink>
-                ))}
-                <div className="my-2 border-t" />
-                <NavLink to="/rules" className={tab}>
-                  <BookOpenIcon className="size-4" /> Rules
-                </NavLink>
-                <NavLink to="/settings" className={tab}>
-                  <SettingsIcon className="size-4" /> Settings
-                </NavLink>
-              </nav>
-            </SheetContent>
-          </Sheet>
-          <div className="flex h-12 min-w-0 flex-1 items-center gap-2 text-sm font-medium">
-            {current && <PageDot color={current.color} />}
-            <span className="truncate">{current?.name ?? (location.pathname.startsWith('/c/') ? '' : 'Home')}</span>
-          </div>
-        </header>
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          <Outlet />
-        </main>
-        <ShareSheet />
-      </div>
-    );
-  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPalette((o) => !o);
+        return;
+      }
+      const t = e.target as HTMLElement;
+      if (e.metaKey || e.ctrlKey || e.altKey || t.closest('input, textarea, [contenteditable="true"], [data-terminal]')) return;
+      if (e.key === 'n' && !inVideo) {
+        e.preventDefault();
+        newVideo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-1 border-b px-3">
-        <NavLink to="/" end className={tab}>
-          Home
-        </NavLink>
-        {pages.map((p) => (
-          <NavLink key={p.id} to={`/p/${p.id}`} className={tab}>
-            <PageDot color={p.color} />
-            {p.name}
-          </NavLink>
-        ))}
-        <Popover open={adding} onOpenChange={setAdding}>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label="New page" className="text-muted-foreground">
-              <PlusIcon />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-64">
-            <NewPage onDone={() => setAdding(false)} />
-          </PopoverContent>
-        </Popover>
-        <div className="flex-1" />
-        <NavLink to="/rules" className={tab}>
-          <BookOpenIcon className="size-4" /> Rules
-        </NavLink>
-        <NavLink to="/settings" className={tab}>
-          <SettingsIcon className="size-4" />
-        </NavLink>
-      </header>
-      <main className="min-h-0 flex-1 overflow-hidden">
+    <div className={cn('h-full', phone ? 'flex flex-col' : 'grid grid-cols-[232px_minmax(0,1fr)]')}>
+      {!phone && <Sidebar onPalette={() => setPalette(true)} onNew={newVideo} />}
+      <main className="min-h-0 min-w-0 flex-1">
         <Outlet />
       </main>
+      {phone && !inVideo && <TabBar onNew={newVideo} />}
+      <Palette open={palette} onOpenChange={setPalette} />
+      <ShareSheet />
     </div>
+  );
+}
+
+function Sidebar({ onPalette, onNew }: { onPalette: () => void; onNew: () => void }) {
+  const brands = useBrands();
+  const videos = useVideos();
+  const system = useSystem();
+  const turn = (brandId?: string) => (videos.data ?? []).filter((v) => v.status === 'turn' && (!brandId || v.brandId === brandId)).length;
+  const five = system.data?.usage?.fiveHour?.utilization;
+  return (
+    <aside className="flex min-h-0 flex-col gap-0.5 overflow-y-auto border-r bg-sidebar p-2.5">
+      <div className="flex items-center gap-2 px-2 pt-1 pb-3 text-sm font-semibold">
+        <span className="size-5 rounded-md bg-[conic-gradient(from_210deg,#e6b450,#ef7a3c,#9b8cf0,#7fb8a4,#e6b450)]" />
+        Studio
+      </div>
+      <Button className="mb-1.5 justify-start" onClick={onNew}>
+        <Plus /> New video <Kbd className="ml-auto">N</Kbd>
+      </Button>
+      <Button variant="outline" className="mb-3 justify-start text-muted-foreground" onClick={onPalette}>
+        <Search /> Jump to… <Kbd className="ml-auto">Ctrl K</Kbd>
+      </Button>
+      <Place to="/" end icon={Inbox} label="Inbox" count={turn()} />
+      <div className="px-2.5 pt-4 pb-1 text-[11px] tracking-wider text-muted-foreground uppercase">Brands</div>
+      {(brands.data ?? []).map((b) => (
+        <NavLink key={b.id} to={`/b/${b.id}`} className={({ isActive }) => cn('flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground', isActive && 'bg-sidebar-accent text-foreground')}>
+          <span className="size-2 rounded-full" style={{ background: b.color }} />
+          <span className="min-w-0 flex-1 truncate">{b.name}</span>
+          {turn(b.id) > 0 && <span className="font-mono text-xs text-you">{turn(b.id)}</span>}
+        </NavLink>
+      ))}
+      <AddBrand brands={brands.data ?? []} />
+      <div className="mt-auto flex flex-col gap-0.5 border-t pt-2">
+        <Place to="/brain" icon={BookOpen} label="Brain" />
+        <Place to="/terminal" icon={SquareTerminal} label="Terminal" />
+        <Place to="/server" icon={Server} label="Server" />
+        <div className="flex items-center gap-2 px-2.5 pt-2 text-xs text-muted-foreground">
+          <span className={cn('size-1.5 rounded-full', system.data?.claude.loggedIn ? 'bg-emerald-500' : system.isError ? 'bg-destructive' : 'bg-muted-foreground')} />
+          {system.isError ? 'ai-server can’t be reached' : system.data?.claude.loggedIn ? 'Claude ready' : 'Claude isn’t logged in'}
+          {five != null && five >= 0.8 && <span className="ml-auto text-destructive">{Math.round(five * 100)} %</span>}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function Place({ to, icon: Icon, label, count, end }: { to: string; icon: typeof Inbox; label: string; count?: number; end?: boolean }) {
+  return (
+    <NavLink to={to} end={end} className={({ isActive }) => cn('flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground', isActive && 'bg-sidebar-accent text-foreground')}>
+      <Icon className="size-4" /> <span className="flex-1">{label}</span>
+      {!!count && <span className="font-mono text-xs text-you">{count}</span>}
+    </NavLink>
+  );
+}
+
+const COLORS = ['#e6b450', '#ef7a3c', '#7fb8a4', '#c49a6c', '#9b8cf0', '#6ea8ff', '#e879a6', '#a1a1aa'];
+
+function AddBrand({ brands }: { brands: Brand[] }) {
+  const [name, setName] = useState<string | null>(null);
+  const create = useCreateBrand();
+  if (name === null)
+    return (
+      <button type="button" onClick={() => setName('')} className="rounded-lg px-2.5 py-1.5 text-left text-sm text-muted-foreground/70 hover:text-foreground">
+        + Brand
+      </button>
+    );
+  const save = () => {
+    if (name.trim()) create.mutate({ name: name.trim(), color: COLORS[brands.length % COLORS.length]! });
+    setName(null);
+  };
+  return (
+    <input
+      autoFocus
+      value={name}
+      onChange={(e) => setName(e.currentTarget.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') save();
+        if (e.key === 'Escape') setName(null);
+      }}
+      onBlur={save}
+      placeholder="Brand name"
+      aria-label="New brand's name"
+      className="mx-1 rounded-lg border bg-background px-2 py-1 text-sm outline-none"
+    />
+  );
+}
+
+function TabBar({ onNew }: { onNew: () => void }) {
+  const tab = (to: string, Icon: typeof Inbox, label: string, end?: boolean) => (
+    <NavLink to={to} end={end} className={({ isActive }) => cn('flex min-w-14 flex-col items-center gap-0.5 text-[11px]', isActive ? 'text-foreground' : 'text-muted-foreground')}>
+      <Icon className="size-5" />
+      {label}
+    </NavLink>
+  );
+  return (
+    <nav className="pb-safe flex items-center justify-around border-t bg-sidebar px-2 pt-2">
+      {tab('/', Inbox, 'Inbox', true)}
+      {tab('/brain', BookOpen, 'Brain')}
+      <button type="button" onClick={onNew} aria-label="New video" className="mb-1 grid size-12 place-items-center rounded-2xl bg-primary text-primary-foreground">
+        <Plus className="size-6" />
+      </button>
+      {tab('/terminal', SquareTerminal, 'Terminal')}
+      {tab('/server', Server, 'Server')}
+    </nav>
   );
 }

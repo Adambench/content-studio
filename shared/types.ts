@@ -40,7 +40,7 @@ export type VideoSummary = {
   reason: string;
   /** Something new since I last opened it (a version, a question, an answer). */
   unseen: boolean;
-  latest: { n: number; kind: VersionKind; duration: number | null; slides: number } | null;
+  latest: { id: string; n: number; kind: VersionKind; duration: number | null; slides: number } | null;
   openNotes: number;
   job: { id: string; status: JobStatus; step: string | null; progress: number } | null;
   uploading: number;

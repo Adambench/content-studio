@@ -4,27 +4,27 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router';
-import { Toaster } from '@/components/ui/sonner';
 import { Shell } from '@/components/Shell';
-import { connectLive, queryClient } from '@/lib/queries';
+import { Toaster } from '@/components/ui/sonner';
 import { connectNative } from '@/lib/native';
-import { BoardPage } from '@/pages/BoardPage';
-import { CardPage } from '@/pages/CardPage';
-import { PageSettingsPage } from '@/pages/PageSettingsPage';
-import { RulesPage } from '@/pages/RulesPage';
-import { SettingsPage } from '@/pages/SettingsPage';
+import { connectLive, queryClient } from '@/lib/queries';
+import { BrainPage } from '@/pages/BrainPage';
+import { InboxPage } from '@/pages/InboxPage';
+import { ServerPage } from '@/pages/ServerPage';
+import { TerminalPage } from '@/pages/TerminalPage';
+import { VideoPage } from '@/pages/VideoPage';
 
 const router = createBrowserRouter([
   {
     element: <Shell />,
     children: [
-      { path: '/', element: <BoardPage /> },
-      { path: '/p/:pageId', element: <BoardPage /> },
-      { path: '/p/:pageId/settings', element: <PageSettingsPage /> },
-      { path: '/c/:cardId', element: <CardPage /> },
-      { path: '/rules', element: <RulesPage /> },
-      { path: '/settings', element: <SettingsPage /> },
-      { path: '*', element: <BoardPage /> },
+      { path: '/', element: <InboxPage /> },
+      { path: '/b/:brandId', element: <InboxPage /> },
+      { path: '/v/:videoId', element: <VideoPage /> },
+      { path: '/brain', element: <BrainPage /> },
+      { path: '/terminal', element: <TerminalPage /> },
+      { path: '/server', element: <ServerPage /> },
+      { path: '*', element: <InboxPage /> },
     ],
   },
 ]);

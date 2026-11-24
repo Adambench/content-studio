@@ -1,82 +1,84 @@
+// Files shared to the app from the phone's gallery: pick the video they're for (or a new one), then Add, or Add &
+// make (Claude starts once every file is in). They upload in the background, with the screen off too.
+
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import type { Video } from '@shared/types';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
-import { PageDot } from '@/components/PageDot';
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { api } from '@/lib/api';
 import { sendShare, Studio, type Share } from '@/lib/native';
-import { useBoard, usePages } from '@/lib/queries';
-import { STAGE_LABEL, type Card, type Stage } from '@shared/types';
+import { useBrands, useVideos } from '@/lib/queries';
+import { cn } from '@/lib/utils';
 
-// Cards that usually want files first.
-const ORDER: Stage[] = ['needs_me', 'script', 'idea', 'making', 'review', 'ready'];
-
-/** What another app shares to Content Studio: pick the card it's for (or make one), and it uploads in the background. */
 export function ShareSheet() {
   const [share, setShare] = useState<Share | null>(null);
-  const [title, setTitle] = useState('');
-  const pages = usePages().data ?? [];
-  const cards = (useBoard().data ?? []).filter((c) => ORDER.includes(c.stage)).sort((a, b) => ORDER.indexOf(a.stage) - ORDER.indexOf(b.stage) || b.updatedAt - a.updatedAt);
-  const [pageId, setPageId] = useState<string | null>(null);
+  const [target, setTarget] = useState<string | null>(null);
+  const [brandId, setBrandId] = useState<string | null>(null);
+  const videos = useVideos();
+  const brands = useBrands();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!Studio) return;
-    let handle: { remove: () => void } | null = null;
-    void Studio.getShare().then(({ share }) => share && setShare(share));
-    void Studio.addListener('share', (s) => setShare(s)).then((h) => (handle = h));
-    return () => handle?.remove();
+    void Studio.getShare().then((r) => r.share && setShare(r.share));
+    const h = Studio.addListener('share', (s) => setShare(s));
+    return () => void h.then((x) => x.remove());
   }, []);
 
   if (!share) return null;
-  const count = share.files.length;
-  const send = async (card: { id: string; pageId: string; title: string }) => {
-    await sendShare(share, card);
-    toast(`${count} file${count === 1 ? '' : 's'} going to ${card.title}`);
-    setShare(null);
-  };
-  const create = async () => {
-    const target = pageId ?? pages[0]?.id;
-    if (!title.trim() || !target) return;
-    const card = await api<Card>('/api/cards', { body: { pageId: target, title: title.trim(), stage: 'needs_me' } });
-    await send(card);
-  };
-  const drop = async () => {
-    await Studio?.discardShare({ id: share.id });
-    setShare(null);
+  const recent = (videos.data ?? []).filter((v) => v.status === 'turn' || v.status === 'making').slice(0, 8);
+  const brand = brandId ?? brands.data?.[0]?.id ?? null;
+  const n = share.files.length;
+
+  const send = async (make: boolean) => {
+    try {
+      let video: { id: string; brandId: string } | undefined = recent.find((v) => v.id === target);
+      if (!video) {
+        if (!brand) return;
+        video = await api<Video>('/api/videos', { body: { brandId: brand, title: share.text?.slice(0, 60) || 'Shared from the phone', go: false } });
+      }
+      await sendShare(share, video, make);
+      toast(make ? 'Uploading · Claude starts when they’re in' : 'Uploading');
+      setShare(null);
+      setTarget(null);
+      navigate(`/v/${video.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
   };
 
   return (
-    <Sheet open onOpenChange={(open) => !open && void drop()}>
-      <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto p-4 pb-safe">
-        <SheetTitle className="pb-2 text-base">
-          {count} file{count === 1 ? '' : 's'} to…
-        </SheetTitle>
-        <div className="flex flex-col gap-2">
-          <div className="flex gap-2">
-            <Input placeholder="New card" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void create()} />
-            <Button onClick={() => void create()} disabled={!title.trim()}>
-              Add
-            </Button>
-          </div>
-          {pages.length > 1 && (
-            <div className="flex flex-wrap gap-1">
-              {pages.map((p) => (
-                <button key={p.id} onClick={() => setPageId(p.id)} className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs ${(pageId ?? pages[0]?.id) === p.id ? 'bg-secondary' : 'text-muted-foreground'}`}>
-                  <PageDot color={p.color} /> {p.name}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="mt-2 flex flex-col">
-            {cards.map((c) => (
-              <button key={c.id} onClick={() => void send(c)} className="flex items-center gap-2 rounded-lg p-2.5 text-left text-sm active:bg-accent">
-                <PageDot color={pages.find((p) => p.id === c.pageId)?.color ?? '#888'} />
-                <span className="min-w-0 flex-1 truncate">{c.title}</span>
-                <span className="text-xs text-muted-foreground">{STAGE_LABEL[c.stage]}</span>
-              </button>
-            ))}
-          </div>
+    <Sheet open onOpenChange={(o) => !o && Studio?.discardShare({ id: share.id }).then(() => setShare(null))}>
+      <SheetContent side="bottom" className="max-h-[85%] gap-3 rounded-t-2xl p-4">
+        <SheetTitle>{n === 1 ? '1 file' : `${n} files`} for…</SheetTitle>
+        <SheetDescription className="sr-only">Pick the video they’re for</SheetDescription>
+        <div className="flex max-h-72 flex-col gap-1 overflow-y-auto">
+          {recent.map((v) => (
+            <button key={v.id} type="button" onClick={() => setTarget(v.id)} className={cn('flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm', target === v.id && 'border-you')}>
+              <span className="size-2 rounded-full" style={{ background: brands.data?.find((b) => b.id === v.brandId)?.color }} />
+              <span className="min-w-0 flex-1 truncate">{v.title}</span>
+            </button>
+          ))}
+          <button type="button" onClick={() => setTarget(null)} className={cn('rounded-xl border px-3 py-2.5 text-left text-sm', target === null && 'border-you')}>
+            A new video
+            {target === null && (
+              <span className="mt-2 flex flex-wrap gap-1.5">
+                {(brands.data ?? []).map((b) => (
+                  <span key={b.id} role="button" tabIndex={0} onClick={() => setBrandId(b.id)} className={cn('rounded-full border px-2 py-0.5 text-xs', brand === b.id ? 'border-foreground' : 'text-muted-foreground')}>
+                    {b.name}
+                  </span>
+                ))}
+              </span>
+            )}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" onClick={() => void send(false)}>
+            Add
+          </Button>
+          <Button onClick={() => void send(true)}>Add & make</Button>
         </div>
       </SheetContent>
     </Sheet>

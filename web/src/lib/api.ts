@@ -1,5 +1,5 @@
 // Talking to the server. In the browser it's the page's own origin (ai-server over Tailscale, or Vite's proxy in
-// dev); in the Android app it's the address the phone was paired with, plus its token.
+// dev); in the Android app's shell the page itself comes from ai-server too, so it's the same origin.
 
 export const isApp = import.meta.env.MODE === 'app';
 
@@ -41,12 +41,12 @@ export function mediaUrl(path: string): string {
 /** Live events: the token in the query for the same reason. */
 export const eventsUrl = () => mediaUrl('/api/events');
 
-/** One file to a card, with progress (fetch can't report upload progress; XHR can). */
-export function uploadFile(cardId: string, file: File, role: string | null, onProgress?: (fraction: number) => void): Promise<void> {
+/** One file to a video, with progress (fetch can't report upload progress; XHR can). */
+export function uploadFile(videoId: string, file: File, role: string | null, onProgress?: (fraction: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const params = new URLSearchParams({ name: file.name, mime: file.type || 'application/octet-stream', ...(role ? { role } : {}) });
     const xhr = new XMLHttpRequest();
-    xhr.open('PUT', `${server}/api/cards/${cardId}/inputs?${params}`);
+    xhr.open('PUT', `${server}/api/videos/${videoId}/inputs?${params}`);
     if (token) xhr.setRequestHeader('authorization', `Bearer ${token}`);
     xhr.setRequestHeader('content-type', file.type || 'application/octet-stream');
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
@@ -54,4 +54,10 @@ export function uploadFile(cardId: string, file: File, role: string | null, onPr
     xhr.onerror = () => reject(new ApiError(0, 'Upload failed: the server can’t be reached'));
     xhr.send(file);
   });
+}
+
+/** The terminal's WebSocket address (same origin, token in the query when paired). */
+export function wsUrl(path: string): string {
+  const base = (server || window.location.origin).replace(/^http/, 'ws');
+  return `${base}${path}${token ? `${path.includes('?') ? '&' : '?'}t=${encodeURIComponent(token)}` : ''}`;
 }

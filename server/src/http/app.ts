@@ -8,6 +8,7 @@ import { config } from '../config.ts';
 import { HttpError } from '../lib/util.ts';
 import { deviceFor } from '../services/devices.ts';
 import { registerApi } from './routes.ts';
+import { registerTerminal } from './terminal.ts';
 
 /**
  * Who may talk to the app. It listens on 127.0.0.1 only; Tailscale Serve puts it on the tailnet over HTTPS and
@@ -62,6 +63,7 @@ export async function buildApp() {
   const hasWeb = existsSync(join(config.webDist, 'index.html'));
   await app.register(staticFiles, { root: hasWeb ? config.webDist : config.dataDir, serve: hasWeb, wildcard: false, decorateReply: true });
 
+  await registerTerminal(app);
   await registerApi(app);
 
   // The UI is one page: any other GET that isn't the API is the app.

@@ -1,7 +1,7 @@
 // Videos (and carousels): one folder each in ~/studio/<brand>/<video>, one Claude Code session, one thread. Status is
 // never stored: it comes from what's happening (a run, an upload, approved, posted).
 
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { KINDS, type JobStatus, type Kind, type Video, type VideoStatus, type VideoSummary } from '../../../shared/types.ts';
@@ -43,7 +43,7 @@ function row(id: string): VideoRow {
 }
 
 function summarize(r: VideoRow): VideoSummary {
-  const latest = get<{ n: number; kind: 'video' | 'carousel'; duration: number | null; slides: number }>('SELECT n, kind, duration, slides FROM versions WHERE video_id = ? ORDER BY n DESC LIMIT 1', r.id) ?? null;
+  const latest = get<{ id: string; n: number; kind: 'video' | 'carousel'; duration: number | null; slides: number }>('SELECT id, n, kind, duration, slides FROM versions WHERE video_id = ? ORDER BY n DESC LIMIT 1', r.id) ?? null;
   const openNotes = get<{ c: number }>("SELECT COUNT(*) AS c FROM notes WHERE video_id = ? AND status = 'open'", r.id)?.c ?? 0;
   const job = get<{ id: string; status: JobStatus; step: string | null; progress: number }>("SELECT id, status, step, progress FROM jobs WHERE video_id = ? AND kind = 'agent' AND status IN ('queued', 'waiting', 'running') ORDER BY created_at DESC LIMIT 1", r.id) ?? null;
   const uploading = get<{ c: number }>('SELECT COUNT(*) AS c FROM uploads WHERE video_id = ? AND input_id IS NULL AND updated_at > ?', r.id, now() - 15 * 60_000)?.c ?? 0;
@@ -185,6 +185,18 @@ export function setPosted(id: string, posted: boolean): Video {
   run('UPDATE videos SET posted_at = ?, updated_at = ? WHERE id = ?', posted ? now() : null, now(), id);
   addThread(id, 'sys', posted ? 'Posted' : 'Back from Posted');
   return getVideo(id);
+}
+
+/** The script Claude and I share: script.md in the video's folder ('' when there's none yet). */
+export function readScript(id: string): string {
+  const f = join(videoDir(row(id)), 'script.md');
+  return existsSync(f) ? readFileSync(f, 'utf8') : '';
+}
+
+export function writeScript(id: string, text: string) {
+  writeFileSync(join(videoDir(row(id)), 'script.md'), text.endsWith('\n') || !text ? text : `${text}\n`);
+  run('UPDATE videos SET updated_at = ? WHERE id = ?', now(), id);
+  emit('video', id, id);
 }
 
 /** The video, its rows and its folder. */

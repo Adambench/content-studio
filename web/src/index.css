@@ -40,6 +40,7 @@
     --color-foreground: var(--foreground);
     --color-background: var(--background);
     --color-brand: var(--brand);
+    --color-you: var(--you);
     --color-viz-series: var(--viz-series);
     --color-viz-above: var(--viz-above);
     --color-viz-below: var(--viz-below);
@@ -54,6 +55,7 @@
 }
 
 :root {
+    --you: oklch(0.55 0.15 255);
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
@@ -120,6 +122,8 @@
     --sidebar-accent-foreground: oklch(0.97 0 0);
     --sidebar-border: oklch(1 0 0 / 7%);
     --sidebar-ring: oklch(0.6 0.12 292);
+    /* What's waiting for me: your turn, my notes. */
+    --you: oklch(0.74 0.12 255);
     /* Claude / brand accent */
     --brand: oklch(0.68 0.19 300);
     --brand-soft: oklch(0.68 0.19 300 / 14%);
