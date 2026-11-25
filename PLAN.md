@@ -184,6 +184,7 @@ and the viral skills).
 |---|---|
 | Daily episode (60 s, 5–10 takes) | Make → Review in ≤ 15 min on ai-server; ≤ ~80 k Claude tokens; by the third episode ≤ 1 round of comments |
 | Before (2026-11-07) | an editing session read 25–55 M tokens; 130 versions and 92 renders for 11 posted videos |
+| Per video (T1) | Make ≤ ~100 k weighted tokens (≈ 8–12 turns, context ≤ ~20 k); each Fix ≤ ~40 k; a run's fixed start ≤ ~9 k (was ~29 k). `cs runs` shows it |
 
 ## Phases
 
@@ -249,6 +250,48 @@ P1 works, then `next` becomes `main`.
 - Later, not in N1: speaking instead of typing (Whisper on ai-server, with P1), Claude's ideas for today in the
   inbox (P2), notes on a stretch of time
 - Done when I can make a video from the inbox, leave notes, Fix, Approve and post, on the laptop and the phone
+
+**T1 — Token diet (2026-11-25): Claude decides, the server does the work**
+
+Measured 2026-11-25. The week reached 99 %: ~62 M weighted tokens (API price ratios as the stand-in for the plan's
+usage: output ×5, cache write ×1.25, cache read ×0.1), almost all from laptop dev sessions (median 240 k context per
+turn, one session 563 turns up to 614 k; the 1 M window only compacts near its end). The app's 3 runs: ~0.25 M. Each
+agent run started at ~29 k before doing anything: tool definitions ~14.5 k, skill list 9.9 k (the repo's
+name-only overrides never reached ai-server; 2.8 k of it bundled dev skills), system 2.5 k, CLAUDE.md 1.1 k.
+`lessons.md` was never loaded (an `@import` outside the video's folder is dropped without approval). Every message,
+Fix or answer resumed the whole session; after an hour that re-caches it all (a 10 s answer: 34 k written). No
+transcriber or video tools on ai-server, and the editing skills (edit-video, cut-silences, cut-mistakes,
+hyperframes-video-beats, video-perception) point at another workspace's paths, a paid transcriber and a missing MCP.
+Estimate for a real Make in that shape: 40–80 turns at 50–150 k, ~1.5–2.5 M weighted, ~0.5 M per Fix.
+
+- [x] Quick wins (2026-11-25): runs get only Bash, Read, Write, Edit, Glob, Grep, Skill (+ WebSearch, WebFetch for
+  a page's setup; no subagents); 7 skills described, the rest by name, no bundled skills, compact at 150 k (also in
+  the Terminal); `excludeDynamicSections` (one cached prefix for every video); the ticked lessons copied into
+  `~/studio/CLAUDE.md` before every run, the 34 squeezed to one line each (2 clipping-only unticked; full wording in
+  `~/.local/share/studio/backups/`); resume only within 55 min and under 60 k context, else a new session with
+  project.md and the thread's last lines; "Spend little" rules in the studio CLAUDE.md; a video's Claude queues
+  pipeline fixes in `~/studio/pipeline-todo.md` (`cs todo`) instead of reading engine code; every run records turns,
+  cost, peak and last context, new session, 5-hour and weekly usage before and after (`cs runs`). Laptop:
+  `autoCompactWindow` 200 k
+- [ ] **Look** on upload, cached per file (P1's first step): faster-whisper large-v3-turbo int8 or Parakeet (the one
+  that keeps fillers), alignment, Silero VAD, script × takes table (last clean take per line; stumbles, fillers,
+  false starts), faces, loudness, music check, shot changes, OCR → `look/digest.md` (≤ ~3 k tokens) and one small
+  sheet per take. Claude never reads raw transcripts or frames it doesn't need
+- [ ] Studio tools instead of Bash turns: `look` (the digest), `sheet` (a ≤ 1024 px contact sheet at given times),
+  `check` (music, LUFS and peaks, `hyperframes check --safe-zone reels`, ASR on the output vs the plan, flash and
+  black frames, cuts inside words → ~15 lines and one sheet), then `build`
+- [ ] One studio-native skill, `make-reel` (~1.5 k tokens, only tools that exist here), replaces the borrowed
+  editing skills
+- [ ] Plan → build: Claude writes `plan.json` in words and ids (line → take, punch-ins, what shows on which words,
+  the hook); code builds the A-roll (FFmpeg) and the HyperFrames page from the page's `kit/` templates; Claude writes
+  HTML only for a scene the plan asks for. Fix = edit the plan, build, check, save
+- [ ] Lessons: one line each, scoped by format; a measurable one becomes a check (then a short line is enough);
+  a monthly merge so the brain doesn't grow forever
+- [ ] Overnight on ai-server: the market collector (mechanical) with one batched Claude read per page a week; local
+  embeddings to search B-roll, SFX and stock; a local vision model only to flag frames for Opus to confirm. Ollama
+  is Open WebUI's: the app runs its own models unless I say otherwise
+- Done when `cs runs` shows a real daily episode's Make ≤ ~100 k weighted and its Fix ≤ ~40 k, with no more rounds
+  of comments than before
 
 **P1 — Daily episode, one press**
 - [ ] Look: transcript (Parakeet vs Whisper on my real takes), alignment to the script, takes table (the last clean

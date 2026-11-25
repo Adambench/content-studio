@@ -186,6 +186,33 @@ export type Brain = {
   pages: { pageId: string; name: string; color: string; file: string; text: string; lessons: Lesson[] }[];
   market: string;
   skills: { name: string; description: string }[];
+  /** ~/studio/pipeline-todo.md: fixes a video's Claude found the pipeline needs, for the laptop session. */
+  todo: string;
+};
+
+/** One Claude run and what it cost (`cs runs`). Usage: the plan's 5-hour and weekly windows, 0..1. */
+export type ClaudeCall = {
+  id: string;
+  task: string;
+  model: string;
+  videoId: string | null;
+  videoTitle: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheRead: number;
+  cacheWrite: number;
+  turns: number;
+  costUsd: number;
+  peakContext: number;
+  lastContext: number;
+  fresh: boolean;
+  fiveBefore: number | null;
+  fiveAfter: number | null;
+  weekBefore: number | null;
+  weekAfter: number | null;
+  ms: number;
+  ok: boolean;
+  createdAt: number;
 };
 
 export type SystemInfo = {

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { InputRole, LiveEvent, SystemInfo, VideoDetail } from '../../../shared/types.ts';
 import { config } from '../config.ts';
 import { get } from '../db/db.ts';
-import { claudeStatus, claudeUsage } from '../engine/claude.ts';
+import { claudeStatus, claudeUsage, listCalls } from '../engine/claude.ts';
 import { chromeInstalled } from '../engine/render.ts';
 import { thumbPath } from '../jobs/kinds.ts';
 import { enqueue, getJob, listJobs } from '../jobs/queue.ts';
@@ -175,6 +175,9 @@ export async function registerApi(app: FastifyInstance) {
     writePageFile(req.params.id, z.object({ text: z.string().max(100_000) }).parse(req.body).text);
     return brain();
   });
+
+  // ------------------------------------------------------------ claude runs
+  app.get<{ Querystring: { videoId?: string } }>('/api/claude/calls', async (req) => listCalls(req.query.videoId));
 
   // ------------------------------------------------------------ jobs
   app.get<{ Querystring: { videoId?: string; active?: string } }>('/api/jobs', async (req) => listJobs({ videoId: req.query.videoId, active: req.query.active === '1' }));

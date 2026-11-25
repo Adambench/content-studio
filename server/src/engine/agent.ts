@@ -8,10 +8,11 @@ import { get, setSetting } from '../db/db.ts';
 import { JobWait } from '../jobs/queue.ts';
 import type { JobContext } from '../jobs/runner.ts';
 import { errorText, now } from '../lib/util.ts';
+import { writeStudioClaudeMd } from '../services/brain.ts';
 import { reopenSent } from '../services/notes.ts';
-import { addThread } from '../services/thread.ts';
+import { addThread, listThread } from '../services/thread.ts';
 import { clearApproval, getVideo, setSession } from '../services/videos.ts';
-import { claudeEnv, isUsageError, recordCall, recordRate, waitForUsage, type CallUsage, type RateInfo } from './claude.ts';
+import { claudeEnv, claudeUsage, isUsageError, recordCall, recordRate, studioSettings, waitForUsage, type CallUsage, type RateInfo } from './claude.ts';
 import { guardFor } from './guard.ts';
 import { hyperframesEnv } from './render.ts';
 import { studioTools, type RunState } from './tools.ts';
@@ -98,6 +99,33 @@ function waitAsBackground(jobId: string) {
   if (before) throw new JobWait('Waiting for the run before it', 60_000);
 }
 
+/** Built-in tools: a video's Claude needs the shell and files; a page's setup also the web. No subagents (each starts cold). */
+const TOOLS = ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'Skill'];
+const PAGE_TOOLS = [...TOOLS, 'WebSearch', 'WebFetch'];
+
+/**
+ * Resume the video's session only while its prompt cache is warm (it lives an hour) and its context is small. A cold or
+ * long session costs its whole history again before Claude does anything (measured: a 10 s answer re-cached 34 k);
+ * a new session starts from ~8 k plus project.md and the thread's last lines.
+ */
+const RESUME_WITHIN = 55 * 60_000;
+const RESUME_UP_TO = 60_000;
+
+function resumable(videoId: string): boolean {
+  const last = get<{ created_at: number; last_context: number }>("SELECT created_at, last_context FROM claude_calls WHERE video_id = ? AND task = 'agent' ORDER BY created_at DESC LIMIT 1", videoId);
+  return !!last && now() - last.created_at < RESUME_WITHIN && last.last_context < RESUME_UP_TO;
+}
+
+const WHO: Partial<Record<string, string>> = { you: 'I said', claude: 'You said', question: 'You asked', version: 'Saved', lesson: 'Lesson', error: 'Error' };
+
+/** What a new session needs from the old one: project.md and the folder, and the thread's last lines. */
+function handoff(videoId: string): string {
+  const items = listThread(videoId, 80).filter((i) => WHO[i.kind]);
+  while (items.at(-1)?.kind === 'you') items.pop(); // what I just said is the prompt itself
+  const lines = items.slice(-10).map((i) => `- ${WHO[i.kind]}: ${i.text.replace(/\s+/g, ' ').slice(0, 240)}`);
+  return `(A new session on this video: the earlier one was closed to save usage. What you knew is in project.md and the folder${lines.length ? `; the thread's last lines:\n${lines.join('\n')}` : ''})`;
+}
+
 export async function runAgent(ctx: JobContext) {
   if (ctx.input.background) waitAsBackground(ctx.job.id);
   const video = getVideo(ctx.videoId!);
@@ -112,13 +140,27 @@ export async function runAgent(ctx: JobContext) {
   const started = now();
   let usage: CallUsage = {};
   let ok = false;
-  let resume = video.sessionId ?? undefined;
+  let turns = 0;
+  let costUsd = 0;
+  let peakContext = 0;
+  let lastContext = 0;
+  const before = claudeUsage();
+  let resume = video.sessionId && resumable(video.id) ? video.sessionId : undefined;
+  const fresh = !!video.sessionId && !resume;
+  if (fresh) prompt = `${handoff(video.id)}\n\n${prompt}`;
+  // The lessons for every page go into ~/studio/CLAUDE.md as they are now (an @import there isn't loaded).
+  writeStudioClaudeMd();
   ctx.progress(0.02, 'Claude is on it');
 
   const handle = (m: SDKMessage) => {
     if (m.type === 'system' && m.subtype === 'init') return setSession(video.id, m.session_id);
     if (m.type === 'rate_limit_event') return recordRate((m as unknown as { rate_limit_info: RateInfo }).rate_limit_info);
     if (m.type === 'assistant' && !m.parent_tool_use_id) {
+      const u = m.message.usage as CallUsage | undefined;
+      if (u) {
+        lastContext = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+        peakContext = Math.max(peakContext, lastContext);
+      }
       for (const b of m.message.content) {
         if (b.type === 'text' && b.text.trim()) addThread(video.id, 'claude', b.text.trim(), {}, ctx.job.id);
         else if (b.type === 'tool_use' && !b.name.startsWith('mcp__studio__')) addThread(video.id, 'tool', describe(b.name, (b.input ?? {}) as Record<string, unknown>, cwd), { tool: b.name }, ctx.job.id);
@@ -127,6 +169,8 @@ export async function runAgent(ctx: JobContext) {
     }
     if (m.type === 'result') {
       usage = { ...usage, ...(m.usage as CallUsage) };
+      turns += m.num_turns ?? 0;
+      costUsd += m.total_cost_usd ?? 0;
       if (m.subtype !== 'success') throw new Error(('errors' in m && m.errors?.join('; ')) || m.subtype);
     }
   };
@@ -141,7 +185,10 @@ export async function runAgent(ctx: JobContext) {
             env: { ...claudeEnv(), ...hyperframesEnv() },
             model: 'opus',
             settingSources: ['user', 'project'],
-            systemPrompt: { type: 'preset', preset: 'claude_code', append: isPage ? `${APPEND}\n\n${PAGE}` : APPEND },
+            settings: studioSettings(),
+            tools: isPage ? PAGE_TOOLS : TOOLS,
+            // The same prompt prefix for every video (no folder in it), so the prompt cache is shared across them.
+            systemPrompt: { type: 'preset', preset: 'claude_code', append: isPage ? `${APPEND}\n\n${PAGE}` : APPEND, excludeDynamicSections: true },
             permissionMode: 'bypassPermissions',
             allowDangerouslySkipPermissions: true,
             disallowedTools: ['AskUserQuestion'],
@@ -179,6 +226,6 @@ export async function runAgent(ctx: JobContext) {
     }
     throw err;
   } finally {
-    recordCall({ task: 'agent', model: 'opus', videoId: video.id, jobId: ctx.job.id, usage, ms: now() - started, ok });
+    recordCall({ task: 'agent', model: 'opus', videoId: video.id, jobId: ctx.job.id, usage, ms: now() - started, ok, cost: { turns, costUsd, peakContext, lastContext, fresh, before, after: claudeUsage() } });
   }
 }

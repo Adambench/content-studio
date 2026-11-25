@@ -62,7 +62,7 @@ export function fixNotes(videoId: string): Job {
   addThread(videoId, 'you', `Fix ${notes.length === 1 ? 'my note' : `my ${notes.length} notes`}`, { notes: notes.map((n) => n.id) });
   return go(
     videoId,
-    `My notes (fix them all in one new version, check it, save it, then call notes_fixed with their ids; record a lesson for each general rule they teach, and change the skill or code behind it when it's general):\n${lines.join('\n')}`,
+    `My notes (fix them all in one new version, check it, save it, then call notes_fixed with their ids; record a lesson for each general rule they teach, and a line in ~/studio/pipeline-todo.md when a skill, tool or check caused it):\n${lines.join('\n')}`,
   );
 }
 

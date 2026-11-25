@@ -206,16 +206,18 @@ test('pages set up in bulk (later) wait for spare usage and go one at a time, ol
   assert.match(input.prompt, /^Set this page up\.[\s\S]*from what I gave[\s\S]*Later two: calm, practical tips\.[\s\S]*Go: set it up/);
 });
 
-test('the brain is files: halal locked in the studio CLAUDE.md, lessons ticked or not', async () => {
-  const md = readFileSync(join(dir, 'studio/CLAUDE.md'), 'utf8');
-  assert.match(md, /No music or instruments/);
-  assert.match(md, /@lessons\.md/);
+test('the brain is files: halal locked in the studio CLAUDE.md, ticked lessons copied into it', async () => {
+  const md = () => readFileSync(join(dir, 'studio/CLAUDE.md'), 'utf8');
+  assert.match(md(), /No music or instruments/);
+  assert.doesNotMatch(md(), /@lessons\.md/);
   await call('POST', '/api/brain/lessons', { scope: 'all', text: 'Cut at the end of the breath, never on it' });
   let brain = (await call<{ lessons: { text: string; on: boolean; line: number }[] }>('GET', '/api/brain')).json;
   assert.equal(brain.lessons[0]?.on, true);
+  assert.match(md(), /^- Cut at the end of the breath, never on it$/m);
   brain = (await call<typeof brain>('PATCH', '/api/brain/lessons', { scope: 'all', line: brain.lessons[0]!.line, on: false })).json;
   assert.equal(brain.lessons[0]?.on, false);
   assert.match(readFileSync(join(dir, 'studio/lessons.md'), 'utf8'), /- \[ \] Cut at the end of the breath/);
+  assert.doesNotMatch(md(), /Cut at the end of the breath/);
 });
 
 test("Claude's guard rails: anything in the studio, nothing to the machine", () => {

@@ -1,13 +1,14 @@
 // Claude, through the Agent SDK on my Pro login (never an API key). Every call names its task, is counted, and
 // background calls wait while the 5-hour usage is high; what I pressed and wait on never waits.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { query, type Options, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { config, keys } from '../config.ts';
-import { getSetting, run as sql, setSetting } from '../db/db.ts';
+import type { ClaudeCall } from '../../../shared/types.ts';
+import { all, getSetting, run as sql, setSetting } from '../db/db.ts';
 import { JobWait } from '../jobs/queue.ts';
 import { newId, now } from '../lib/util.ts';
 
@@ -158,10 +159,15 @@ export async function ask<S extends z.ZodType>(input: AskInput<S>): Promise<z.in
 
 export type CallUsage = { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
 
+/** What an agent run adds to its usage: round trips, the API-price estimate, contexts, a new session, the plan's usage. */
+export type RunCost = { turns?: number; costUsd?: number; peakContext?: number; lastContext?: number; fresh?: boolean; before?: Usage | null; after?: Usage | null };
+
 /** Every Claude run counted, by task, so the targets can be checked. */
-export function recordCall(c: { task: Task; model: string; videoId: string | null; jobId: string | null; usage: CallUsage; ms: number; ok: boolean }) {
+export function recordCall(c: { task: Task; model: string; videoId: string | null; jobId: string | null; usage: CallUsage; ms: number; ok: boolean; cost?: RunCost }) {
+  const r = c.cost ?? {};
   sql(
-    'INSERT INTO claude_calls (id, task, model, video_id, job_id, input_tokens, output_tokens, cache_read, cache_write, ms, ok, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    `INSERT INTO claude_calls (id, task, model, video_id, job_id, input_tokens, output_tokens, cache_read, cache_write, ms, ok, created_at,
+       turns, cost_usd, peak_context, last_context, fresh, five_before, five_after, week_before, week_after) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     newId(),
     c.task,
     c.model,
@@ -174,7 +180,50 @@ export function recordCall(c: { task: Task; model: string; videoId: string | nul
     c.ms,
     c.ok,
     now(),
+    r.turns ?? 0,
+    r.costUsd ?? 0,
+    r.peakContext ?? 0,
+    r.lastContext ?? 0,
+    r.fresh ? 1 : 0,
+    r.before?.fiveHour?.utilization ?? null,
+    r.after?.fiveHour?.utilization ?? null,
+    r.before?.sevenDay?.utilization ?? null,
+    r.after?.sevenDay?.utilization ?? null,
   );
+}
+
+type CallRow = {
+  id: string; task: string; model: string; video_id: string | null; title: string | null; input_tokens: number; output_tokens: number; cache_read: number; cache_write: number;
+  turns: number; cost_usd: number; peak_context: number; last_context: number; fresh: number; five_before: number | null; five_after: number | null; week_before: number | null; week_after: number | null; ms: number; ok: number; created_at: number;
+};
+
+/** The newest runs (of one video, or all), newest first. */
+export function listCalls(videoId?: string, limit = 40): ClaudeCall[] {
+  return all<CallRow>(
+    `SELECT c.*, v.title FROM claude_calls c LEFT JOIN videos v ON v.id = c.video_id ${videoId ? 'WHERE c.video_id = ?' : ''} ORDER BY c.created_at DESC LIMIT ?`,
+    ...(videoId ? [videoId, limit] : [limit]),
+  ).map((r) => ({
+    id: r.id, task: r.task, model: r.model, videoId: r.video_id, videoTitle: r.title, inputTokens: r.input_tokens, outputTokens: r.output_tokens, cacheRead: r.cache_read, cacheWrite: r.cache_write,
+    turns: r.turns, costUsd: r.cost_usd, peakContext: r.peak_context, lastContext: r.last_context, fresh: !!r.fresh, fiveBefore: r.five_before, fiveAfter: r.five_after, weekBefore: r.week_before, weekAfter: r.week_after,
+    ms: r.ms, ok: !!r.ok, createdAt: r.created_at,
+  }));
+}
+
+/** Skills whose description every run sees (the editing ones); the rest are listed by name and still open by name. */
+const DESCRIBED_SKILLS = new Set(['playbook', 'content-principles', 'edit-video', 'hyperframes', 'hyperframes-core', 'embedded-captions', 'studio-script']);
+
+/**
+ * Settings for every Claude Code the studio starts (the runs and the Terminal), measured 2026-11-25: the skill list
+ * was 9.9 k tokens on every turn, 1.4 k this way. No bundled dev skills (code review, the API, schedules), and a long
+ * session compacts at 150 k instead of near the 1 M window's end.
+ */
+export function studioSettings() {
+  const names = existsSync(config.skillsDir) ? readdirSync(config.skillsDir) : [];
+  return {
+    skillOverrides: Object.fromEntries(names.filter((n) => !DESCRIBED_SKILLS.has(n)).map((n) => [n, 'name-only' as const])),
+    disableBundledSkills: true,
+    autoCompactWindow: 150_000,
+  };
 }
 
 /** The text of a skill (SKILL.md, or one of its files) to paste into a prompt: background calls load no skills. */

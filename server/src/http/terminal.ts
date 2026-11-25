@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import websocket from '@fastify/websocket';
 import pty from '@lydell/node-pty';
 import type { FastifyInstance } from 'fastify';
-import { claudeEnv } from '../engine/claude.ts';
+import { claudeEnv, studioSettings } from '../engine/claude.ts';
 import { hyperframesEnv } from '../engine/render.ts';
 import { findBinary } from '../lib/proc.ts';
 import { getVideo } from '../services/videos.ts';
@@ -40,7 +40,8 @@ export async function registerTerminal(app: FastifyInstance) {
       if (!bin) throw new Error('Claude Code isn’t installed on this machine');
       cwd = v.folder;
       file = bin;
-      args = v.sessionId ? ['--resume', v.sessionId] : [];
+      // The runs' settings (skills by name, early compacting), so the same session costs the same here.
+      args = ['--settings', JSON.stringify(studioSettings()), ...(v.sessionId ? ['--resume', v.sessionId] : [])];
     } catch (err) {
       socket.send(`\r\n${err instanceof Error ? err.message : String(err)}\r\n`);
       socket.close();

@@ -56,8 +56,13 @@ PLAN.md has the decisions (*The app*), parts, targets and phases; read only the 
 - **Claude Code per video**: full shell, no approval prompts (my yes, 2026-11-24) inside `engine/guard.ts`: never
   sudo, Docker, Ollama, Open WebUI, systemd or the network; deletes only inside the video's folder (or /tmp, the
   engine's tools, caches); no keys; never posts. Change the rails only with my say.
+- **Few tokens per video** (PLAN.md *T1*): a run gets only the tools and skill descriptions it needs
+  (`studioSettings()`, `TOOLS` in `engine/agent.ts`), resumes its session only within 55 min and under 60 k context
+  (else a new one from project.md), and every run's cost is in `cs runs`. Mechanical work (transcripts, checks,
+  building) belongs to the server's code and tools, not to Claude's turns; Claude gets short digests and small sheets.
 - **Every comment I leave is a lesson**: fixing it also records the general rule (rules, source `lesson`); when the
-  pipeline caused it, change that code too so no later video repeats it.
+  pipeline caused it, change that code too so no later video repeats it (a video's Claude queues it in
+  `~/studio/pipeline-todo.md`, `cs todo`; the laptop session makes it).
 - **Modular**: recipes are defaults, not limits; any page can use any recipe or mix them; a card's Notes steer it.
   Don't fit the engine to one scenario.
 - **Existing FOSS first** (HyperFrames native projects, FFmpeg, local models), licences noted in PLAN.md *Parts*.
@@ -75,7 +80,7 @@ PLAN.md has the decisions (*The app*), parts, targets and phases; read only the 
 - `npm run dev` (server on 8787 + Vite on 5173), `npm run typecheck`, `npm test`
 - `npm run deploy` — push and restart on ai-server (the first time it runs `scripts/setup-server.sh` there)
 - `npm run cs -- help`: `status`, `pages`, `page`, `setup`, `videos`, `video`, `new`, `add`, `say`, `go`, `fix`, `stop`, `note`,
-  `thread`, `approve`, `posted`, `test-render`, `jobs`, `pair`. `CS_SERVER` points it elsewhere (e.g. a test server).
+  `thread`, `approve`, `posted`, `test-render`, `jobs`, `pair`, `runs` (what each Claude run cost), `todo`. `CS_SERVER` points it elsewhere (e.g. a test server).
 - `npm run android` — `cap sync` of the shell. APKs come from CI on a `v*` tag (bump the root `package.json`
   version). Never generate a new signing key.
 
