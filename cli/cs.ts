@@ -222,14 +222,14 @@ async function main() {
     case 'runs': {
       const q = rest[0] ? `?videoId=${await videoId(rest[0])}` : '';
       const k = (n: number) => `${Math.round(n / 1000)}k`;
-      const pct = (a: number | null, b: number | null) => (a == null || b == null ? '' : ` ${b >= a ? '+' : ''}${Math.round((b - a) * 100)} %`);
+      const pct = (what: string, a: number | null, b: number | null) => (a == null || b == null ? '' : ` · ${what} ${b >= a ? '+' : ''}${Math.round((b - a) * 100)} %`);
       for (const c of (await api<ClaudeCall[]>(`/api/claude/calls${q}`)).reverse()) {
         // API prices as the stand-in for the plan's usage: output x5, cache write x1.25, cache read x0.1.
         const weighted = c.inputTokens + c.outputTokens * 5 + c.cacheWrite * 1.25 + c.cacheRead * 0.1;
         const when = new Date(c.createdAt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         console.log(
           `${when} ${(c.videoTitle ?? c.task).slice(0, 28).padEnd(28)} ${String(c.turns).padStart(3)} turns · peak ${k(c.peakContext)} · ≈${k(weighted)} weighted · $${c.costUsd.toFixed(2)}` +
-            `${c.fiveAfter != null ? ` · 5h${pct(c.fiveBefore, c.fiveAfter)} week${pct(c.weekBefore, c.weekAfter)}` : ''}${c.fresh ? ' · new session' : ''}${c.ok ? '' : ' · FAILED'}`,
+            `${pct('5h', c.fiveBefore, c.fiveAfter)}${pct('week', c.weekBefore, c.weekAfter)}${c.fresh ? ' · new session' : ''}${c.ok ? '' : ' · FAILED'}`,
         );
       }
       return;
