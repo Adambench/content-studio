@@ -51,6 +51,13 @@ export function claudeStatus(): { loggedIn: boolean; detail: string } {
 
 export const claudeUsage = () => getSetting<Usage | null>('claudeUsage', null);
 
+/** The plan's usage now (0..1); null for a window that has reset since it was last reported (its number is stale). */
+export function usageNow(): { five: number | null; week: number | null } {
+  const u = claudeUsage();
+  const live = (w?: { utilization: number; resetsAt: number }) => (w && w.resetsAt > now() ? w.utilization : null);
+  return { five: live(u?.fiveHour), week: live(u?.sevenDay) };
+}
+
 /** For background work: a JobWait while the 5-hour window is above 80 %, until a minute after it resets. */
 export function waitForUsage() {
   const limited = getSetting<number>('claudeLimitedUntil', 0);
@@ -160,7 +167,7 @@ export async function ask<S extends z.ZodType>(input: AskInput<S>): Promise<z.in
 export type CallUsage = { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
 
 /** What an agent run adds to its usage: round trips, the API-price estimate, contexts, a new session, the plan's usage. */
-export type RunCost = { turns?: number; costUsd?: number; peakContext?: number; lastContext?: number; fresh?: boolean; before?: Usage | null; after?: Usage | null };
+export type RunCost = { turns?: number; costUsd?: number; peakContext?: number; lastContext?: number; fresh?: boolean; before?: ReturnType<typeof usageNow>; after?: ReturnType<typeof usageNow> };
 
 /** Every Claude run counted, by task, so the targets can be checked. */
 export function recordCall(c: { task: Task; model: string; videoId: string | null; jobId: string | null; usage: CallUsage; ms: number; ok: boolean; cost?: RunCost }) {
@@ -185,10 +192,10 @@ export function recordCall(c: { task: Task; model: string; videoId: string | nul
     r.peakContext ?? 0,
     r.lastContext ?? 0,
     r.fresh ? 1 : 0,
-    r.before?.fiveHour?.utilization ?? null,
-    r.after?.fiveHour?.utilization ?? null,
-    r.before?.sevenDay?.utilization ?? null,
-    r.after?.sevenDay?.utilization ?? null,
+    r.before?.five ?? null,
+    r.after?.five ?? null,
+    r.before?.week ?? null,
+    r.after?.week ?? null,
   );
 }
 

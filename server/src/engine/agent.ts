@@ -12,7 +12,7 @@ import { writeStudioClaudeMd } from '../services/brain.ts';
 import { reopenSent } from '../services/notes.ts';
 import { addThread, listThread } from '../services/thread.ts';
 import { clearApproval, getVideo, setSession } from '../services/videos.ts';
-import { claudeEnv, claudeUsage, isUsageError, recordCall, recordRate, studioSettings, waitForUsage, type CallUsage, type RateInfo } from './claude.ts';
+import { claudeEnv, isUsageError, recordCall, recordRate, studioSettings, usageNow, waitForUsage, type CallUsage, type RateInfo } from './claude.ts';
 import { guardFor } from './guard.ts';
 import { hyperframesEnv } from './render.ts';
 import { studioTools, type RunState } from './tools.ts';
@@ -144,7 +144,7 @@ export async function runAgent(ctx: JobContext) {
   let costUsd = 0;
   let peakContext = 0;
   let lastContext = 0;
-  const before = claudeUsage();
+  const before = usageNow();
   let resume = video.sessionId && resumable(video.id) ? video.sessionId : undefined;
   const fresh = !!video.sessionId && !resume;
   if (fresh) prompt = `${handoff(video.id)}\n\n${prompt}`;
@@ -226,6 +226,6 @@ export async function runAgent(ctx: JobContext) {
     }
     throw err;
   } finally {
-    recordCall({ task: 'agent', model: 'opus', videoId: video.id, jobId: ctx.job.id, usage, ms: now() - started, ok, cost: { turns, costUsd, peakContext, lastContext, fresh, before, after: claudeUsage() } });
+    recordCall({ task: 'agent', model: 'opus', videoId: video.id, jobId: ctx.job.id, usage, ms: now() - started, ok, cost: { turns, costUsd, peakContext, lastContext, fresh, before, after: usageNow() } });
   }
 }
