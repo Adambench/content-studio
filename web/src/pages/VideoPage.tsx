@@ -13,7 +13,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Dock } from '@/components/video/Dock';
 import { PostSheet } from '@/components/video/PostSheet';
 import { createPlayer, PlayerCtx, usePlayer, usePS } from '@/components/video/player';
-import { shownVersion, Stage } from '@/components/video/Stage';
+import { BeforeBar, shownVersion, Stage } from '@/components/video/Stage';
 import { BriefTab, FilesTab, ScriptTab, TerminalTab } from '@/components/video/Tabs';
 import { Thread } from '@/components/video/Thread';
 import { Timeline } from '@/components/video/Timeline';
@@ -167,6 +167,24 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
   const hidden = <input ref={fileInput} type="file" multiple hidden accept="video/*,audio/*,image/*" onChange={(e) => (e.currentTarget.files?.length ? uploadFiles(v.id, [...e.currentTarget.files]) : undefined)} />;
   const approveLabel = v.status === 'ready' || v.status === 'posted' ? 'Post' : `Approve v${version?.n ?? ''}`;
 
+  // On the phone, before there's anything to watch, the thread is the screen (a page's setup is a conversation).
+  if (phone && !version)
+    return (
+      <div className="flex h-full flex-col bg-background" {...drop}>
+        {hidden}
+        <div className="pt-safe flex items-center gap-2 px-2">
+          <Button size="icon" variant="ghost" onClick={() => navigate(home)} aria-label="Back">
+            <ArrowLeft />
+          </Button>
+          <div className="min-w-0 flex-1 truncate py-2 text-sm font-medium">{isPage ? `Set up ${page?.name ?? ''}` : v.title}</div>
+        </div>
+        {tabs}
+        <BeforeBar detail={detail} onGo={() => act.go.mutate()} />
+        {body}
+        <div className="pb-safe">{dock}</div>
+      </div>
+    );
+
   if (phone)
     return (
       <div className="relative h-full overflow-hidden bg-black" {...drop}>
@@ -187,13 +205,6 @@ function StudioBody({ detail }: { detail: VideoDetail }) {
             <Side icon={MessageSquare} label="Thread" onClick={() => setRail(true)} badge={open || undefined} />
             {detail.versions.length > 1 && <Side icon={Layers} label={`v${ver}`} onClick={() => p.set({ ver: detail.versions[(detail.versions.findIndex((x) => x.n === ver) + 1) % detail.versions.length]!.n, compare: false })} />}
             {v.status !== 'posted' && v.status !== 'done' && <Side icon={v.status === 'ready' ? Share2 : Check} label={v.status === 'ready' ? 'Post' : 'Approve'} onClick={approve} />}
-          </div>
-        )}
-        {!version && (
-          <div className="absolute inset-x-0 bottom-6 z-10 flex justify-center">
-            <Button variant="secondary" onClick={() => setRail(true)}>
-              <MessageSquare /> Thread
-            </Button>
           </div>
         )}
         <div className="pb-safe absolute inset-x-3 bottom-3 z-10 mr-14">

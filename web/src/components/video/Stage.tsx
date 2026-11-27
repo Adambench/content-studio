@@ -112,6 +112,35 @@ function Carousel({ version, compareOf, fill }: { version: Version; compareOf: n
   );
 }
 
+/** The phone's Before, one line above the thread: Claude at work, or files waiting for my go (nothing when neither). */
+export function BeforeBar({ detail, onGo }: { detail: VideoDetail; onGo: () => void }) {
+  const job = detail.job;
+  const files = detail.inputs.length;
+  if (!job && !files) return null;
+  return (
+    <div className="flex items-center gap-3 border-b px-4 py-2.5 text-sm">
+      {job ? (
+        <>
+          <Spinner className="size-4 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{job.status === 'waiting' ? job.error || 'Waiting for Claude’s usage window' : job.step || 'Claude is on it'}</span>
+          {job.status === 'waiting' && (
+            <Button size="sm" variant="outline" onClick={onGo}>
+              Start now
+            </Button>
+          )}
+        </>
+      ) : (
+        <>
+          <span className="flex-1 text-muted-foreground">{files === 1 ? '1 file is in' : `${files} files are in`}</span>
+          <Button size="sm" onClick={onGo}>
+            {detail.video.kind === 'page' ? 'Set it up' : 'Make it'}
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** No version yet: Claude at work, or files waiting for my go, or nothing yet. */
 function Before({ detail, onGo }: { detail: VideoDetail; onGo: () => void }) {
   const job = detail.job;

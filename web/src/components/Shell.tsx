@@ -50,7 +50,8 @@ export function Shell() {
   return (
     <div className={cn('h-full', phone ? 'flex flex-col' : 'grid grid-cols-[232px_minmax(0,1fr)]')}>
       {!phone && <Sidebar onPalette={() => setPalette(true)} onNew={newVideo} />}
-      <main className="min-h-0 min-w-0 flex-1">
+      {/* The Android app draws under the status bar; the video page pads for it itself. */}
+      <main className={cn('min-h-0 min-w-0 flex-1', phone && !inVideo && 'pt-safe')}>
         <Outlet />
       </main>
       {phone && !inVideo && <TabBar onNew={newVideo} />}
