@@ -26,7 +26,7 @@ export function ServerPage() {
         <h1 className="text-xl font-semibold">Server</h1>
         <div className="flex flex-col divide-y overflow-hidden rounded-xl border bg-card">
           {sys.isError ? (
-            row('ai-server', 'Can’t be reached: is it on, and on Tailscale?', true)
+            row('ai-server', 'Can’t be reached: is it on?', true)
           ) : (
             <>
               {row('ai-server', s ? `${s.host} · v${s.version} · ${s.gpu ?? 'no GPU found'}` : '…')}
@@ -54,7 +54,7 @@ export function ServerPage() {
                   Pair a phone
                 </Button>
               )}
-              <p className="text-xs text-muted-foreground">On the tailnet the app needs no pairing; it’s for the phone app’s background uploads.</p>
+              <p className="text-xs text-muted-foreground">Off the tailnet, a device signs in with this code.</p>
             </div>
           </div>
         </section>

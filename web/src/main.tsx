@@ -6,11 +6,13 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import { Shell } from '@/components/Shell';
 import { Toaster } from '@/components/ui/sonner';
+import { ApiError, api, loadSavedToken } from '@/lib/api';
 import { connectNative } from '@/lib/native';
 import { connectLive, queryClient } from '@/lib/queries';
 import { BrainPage } from '@/pages/BrainPage';
 import { InboxPage } from '@/pages/InboxPage';
 import { ServerPage } from '@/pages/ServerPage';
+import { SignInPage } from '@/pages/SignInPage';
 import { VideoPage } from '@/pages/VideoPage';
 
 const router = createBrowserRouter([
@@ -38,8 +40,10 @@ function App() {
 }
 
 await connectNative();
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+loadSavedToken();
+// Off the tailnet, nothing but a paired device gets in: ask for a code first.
+const signedIn = await api('/api/signed-in').then(
+  () => true,
+  (e) => !(e instanceof ApiError && e.status === 401),
 );
+createRoot(document.getElementById('root')!).render(<StrictMode>{signedIn ? <App /> : <SignInPage />}</StrictMode>);

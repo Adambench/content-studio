@@ -9,6 +9,27 @@ export function setConnection(next: { server: string; token: string | null }) {
   token = next.token;
 }
 
+/** In a plain browser off the tailnet, the token a pairing gave is kept here (the phone app keeps its own). */
+const SAVED = 'cs-token';
+
+export function loadSavedToken() {
+  try {
+    const saved = localStorage.getItem(SAVED);
+    if (saved && !token) token = saved;
+  } catch {
+    // storage blocked: sign in again next time
+  }
+}
+
+export function saveToken(next: string) {
+  token = next;
+  try {
+    localStorage.setItem(SAVED, next);
+  } catch {
+    // storage blocked: this visit only
+  }
+}
+
 export const serverUrl = () => server || window.location.origin;
 
 export class ApiError extends Error {

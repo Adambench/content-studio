@@ -3,7 +3,7 @@
 // from ai-server. In a browser all of this is a no-op.
 
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
-import { api, setConnection } from './api';
+import { api, saveToken, setConnection } from './api';
 
 export type QueuedFile = { path: string; name: string; mime: string; size: number };
 export type Share = { id: string; files: QueuedFile[]; text: string | null };
@@ -33,9 +33,18 @@ export async function connectNative() {
   if (!Studio) return;
   const p = await Studio.getPairing().catch(() => ({ server: null, token: null }));
   if (p.token && p.server === window.location.origin) setConnection({ server: '', token: p.token });
-  // The background queue needs to know where to send files. On the tailnet Tailscale says who the phone is, so a
-  // pairing code isn't needed: the token is only a placeholder then.
+  // The background queue needs to know where to send files. Off the tailnet the sign-in screen pairs the phone and
+  // replaces this placeholder token with a real one.
   else await Studio.setPairing({ server: window.location.origin, token: p.token ?? 'tailnet' }).catch(() => undefined);
+}
+
+/** A device token from a pairing code: kept by the phone app (its uploads use it too), or by the browser. */
+export async function signIn(code: string) {
+  const { token } = await api<{ token: string }>('/api/pair', { body: { code, name: isNative ? 'Phone' : 'Browser' } });
+  if (Studio) {
+    await Studio.setPairing({ server: window.location.origin, token });
+    setConnection({ server: '', token });
+  } else saveToken(token);
 }
 
 /** Files from the phone's gallery to a video, through the background queue. */

@@ -1,5 +1,6 @@
-// Paired devices. On the tailnet, Tailscale tells the server who's asking, so pairing only gives the Android app's
-// upload queue a token to send. A code is shown on a screen that's already signed in and lasts 10 minutes.
+// Paired devices. On the tailnet, Tailscale tells the server who's asking; off it (the phone, over Funnel) a paired
+// device's token is the only way in. A code is shown on a screen that's already signed in (or `cs pair`), works once
+// and lasts 10 minutes; wrong codes are limited, since anyone on the internet can try them.
 
 import { createHash, randomInt } from 'node:crypto';
 import { all, get, run } from '../db/db.ts';
@@ -16,9 +17,16 @@ export function newPairCode(): { code: string; expiresAt: number } {
   return { code, expiresAt };
 }
 
+const misses: number[] = [];
+
 export function pair(code: string, name: string): { token: string } {
+  while (misses.length && misses[0]! < now() - 10 * 60_000) misses.shift();
+  if (misses.length >= 10) throw new HttpError(429, 'Too many wrong codes: wait 10 minutes');
   const row = get<{ code: string; expires_at: number }>('SELECT * FROM pair_codes WHERE code = ?', code.trim().toUpperCase());
-  if (!row || row.expires_at < now()) throw new HttpError(401, 'That code has expired: show a new one');
+  if (!row || row.expires_at < now()) {
+    misses.push(now());
+    throw new HttpError(401, 'That code is wrong or has expired: show a new one');
+  }
   run('DELETE FROM pair_codes WHERE code = ?', row.code);
   const token = newToken();
   run('INSERT INTO devices (id, name, token_hash, created_at) VALUES (?, ?, ?, ?)', newId(), name.slice(0, 80) || 'Device', hash(token), now());

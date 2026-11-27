@@ -103,9 +103,10 @@ fi
 sleep 2
 curl -fsS http://127.0.0.1:8787/api/health && echo
 
-# Port 8443, tailnet only: 443 belongs to Open WebUI (with Funnel), which this never touches.
-say "Tailscale Serve (HTTPS on port 8443, tailnet only, never Funnel)"
-if tailscale serve --bg --https=8443 http://127.0.0.1:8787 >/dev/null 2>&1; then
+# Port 8443, on the tailnet and (Funnel, since 2026-11-26) the internet for the phone, which can't run Tailscale: the
+# app lets only paired devices in from there. 443 belongs to Open WebUI (with its own Funnel): never touched.
+say "Tailscale Funnel (HTTPS on port 8443; off the tailnet only paired devices get in)"
+if tailscale funnel --bg --https=8443 http://127.0.0.1:8787 >/dev/null 2>&1; then
   tailscale serve status 2>/dev/null | grep ':8443' || true
 else
   echo "Run once: sudo tailscale set --operator=$USER   then run this script again."

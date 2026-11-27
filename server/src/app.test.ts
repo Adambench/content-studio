@@ -252,4 +252,15 @@ test('only the tailnet, paired devices and this machine get in', async () => {
   assert.equal((await call('GET', '/api/videos', undefined, { 'x-forwarded-for': '100.64.0.9', authorization: `Bearer ${paired.json.token}` })).status, 200);
   // A code works once.
   assert.equal((await call('POST', '/api/pair', { code: code.json.code }, { 'x-forwarded-for': '100.64.0.9' })).status, 401);
+  // From the internet (Funnel) only a paired device gets in, even straight from loopback, which is where Funnel's proxy connects from.
+  const funnel = { 'tailscale-funnel-request': '?1' };
+  assert.equal((await call('GET', '/api/signed-in', undefined, funnel)).status, 401);
+  assert.equal((await call('GET', '/api/signed-in', undefined, { ...funnel, authorization: 'Bearer nope' })).status, 401);
+  assert.equal((await call('GET', '/api/signed-in', undefined, { ...funnel, authorization: `Bearer ${paired.json.token}` })).status, 200);
+  assert.equal((await call('GET', `/api/signed-in?t=${paired.json.token}`, undefined, funnel)).status, 200);
+  assert.equal((await call('POST', '/api/pair/code', {}, funnel)).status, 401);
+  // Wrong codes run out: ten in 10 minutes (one above), then even a right one waits.
+  for (let i = 0; i < 9; i++) assert.equal((await call('POST', '/api/pair', { code: 'WRONG123' }, funnel)).status, 401);
+  const fresh = await call<{ code: string }>('POST', '/api/pair/code', {});
+  assert.equal((await call('POST', '/api/pair', { code: fresh.json.code }, funnel)).status, 429);
 });

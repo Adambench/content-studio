@@ -185,6 +185,7 @@ export async function registerApi(app: FastifyInstance) {
   app.post<P>('/api/jobs/:id/cancel', async (req) => cancelJob(req.params.id));
 
   // ------------------------------------------------------------ pairing
+  app.get('/api/signed-in', async () => ({ ok: true }));
   app.post('/api/pair/code', async () => newPairCode());
   app.post('/api/pair', async (req) => {
     const body = z.object({ code: z.string().min(4).max(20), name: z.string().max(80).default('Phone') }).parse(req.body);

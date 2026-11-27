@@ -16,8 +16,8 @@ PLAN.md has the decisions (*The app*), parts, targets and phases; read only the 
   `lessons.md` and `<page>/CLAUDE.md` are the brain), the app's data (`~/.local/share/studio`: SQLite, uploads, tools, HyperFrames' private cache), and Claude (the
   Agent SDK's own Claude Code binary on my Pro login: a `claude setup-token` token in
   `~/.config/content-studio/keys.env`). Skills: the repo's `.claude/skills`, linked into `~/.claude/skills` on
-  deploy. On the tailnet by Tailscale Serve: https://ai-server.tail1e2ac8.ts.net:8443. Port 443 there is Open
-  WebUI's (Docker, with Funnel): never touch it, never Funnel ours.
+  deploy. At https://ai-server.tail1e2ac8.ts.net:8443, on the tailnet and (Funnel, since 2026-11-26) the internet, for
+  the phone, which can't run Tailscale. Port 443 there is Open WebUI's (Docker, with its own Funnel): never touch it.
 - **Laptop**: Claude Code (dev) and the app in Chrome. `cs` talks to ai-server; `npm run deploy` ships code.
 - **Phone**: the Android app, a thin shell that loads the live app from ai-server (`mobile/`): gallery share →
   a video ("Add & make"), background uploads, saving to the gallery.
@@ -67,7 +67,8 @@ PLAN.md has the decisions (*The app*), parts, targets and phases; read only the 
   Don't fit the engine to one scenario.
 - **Existing FOSS first** (HyperFrames native projects, FFmpeg, local models), licences noted in PLAN.md *Parts*.
 - **Auth**: the server listens on 127.0.0.1 only. Tailscale Serve adds `Tailscale-User-Login`; a paired device sends
-  a bearer token (media and live events: `?t=`); Funnel requests are refused (`http/app.ts`).
+  a bearer token (media and live events: `?t=`). From Funnel only a paired device gets in (`http/app.ts`): the
+  sign-in screen takes a code from Server → Pair a phone or `cs pair`. More guard rails to come (my call, 2026-11-26).
 - **HyperFrames**: footage goes into a project as a hard link (a symbolic link to outside the project renders black);
   GSAP is copied into each project, so a render never needs the network.
 - **UI**: dark only, few words, quiet colours; blue (`you`) for what's waiting for me, `destructive` only for what

@@ -12,18 +12,18 @@ import { registerTerminal } from './terminal.ts';
 
 /**
  * Who may talk to the app. It listens on 127.0.0.1 only; Tailscale Serve puts it on the tailnet over HTTPS and
- * tells it who's asking (Tailscale-User-Login), so the laptop and the phone need nothing else. Paired devices send a
- * token (the Android upload queue). A process on this machine talking to it directly is me too. Funnel (the public
- * internet) never gets in.
+ * tells it who's asking (Tailscale-User-Login), so the laptop needs nothing else. A process on this machine talking
+ * to it directly is me too. Since 2026-11-26 the same address is also on the public internet (Funnel, port 8443) for
+ * the phone, which can't run Tailscale: from there only a paired device's token gets in (a code shown on a signed-in
+ * screen, `cs pair`), never a header or the loopback address, which Funnel's own proxy would otherwise pass for me.
  */
 export function allowed(req: FastifyRequest): boolean {
   const h = req.headers;
-  if (h['tailscale-funnel-request']) return false;
-  if (h['tailscale-user-login']) return true;
   const bearer = typeof h.authorization === 'string' && h.authorization.startsWith('Bearer ') ? h.authorization.slice(7) : null;
   const queryToken = (req.query as Record<string, string> | undefined)?.t;
-  if (bearer && deviceFor(bearer)) return true;
-  if (queryToken && deviceFor(queryToken)) return true;
+  const paired = Boolean((bearer && deviceFor(bearer)) || (queryToken && deviceFor(queryToken)));
+  if (h['tailscale-funnel-request']) return paired;
+  if (h['tailscale-user-login'] || paired) return true;
   const remote = req.socket.remoteAddress ?? '';
   return ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote) && !h['x-forwarded-for'];
 }
@@ -47,7 +47,7 @@ export async function buildApp() {
     const path = req.url.split('?')[0] ?? '';
     if (req.method === 'OPTIONS' || OPEN.has(path) || !(path.startsWith('/api/') || path.startsWith('/media/'))) return;
     if (!allowed(req)) {
-      reply.code(401).send({ error: 'Not signed in: open the app over Tailscale or pair this device' });
+      reply.code(401).send({ error: 'Not signed in: pair this device' });
     }
   });
 
